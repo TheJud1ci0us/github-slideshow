@@ -308,10 +308,13 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
+                Text("Stuck? Restart")
+            }
         }
         TranscriptState.FAILED -> Banner {
             Text("Transcription failed: ${ep.error ?: "unknown error"}", color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = { scope.launch { graph.repo.transcribe(ep.id) } }) { Text("Try again") }
+            TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) { Text("Try again") }
         }
         TranscriptState.NONE -> if (!partial) Banner {
             Text("No transcript yet", style = MaterialTheme.typography.titleSmall)

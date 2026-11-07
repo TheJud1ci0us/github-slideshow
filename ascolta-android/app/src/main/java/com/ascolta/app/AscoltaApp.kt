@@ -3,6 +3,8 @@ package com.ascolta.app
 import android.app.Application
 import android.content.Context
 import com.ascolta.app.data.AppDatabase
+import com.ascolta.app.data.AppLog
+import kotlinx.coroutines.launch
 import com.ascolta.app.data.PodcastRepository
 import com.ascolta.app.data.Settings
 import com.ascolta.app.data.TranscriptStore
@@ -25,9 +27,13 @@ class AscoltaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.init(this)
         graph = AppGraph(this)
         Notifications.createChannels(this)
         WorkScheduler.schedulePeriodicRefresh(this)
+        graph.scope.launch {
+            runCatching { graph.repo.recoverStuckWork() }.onFailure { AppLog.w("App", "Recovery failed", it) }
+        }
     }
 }
 

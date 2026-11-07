@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.ascolta.app.data.AppLog
 import com.ascolta.app.data.DownloadState
 import com.ascolta.app.data.TranscriptState
 import com.ascolta.app.graph
@@ -49,12 +50,14 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val dest = File(applicationContext.filesDir, "episodes/$id.$ext")
         trySetForeground(Notifications.foregroundInfo(applicationContext, notificationId, "Downloading", episode.title, null, false))
         dao.setDownload(id, DownloadState.DOWNLOADING, 0f)
+        AppLog.i(TAG, "Downloading #$id from $url")
         return try {
             graph.http.downloadTo(url, dest) { fraction ->
                 dao.setDownload(id, DownloadState.DOWNLOADING, fraction.coerceAtLeast(0f))
                 setProgress(workDataOf(WorkScheduler.KEY_PROGRESS to fraction))
             }
             dao.setLocalPath(id, dest.path, DownloadState.DONE)
+            AppLog.i(TAG, "Downloaded #$id (${dest.length() / 1_000_000} MB)")
             if (dao.get(id)?.transcriptState == TranscriptState.QUEUED) {
                 // A transcription was waiting for this download.
                 WorkScheduler.transcribe(applicationContext, id, manual = true)
@@ -65,7 +68,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Download failed", e)
+            AppLog.w(TAG, "Download #$id failed (attempt $runAttemptCount)", e)
             if (runAttemptCount < 3) {
                 dao.setDownload(id, DownloadState.QUEUED, 0f, "Retrying: ${e.message}")
                 Result.retry()
@@ -87,7 +90,9 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             Notifications.foregroundInfo(applicationContext, 900, "Downloading speech model", model.label, null, false),
         )
         return try {
-            graph.models.download(model) { setProgress(workDataOf(WorkScheduler.KEY_PROGRESS to it)) }
+            graph.models.download(model) { written, total ->
+                setProgress(workDataOf(WorkScheduler.KEY_PROGRESS to if (total > 0) written.toFloat() / total else -1f))
+            }
             Result.success()
         } catch (e: CancellationException) {
             throw e

@@ -31,10 +31,10 @@ object WorkScheduler {
     const val KEY_PROGRESS = "progress"
 
     private const val REFRESH_WORK = "refresh-feeds"
-    /** All transcriptions share one queue so only one runs at a time (they are CPU/RAM heavy). */
-    private const val TRANSCRIBE_QUEUE = "transcription-queue"
 
     fun modelWorkName(model: WhisperModel) = "model-${model.id}"
+    fun transcribeWorkName(episodeId: Long) = "transcribe-$episodeId"
+    fun downloadWorkName(episodeId: Long) = "download-$episodeId"
 
     fun schedulePeriodicRefresh(context: Context) {
         val request = PeriodicWorkRequestBuilder<RefreshWorker>(6, TimeUnit.HOURS)
@@ -55,20 +55,42 @@ object WorkScheduler {
             )
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork("download-$episodeId", ExistingWorkPolicy.KEEP, request)
+        // A manual request replaces an automatic one that may be waiting for Wi-Fi.
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            downloadWorkName(episodeId),
+            if (manual) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+            request,
+        )
     }
 
-    fun transcribe(context: Context, episodeId: Long, manual: Boolean) {
+    /**
+     * Each episode has its own job; TranscribeWorker makes them take turns, since
+     * speech recognition uses most of the CPU and a lot of memory.
+     */
+    fun transcribe(context: Context, episodeId: Long, manual: Boolean, replace: Boolean = false) {
         val chargingOnly = context.graph.settings.chargingOnly.value && !manual
         val request = OneTimeWorkRequestBuilder<TranscribeWorker>()
             .setInputData(workDataOf(KEY_EPISODE_ID to episodeId))
             .setConstraints(Constraints.Builder().setRequiresCharging(chargingOnly).build())
-            .addTag("transcribe-$episodeId")
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
             .build()
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork(TRANSCRIBE_QUEUE, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            transcribeWorkName(episodeId),
+            if (replace || manual) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+            request,
+        )
     }
+
+    fun cancelTranscription(context: Context, episodeId: Long) {
+        WorkManager.getInstance(context).cancelUniqueWork(transcribeWorkName(episodeId))
+    }
+
+    /** True if a job with this unique name is waiting or running. */
+    suspend fun isActive(context: Context, uniqueName: String): Boolean =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            WorkManager.getInstance(context).getWorkInfosForUniqueWork(uniqueName).get()
+                .any { !it.state.isFinished }
+        }
 
     fun downloadModel(context: Context, model: WhisperModel) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()

@@ -40,6 +40,13 @@ suspend fun OkHttpClient.downloadTo(
     url: String,
     dest: File,
     onProgress: suspend (Float) -> Unit,
+) = downloadWithBytes(url, dest) { written, total -> onProgress(if (total > 0) written.toFloat() / total else -1f) }
+
+/** Like [downloadTo] but reports bytes written and total size (-1 if unknown). */
+suspend fun OkHttpClient.downloadWithBytes(
+    url: String,
+    dest: File,
+    onProgress: suspend (written: Long, total: Long) -> Unit,
 ) = withContext(Dispatchers.IO) {
     dest.parentFile?.mkdirs()
     val part = File(dest.path + ".part")
@@ -59,19 +66,21 @@ suspend fun OkHttpClient.downloadTo(
             body.byteStream().use { input ->
                 val buffer = ByteArray(64 * 1024)
                 var written = offset
-                var lastReported = -1f
+                var lastReportedAt = 0L
+                onProgress(written, total)
                 while (true) {
                     ensureActive()
                     val read = input.read(buffer)
                     if (read < 0) break
                     out.write(buffer, 0, read)
                     written += read
-                    val fraction = if (total > 0) written.toFloat() / total else -1f
-                    if (fraction < 0 || fraction - lastReported >= 0.01f) {
-                        lastReported = fraction
-                        onProgress(fraction)
+                    val now = System.currentTimeMillis()
+                    if (now - lastReportedAt >= 500) {
+                        lastReportedAt = now
+                        onProgress(written, total)
                     }
                 }
+                onProgress(written, total)
             }
         }
     }

@@ -148,14 +148,16 @@ class ParsersTest {
         val resampler = LinearResampler(44_100, 16_000)
         var produced = 0
         val block = FloatArray(4410) { 0.5f }
-        repeat(10) { resampler.process(block, block.size) { produced++ } } // 1 second of audio
+        repeat(10) { produced += resampler.process(block, block.size).second } // 1 second of audio
         assertTrue("got $produced samples", produced in 15_990..16_010)
     }
 
     @Test
     fun accumulatesChunksAndSkipsResumedAudio() {
         val acc = ChunkAccumulator(chunkSamples = 4, skipSamples = 3)
-        (0 until 12).forEach { acc.add(it.toFloat()) }
+        val input = FloatArray(12) { it.toFloat() }
+        acc.add(input.copyOfRange(0, 5), 5)
+        acc.add(input.copyOfRange(5, 12), 7)
         val first = acc.poll()!!
         assertEquals(listOf(3f, 4f, 5f, 6f), first.first.toList())
         assertEquals(3L, first.second)
@@ -165,5 +167,16 @@ class ParsersTest {
         val rest = acc.flush()!!
         assertEquals(listOf(11f), rest.first.toList())
         assertEquals(11L, rest.second)
+    }
+
+    @Test
+    fun shortFirstChunk() {
+        val acc = ChunkAccumulator(chunkSamples = 5, skipSamples = 0, firstChunkSamples = 2)
+        acc.add(FloatArray(9) { it.toFloat() }, 9)
+        assertEquals(listOf(0f, 1f), acc.poll()!!.first.toList())
+        val second = acc.poll()!!
+        assertEquals(listOf(2f, 3f, 4f, 5f, 6f), second.first.toList())
+        assertEquals(2L, second.second)
+        assertEquals(listOf(7f, 8f), acc.flush()!!.first.toList())
     }
 }

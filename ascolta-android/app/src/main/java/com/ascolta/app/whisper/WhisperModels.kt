@@ -2,7 +2,7 @@ package com.ascolta.app.whisper
 
 import android.content.Context
 import android.net.Uri
-import com.ascolta.app.net.downloadTo
+import com.ascolta.app.net.downloadWithBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -40,9 +40,10 @@ class WhisperModelManager(private val context: Context, private val http: OkHttp
 
     fun isDownloaded(model: WhisperModel) = file(model).let { it.exists() && it.length() > 0 }
 
-    suspend fun download(model: WhisperModel, onProgress: suspend (Float) -> Unit) {
+    /** [onProgress] receives bytes downloaded and total bytes (-1 if unknown). */
+    suspend fun download(model: WhisperModel, onProgress: suspend (Long, Long) -> Unit) {
         val url = model.url ?: error("Import a model file in Settings first")
-        http.downloadTo(url, file(model), onProgress)
+        http.downloadWithBytes(url, file(model), onProgress)
     }
 
     fun delete(model: WhisperModel) {

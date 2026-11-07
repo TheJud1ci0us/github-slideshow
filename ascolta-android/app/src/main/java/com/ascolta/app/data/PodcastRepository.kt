@@ -12,6 +12,7 @@ import com.ascolta.app.translate.TranslationService
 import com.ascolta.app.work.WorkScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -211,6 +212,38 @@ class PodcastRepository(
         WorkScheduler.transcribe(context, episodeId, manual)
     }
 
+    /** Stops whatever is happening for this episode and starts its transcription again (keeps saved progress). */
+    suspend fun restartTranscription(episodeId: Long) {
+        AppLog.i("Repo", "Restart transcription #$episodeId")
+        WorkScheduler.cancelTranscription(context, episodeId)
+        episodeDao.setTranscript(episodeId, TranscriptState.NONE, 0f, null)
+        val episode = episodeDao.get(episodeId) ?: return
+        if (episode.downloadState != DownloadState.DONE && episode.podcastId != null) {
+            episodeDao.setDownload(episodeId, DownloadState.NONE, 0f)
+        }
+        transcribe(episodeId, manual = true)
+    }
+
+    /**
+     * After the app was killed or the phone restarted, some jobs may be marked as
+     * running although nothing is scheduled. Re-queue those.
+     */
+    suspend fun recoverStuckWork() {
+        for (episode in episodeDao.activeList()) {
+            val transcribing = episode.transcriptState == TranscriptState.QUEUED || episode.transcriptState == TranscriptState.RUNNING
+            val downloading = episode.downloadState == DownloadState.QUEUED || episode.downloadState == DownloadState.DOWNLOADING
+            if (downloading && !WorkScheduler.isActive(context, WorkScheduler.downloadWorkName(episode.id))) {
+                AppLog.i("Repo", "Recovering download #${episode.id}")
+                WorkScheduler.download(context, episode.id, transcribeAfter = settings.autoTranscribe.value, manual = true)
+            }
+            if (transcribing && !downloading && !WorkScheduler.isActive(context, WorkScheduler.transcribeWorkName(episode.id))) {
+                AppLog.i("Repo", "Recovering transcription #${episode.id}")
+                episodeDao.setTranscript(episode.id, TranscriptState.QUEUED, episode.transcriptProgress, "Resuming")
+                WorkScheduler.transcribe(context, episode.id, manual = true)
+            }
+        }
+    }
+
     /** Throws away the transcript and generates it again (e.g. after switching to a better model). */
     suspend fun retranscribe(episodeId: Long) {
         transcripts.delete(episodeId)
@@ -252,7 +285,8 @@ class PodcastRepository(
         if (!translation.isSupported(transcript.language, target)) return null
         val stale = transcript.translationLanguage != null && transcript.translationLanguage != target
         if (!stale && transcript.segments.all { it.translation != null }) return transcript
-        translation.ensureModel(transcript.language, target, requireWifi = false)
+        withTimeoutOrNull(3 * 60_000L) { translation.ensureModel(transcript.language, target, requireWifi = false) }
+            ?: throw IOException("the translation model couldn't be downloaded. Check your connection and try again.")
         val segments = transcript.segments.map { segment ->
             if (segment.translation != null && !stale) segment
             else segment.copy(translation = translation.translate(segment.text, transcript.language, target))
@@ -269,8 +303,10 @@ class PodcastRepository(
 
     suspend fun translateWord(text: String, source: String): String {
         val target = settings.nativeLanguage.value
-        translation.ensureModel(source, target, requireWifi = false)
-        return translation.translate(text, source, target)
+        return withTimeoutOrNull(60_000L) {
+            translation.ensureModel(source, target, requireWifi = false)
+            translation.translate(text, source, target)
+        } ?: throw IOException("translation model not available yet")
     }
 
     // ---- Vocabulary --------------------------------------------------------

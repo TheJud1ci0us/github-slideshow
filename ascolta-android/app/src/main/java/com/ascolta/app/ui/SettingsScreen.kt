@@ -121,6 +121,10 @@ fun SettingsScreen() {
             }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Check all feeds now") }
 
             HorizontalDivider()
+            Section("Diagnostics")
+            DiagnosticsSection()
+
+            HorizontalDivider()
             Section("About")
             Text(
                 "Ascolta plays public podcast RSS feeds. Speech recognition (whisper.cpp) and translation " +
@@ -131,6 +135,77 @@ fun SettingsScreen() {
             )
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun DiagnosticsSection() {
+    val context = LocalContext.current
+    var showLog by remember { mutableStateOf(false) }
+    val powerManager = remember { context.getSystemService(android.os.PowerManager::class.java) }
+    var unrestricted by remember { mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) }
+    val engine = remember {
+        runCatching { com.ascolta.app.whisper.WhisperLib.nativeSystemInfo() }.getOrElse { "not loaded: ${it.message}" }
+    }
+
+    ListItem(
+        modifier = Modifier.clickable {
+            // OnePlus/Oppo and others stop background work aggressively unless the app is exempt.
+            val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(android.net.Uri.parse("package:${context.packageName}"))
+            runCatching { context.startActivity(intent) }.onFailure {
+                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+        },
+        headlineContent = { Text("Allow background work") },
+        supportingContent = {
+            Text(
+                if (unrestricted) "Battery: unrestricted ✓"
+                else "Recommended: lets long transcriptions finish while the app is closed. Tap to allow.",
+            )
+        },
+    )
+    LaunchedEffect(Unit) {
+        while (true) {
+            unrestricted = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+            kotlinx.coroutines.delay(2000)
+        }
+    }
+    ListItem(
+        modifier = Modifier.clickable { showLog = true },
+        headlineContent = { Text("View log") },
+        supportingContent = { Text("What the app did, step by step. Share it if something goes wrong.") },
+    )
+    Text(
+        "Speech engine: $engine",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
+
+    if (showLog) {
+        val log = remember { com.ascolta.app.data.AppLog.read().takeLast(20_000) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showLog = false },
+            title = { Text("Log") },
+            text = {
+                Text(
+                    log,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    modifier = Modifier.height(400.dp).verticalScroll(rememberScrollState(Int.MAX_VALUE)),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, com.ascolta.app.data.AppLog.read().takeLast(50_000))
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, "Share log"))
+                }) { Text("Share") }
+            },
+            dismissButton = { TextButton(onClick = { showLog = false }) { Text("Close") } },
+        )
     }
 }
 

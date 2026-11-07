@@ -35,6 +35,8 @@ class AudioDecoder(private val path: String) {
     suspend fun decode(
         chunkSamples: Int,
         skipSamples: Long,
+        firstChunkSamples: Int = chunkSamples,
+        onDecoded: (Long) -> Unit = {},
         onChunk: suspend (FloatArray, Long) -> Boolean,
     ) = withContext(Dispatchers.IO) {
         val extractor = MediaExtractor()
@@ -54,7 +56,7 @@ class AudioDecoder(private val path: String) {
             var sampleRate = inputFormat.getIntegerOrNull(MediaFormat.KEY_SAMPLE_RATE) ?: 44100
             var floatPcm = false
             var resampler = LinearResampler(sampleRate, SAMPLE_RATE)
-            val accumulator = ChunkAccumulator(chunkSamples, skipSamples)
+            val accumulator = ChunkAccumulator(chunkSamples, skipSamples, firstChunkSamples)
             val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
@@ -111,7 +113,9 @@ class AudioDecoder(private val path: String) {
                                     mono[f] = sum / channels / 32768f
                                 }
                             }
-                            resampler.process(mono, frames) { accumulator.add(it) }
+                            val (out, n) = resampler.process(mono, frames)
+                            accumulator.add(out, n)
+                            onDecoded(accumulator.samplesSeen)
                         }
                         codec.releaseOutputBuffer(outIndex, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true

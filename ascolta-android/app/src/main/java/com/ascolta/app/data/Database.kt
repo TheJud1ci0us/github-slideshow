@@ -65,6 +65,9 @@ interface EpisodeDao {
     )
     fun observeActive(): Flow<List<EpisodeEntity>>
 
+    @Query("SELECT * FROM episodes WHERE downloadState IN (1, 2) OR transcriptState IN (1, 2)")
+    suspend fun activeList(): List<EpisodeEntity>
+
     @Query("SELECT * FROM episodes WHERE lastPlayedAt > 0 ORDER BY lastPlayedAt DESC LIMIT :limit")
     fun observeRecentlyPlayed(limit: Int): Flow<List<EpisodeEntity>>
 
