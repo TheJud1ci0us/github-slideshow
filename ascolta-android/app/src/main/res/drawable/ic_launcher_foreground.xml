@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speech bubble containing a sound wave. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF1F6F5C"
+        android:pathData="M34,32h40a8,8 0,0 1,8 8v22a8,8 0,0 1,-8 8H52l-12,10v-10h-6a8,8 0,0 1,-8 -8V40a8,8 0,0 1,8 -8z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M40,48h4v6h-4zM47,43h4v16h-4zM54,39h4v24h-4zM61,45h4v12h-4zM68,48h4v6h-4z" />
+</vector>
