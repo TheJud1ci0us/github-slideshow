@@ -108,6 +108,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val showOriginal by settings.showOriginal.flow.collectAsState()
     val showTranslation by settings.showTranslation.flow.collectAsState()
     val autoPause by settings.autoPause.flow.collectAsState()
+    val wordHighlight by settings.wordHighlight.flow.collectAsState()
     val textScale by settings.transcriptTextScale.flow.collectAsState()
     val nativeLanguage by settings.nativeLanguage.flow.collectAsState()
 
@@ -153,7 +154,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     // Highlighted sentence: none during music or long silences after a sentence has ended.
     val currentIndex = navIndex.takeIf { it >= 0 && position <= segments[it].endMs + HIGHLIGHT_LINGER_MS } ?: -1
     // Word being spoken inside the highlighted sentence (when the engine gave word timings).
-    val currentWord = segments.getOrNull(currentIndex)?.words?.indexOfLast { it.startMs <= position } ?: -1
+    val currentWord = if (!wordHighlight) -1
+        else segments.getOrNull(currentIndex)?.words?.indexOfLast { it.startMs <= position } ?: -1
 
     fun startOrToggle() {
         val e = episode ?: return
@@ -201,6 +203,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         CheckItem(stringResource(R.string.show_language, source), showOriginal) { settings.showOriginal.set(it) }
                         CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
                         CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
+                        CheckItem(stringResource(R.string.highlight_words), wordHighlight) { settings.wordHighlight.set(it) }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text(stringResource(R.string.larger_text)) }, onClick = {
                             settings.transcriptTextScale.set((textScale + 0.15f).coerceAtMost(2f))
@@ -563,6 +566,35 @@ private fun WordSheet(
                 ) {
                     Icon(Icons.Filled.BookmarkAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.save_word))
                 }
+                // Saves the whole sentence as a card, so the word keeps its context.
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val sentence = lookup.segment.text.trim()
+                            val sentenceTranslation = lookup.segment.translation
+                                ?: runCatching { graph.repo.translateWord(sentence, language) }.getOrNull()
+                            val added = graph.repo.saveWord(
+                                VocabEntity(
+                                    word = sentence,
+                                    translation = sentenceTranslation.orEmpty(),
+                                    sentence = sentence,
+                                    sentenceTranslation = sentenceTranslation,
+                                    language = language,
+                                    episodeId = episode?.id,
+                                    episodeTitle = episode?.title,
+                                    createdAt = System.currentTimeMillis(),
+                                ),
+                            )
+                            Toast.makeText(context, context.getString(if (added) R.string.sentence_saved else R.string.already_saved), Toast.LENGTH_SHORT).show()
+                            onDismiss()
+                        }
+                    },
+                ) {
+                    Icon(Icons.Filled.BookmarkAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.save_sentence))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row {
                 OutlinedButton(onClick = { onPlaySentence(); onDismiss() }) {
                     Icon(Icons.Filled.Replay, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.play_sentence))
                 }

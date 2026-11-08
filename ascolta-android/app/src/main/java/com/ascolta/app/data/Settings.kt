@@ -90,12 +90,15 @@ class Settings(context: Context) {
 
     val autoDownloadNew = bool("auto_download_new", true)
     val autoTranscribe = bool("auto_transcribe", true)
+    /** Network mode: true = Wi-Fi only (downloads, streaming, models); false = Wi-Fi and mobile data. */
     val wifiOnly = bool("wifi_only", true)
     val chargingOnly = bool("charging_only", false)
 
     val showOriginal = bool("show_original", true)
     val showTranslation = bool("show_translation", true)
     val autoPause = bool("auto_pause", false)
+    /** Highlights the word being spoken inside the current sentence. */
+    val wordHighlight = bool("word_highlight", true)
     val playbackSpeed = float("playback_speed", 1f)
     val transcriptTextScale = float("transcript_text_scale", 1f)
 
