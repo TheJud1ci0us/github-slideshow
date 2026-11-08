@@ -21,7 +21,7 @@ import androidx.work.workDataOf
 import com.ascolta.app.MainActivity
 import com.ascolta.app.R
 import com.ascolta.app.graph
-import com.ascolta.app.whisper.WhisperModel
+import com.ascolta.app.whisper.SpeechModel
 import java.util.concurrent.TimeUnit
 
 object WorkScheduler {
@@ -32,7 +32,7 @@ object WorkScheduler {
 
     private const val REFRESH_WORK = "refresh-feeds"
 
-    fun modelWorkName(model: WhisperModel) = "model-${model.id}"
+    fun modelWorkName(model: SpeechModel) = "model-${model.id}"
     fun transcribeWorkName(episodeId: Long) = "transcribe-$episodeId"
     fun downloadWorkName(episodeId: Long) = "download-$episodeId"
 
@@ -85,6 +85,10 @@ object WorkScheduler {
         WorkManager.getInstance(context).cancelUniqueWork(transcribeWorkName(episodeId))
     }
 
+    fun cancelDownload(context: Context, episodeId: Long) {
+        WorkManager.getInstance(context).cancelUniqueWork(downloadWorkName(episodeId))
+    }
+
     /** True if a job with this unique name is waiting or running. */
     suspend fun isActive(context: Context, uniqueName: String): Boolean =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -92,7 +96,7 @@ object WorkScheduler {
                 .any { !it.state.isFinished }
         }
 
-    fun downloadModel(context: Context, model: WhisperModel) {
+    fun downloadModel(context: Context, model: SpeechModel) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
             .setInputData(workDataOf(KEY_MODEL_ID to model.id))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -101,7 +105,7 @@ object WorkScheduler {
             .enqueueUniqueWork(modelWorkName(model), ExistingWorkPolicy.KEEP, request)
     }
 
-    fun cancelModelDownload(context: Context, model: WhisperModel) {
+    fun cancelModelDownload(context: Context, model: SpeechModel) {
         WorkManager.getInstance(context).cancelUniqueWork(modelWorkName(model))
     }
 
@@ -120,8 +124,8 @@ object Notifications {
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_WORK, "Downloads & transcription", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Progress of episode downloads and on-device transcription"
+            NotificationChannel(CHANNEL_WORK, context.getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW).apply {
+                description = context.getString(R.string.notif_channel_desc)
             },
         )
     }

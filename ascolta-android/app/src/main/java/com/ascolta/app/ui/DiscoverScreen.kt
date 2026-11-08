@@ -48,7 +48,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ascolta.app.data.LANGUAGES
+import com.ascolta.app.R
 import com.ascolta.app.graph
+import androidx.compose.ui.res.stringResource
 import com.ascolta.app.net.DirectoryResult
 import kotlinx.coroutines.launch
 
@@ -87,8 +89,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         scope.launch {
             val country = LANGUAGES.firstOrNull { it.code == learning }?.country
             runCatching { graph.directory.search(term, country) }
-                .onSuccess { results = it; if (it.isEmpty()) error = "No podcasts found." }
-                .onFailure { error = "Search failed: ${it.message}" }
+                .onSuccess { results = it; if (it.isEmpty()) error = context.getString(R.string.no_results) }
+                .onFailure { error = context.getString(R.string.search_failed, it.message ?: "") }
             loading = false
         }
     }
@@ -102,14 +104,14 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        topBar = { TopAppBar(title = { Text("Discover") }) },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_discover)) }) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
-                placeholder = { Text("Search podcasts") },
+                placeholder = { Text(stringResource(R.string.search_hint)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { search(query) }),
@@ -130,8 +132,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             if (results.isEmpty() && !loading && error == null) {
                 Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.TopCenter) {
                     Text(
-                        "Search millions of podcasts. Results come from the open Apple Podcasts directory; " +
-                            "the app plays each show's public RSS feed.",
+                        stringResource(R.string.discover_intro),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -151,15 +152,15 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                                 subscribing[r.feedUrl] == true -> SmallSpinner()
                                 isSubscribed -> TextButton(onClick = {
                                     scope.launch { openPodcast(graph.repo.subscribe(r.feedUrl)) }
-                                }) { Icon(Icons.Filled.Check, null); Text("Open") }
+                                }) { Icon(Icons.Filled.Check, null); Text(stringResource(R.string.action_open)) }
                                 else -> FilledTonalButton(onClick = {
                                     subscribing[r.feedUrl] = true
                                     scope.launch {
                                         runCatching { graph.repo.subscribe(r.feedUrl) }
-                                            .onFailure { error = "Couldn't load that feed: ${it.message}" }
+                                            .onFailure { error = context.getString(R.string.feed_failed, it.message ?: "") }
                                         subscribing[r.feedUrl] = false
                                     }
-                                }) { Text("Follow") }
+                                }) { Text(stringResource(R.string.action_follow)) }
                             }
                         },
                     )

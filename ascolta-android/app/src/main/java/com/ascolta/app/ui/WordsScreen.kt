@@ -31,7 +31,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ascolta.app.R
 import com.ascolta.app.graph
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,7 +48,7 @@ fun WordsScreen() {
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text("Words (${words.size})") },
+                title = { Text(stringResource(R.string.words_title, words.size)) },
                 actions = {
                     if (words.isNotEmpty()) {
                         IconButton(onClick = {
@@ -54,12 +56,12 @@ fun WordsScreen() {
                                 val tsv = graph.repo.exportVocabTsv()
                                 val send = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, "Ascolta words")
+                                    putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.export_subject))
                                     putExtra(Intent.EXTRA_TEXT, tsv)
                                 }
-                                context.startActivity(Intent.createChooser(send, "Export words (Anki: tab-separated)"))
+                                context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
                             }
-                        }) { Icon(Icons.Filled.IosShare, "Export") }
+                        }) { Icon(Icons.Filled.IosShare, stringResource(R.string.export)) }
                     }
                 },
             )
@@ -68,8 +70,7 @@ fun WordsScreen() {
         if (words.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "Tap any word in a transcript to translate it, then save it here.\n\n" +
-                        "Export the list (tab-separated) to import into Anki or another flashcard app.",
+                    stringResource(R.string.words_empty),
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -90,7 +91,7 @@ fun WordsScreen() {
                         },
                         trailingContent = {
                             IconButton(onClick = { scope.launch { graph.repo.deleteWord(w.id) } }) {
-                                Icon(Icons.Filled.Delete, "Delete")
+                                Icon(Icons.Filled.Delete, stringResource(R.string.action_delete))
                             }
                         },
                     )

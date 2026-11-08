@@ -15,7 +15,13 @@ import com.ascolta.app.graph
 import com.ascolta.app.net.FeedTranscriptParser
 import com.ascolta.app.net.fetchString
 import com.ascolta.app.whisper.AudioDecoder
-import com.ascolta.app.whisper.WhisperContext
+import com.ascolta.app.R
+import com.ascolta.app.data.languageName
+import com.ascolta.app.whisper.Engine
+import com.ascolta.app.whisper.EngineLock
+import com.ascolta.app.whisper.EngineOptions
+import com.ascolta.app.whisper.SpeechEngine
+import com.ascolta.app.whisper.SpeechModel
 import com.ascolta.app.whisper.WhisperLib
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -24,7 +30,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -48,7 +53,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     private var title = ""
 
     private data class Status(val text: String, val progress: Float)
-    private val status = MutableStateFlow(Status("Starting", 0f))
+    private val status = MutableStateFlow(Status("…", 0f))
 
     override suspend fun doWork(): Result {
         episodeId = inputData.getLong(WorkScheduler.KEY_EPISODE_ID, -1)
@@ -58,10 +63,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
         title = episode.title
 
-        if (engineLock.isLocked) {
-            dao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, "Waiting for another transcription")
+        if (EngineLock.mutex.isLocked) {
+            dao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, applicationContext.getString(R.string.status_waiting_other))
         }
-        return engineLock.withLock {
+        return EngineLock.mutex.withLock {
             val language = episode.transcriptLanguage ?: graph.settings.learningLanguage.value
             val target = graph.settings.nativeLanguage.value
             AppLog.i(TAG, "Start #$episodeId \"$title\" lang=$language→$target model=${graph.settings.model.id} attempt=$runAttemptCount")
@@ -92,7 +97,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         var transcript = graph.transcripts.load(episodeId)
 
         if (transcript == null && episode.feedTranscriptUrl != null) {
-            update("Fetching published transcript", 0f)
+            update(applicationContext.getString(R.string.status_fetching_published), 0f)
             transcript = runCatching { fetchFeedTranscript(episode, language) }
                 .onFailure { AppLog.w(TAG, "Feed transcript unusable", it) }
                 .getOrNull()
@@ -107,7 +112,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             if (path == null || !File(path).exists()) {
                 // Needs the audio first; the download queues this job again when it finishes.
                 AppLog.i(TAG, "Audio not downloaded yet; queuing download")
-                dao.setTranscript(episodeId, TranscriptState.QUEUED, 0f, "Waiting for download")
+                dao.setTranscript(episodeId, TranscriptState.QUEUED, 0f, applicationContext.getString(R.string.status_waiting_download))
                 dao.setDownload(episodeId, DownloadState.QUEUED, 0f)
                 WorkScheduler.download(applicationContext, episodeId, transcribeAfter = true, manual = true)
                 return Result.success()
@@ -144,7 +149,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             AppLog.i(TAG, "Translation model missing and not on Wi-Fi; translating later")
             return false
         }
-        update("Downloading translation model", status.value.progress)
+        update(applicationContext.getString(R.string.status_downloading_translation), status.value.progress)
         val ok = withTimeoutOrNull(TRANSLATION_DOWNLOAD_TIMEOUT_MS) {
             runCatching { graph.translation.ensureModel(source, target, requireWifi = false) }
                 .onFailure { AppLog.w(TAG, "Translation model download failed", it) }
@@ -160,38 +165,50 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         target: String,
         existing: Transcript?,
     ): Transcript? {
-        val model = graph.settings.model
-        if (!graph.models.isDownloaded(model)) {
-            val label = "Downloading speech model (${model.label})"
-            update(label, 0f)
-            AppLog.i(TAG, "Downloading model ${model.fileName}")
-            graph.models.download(model) { written, total ->
-                val mb = written / 1_000_000
-                if (total > 0) update("$label · $mb of ${total / 1_000_000} MB", written.toFloat() / total)
-                else update("$label · $mb MB", 0f)
-            }
-            AppLog.i(TAG, "Model downloaded (${graph.models.file(model).length() / 1_000_000} MB)")
+        val settings = graph.settings
+        val model = settings.model
+        if (!model.supports(language)) {
+            throw IllegalStateException(
+                applicationContext.getString(R.string.error_model_language, model.label, languageName(language)),
+            )
         }
+        ensureModel(model)
 
-        var transcript = existing?.takeIf { it.source == Transcript.SOURCE_WHISPER && it.language == language }
-            ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
+        val useVad = settings.skipNonSpeech.value || model.engine == Engine.PARAKEET
+        if (useVad && !graph.models.isVadDownloaded()) {
+            update(applicationContext.getString(R.string.status_downloading_vad), status.value.progress)
+            graph.models.downloadVad()
+        }
+        val options = EngineOptions(
+            threads = settings.threads.value.coerceIn(1, 8),
+            flashAttention = settings.flashAttention.value,
+            vadModelPath = if (useVad) graph.models.vadFile().path else null,
+        )
+
+        // Resume only a partial transcript made with the same model and language.
+        var transcript = existing?.takeIf {
+            it.source == Transcript.SOURCE_WHISPER && it.language == language && (it.model == null || it.model == model.id)
+        } ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
 
         val decoder = AudioDecoder(path)
         val totalMs = decoder.durationMs().coerceAtLeast(1)
-        AppLog.i(TAG, "Audio ${totalMs / 1000}s, resuming at ${transcript.processedMs / 1000}s")
+        AppLog.i(TAG, "Audio ${totalMs / 1000}s, resuming at ${transcript.processedMs / 1000}s; " +
+            "model=${model.id} threads=${options.threads} flash=${options.flashAttention} skipNonSpeech=$useVad")
 
         val canTranslate = prepareTranslation(language, target)
 
-        update("Loading speech model", transcript.processedMs.toFloat() / totalMs)
-        AppLog.i(TAG, "Engine: ${runCatching { WhisperLib.nativeSystemInfo() }.getOrDefault("?")}")
+        update(applicationContext.getString(R.string.status_loading_model), transcript.processedMs.toFloat() / totalMs)
+        WhisperLib.ensureBackends(applicationContext.applicationInfo.nativeLibraryDir)
+        AppLog.i(TAG, "CPU: ${runCatching { WhisperLib.nativeCpuVariant() }.getOrDefault("?")}")
         var stopped = false
         val started = System.currentTimeMillis()
+        val transcribing = applicationContext.getString(R.string.status_transcribing)
 
-        WhisperContext.load(graph.models.file(model).path).use { whisper ->
+        SpeechEngine.load(model, graph.models, options).use { engine ->
             val job = coroutineContext[Job]
-            val abortHandle = job?.invokeOnCompletion { whisper.abort() }
+            val abortHandle = job?.invokeOnCompletion { engine.abort() }
             try {
-                update("Reading audio", transcript.processedMs.toFloat() / totalMs)
+                update(applicationContext.getString(R.string.status_reading_audio), transcript.processedMs.toFloat() / totalMs)
                 decoder.decode(
                     chunkSamples = CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
                     skipSamples = transcript.processedMs * 16,
@@ -204,20 +221,21 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     val chunkStartMs = startSample / 16
                     val chunkMs = samples.size / 16L
                     val prompt = transcript.segments.takeLast(3).joinToString(" ") { it.text }.takeLast(200)
-                    update("Transcribing", chunkStartMs.toFloat() / totalMs)
+                    update(transcribing, chunkStartMs.toFloat() / totalMs)
 
                     val chunkStarted = System.currentTimeMillis()
-                    val result = whisper.transcribe(samples, language, prompt) { percent ->
-                        update("Transcribing", (chunkStartMs + chunkMs * percent / 100f) / totalMs)
+                    val result = engine.transcribe(samples, language, prompt) { percent ->
+                        update(transcribing, (chunkStartMs + chunkMs * percent / 100f) / totalMs)
                     }
                     if (result == null) {
                         stopped = true
                         return@decode false
                     }
+                    val took = System.currentTimeMillis() - chunkStarted
                     AppLog.i(
                         TAG,
-                        "Chunk at ${chunkStartMs / 1000}s (${chunkMs / 1000}s audio) took " +
-                            "${(System.currentTimeMillis() - chunkStarted) / 1000}s, ${result.size} segments",
+                        "Chunk at ${chunkStartMs / 1000}s (${chunkMs / 1000}s audio) took ${took / 1000.0}s " +
+                            "(${"%.1f".format(java.util.Locale.US, chunkMs.toFloat() / took.coerceAtLeast(1))}x real time), ${result.size} segments",
                     )
 
                     var newSegments = result
@@ -233,10 +251,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     transcript = transcript.copy(
                         segments = transcript.segments + newSegments,
                         processedMs = chunkStartMs + chunkMs,
+                        model = model.id,
                         translationLanguage = if (canTranslate) target else transcript.translationLanguage,
                     )
                     graph.transcripts.save(episodeId, transcript)
-                    update("Transcribing", transcript.processedMs.toFloat() / totalMs)
+                    update(transcribing, transcript.processedMs.toFloat() / totalMs)
                     true
                 }
             } finally {
@@ -244,8 +263,20 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
         }
         if (stopped) return null
-        AppLog.i(TAG, "Transcription finished in ${(System.currentTimeMillis() - started) / 1000}s")
+        val seconds = (System.currentTimeMillis() - started) / 1000
+        AppLog.i(TAG, "Transcription finished in ${seconds}s for ${totalMs / 1000}s of audio")
         return transcript.copy(complete = true, processedMs = maxOf(transcript.processedMs, totalMs))
+    }
+
+    private suspend fun ensureModel(model: SpeechModel) {
+        if (graph.models.isDownloaded(model)) return
+        val label = applicationContext.getString(R.string.status_downloading_model, model.label)
+        update(label, 0f)
+        AppLog.i(TAG, "Downloading model ${model.id}")
+        graph.models.download(model) { written, total ->
+            update("$label · ${written / 1_000_000} / ${total / 1_000_000} MB", written.toFloat() / total.coerceAtLeast(1))
+        }
+        AppLog.i(TAG, "Model ${model.id} downloaded")
     }
 
     private suspend fun translateRemaining(transcript: Transcript, target: String): Transcript {
@@ -259,7 +290,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val segments = transcript.segments.map { s ->
                 if (s.translation != null && !stale) s
                 else {
-                    update("Translating", done++.toFloat() / missing)
+                    update(applicationContext.getString(R.string.status_translating), done++.toFloat() / missing)
                     s.copy(translation = withTimeoutOrNull(15_000) {
                         graph.translation.translate(s.text, transcript.language, target)
                     })
@@ -283,6 +314,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         var last: Status? = null
         while (coroutineContext.isActive) {
             val current = status.value
+            if (isStopped) break // stopped by the user: don't overwrite the "stopped" state
             if (current != last) {
                 last = current
                 dao.setTranscript(episodeId, TranscriptState.RUNNING, current.progress, current.text)
@@ -309,8 +341,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         private const val CHUNK_SECONDS = 5 * 60
         private const val TRANSLATION_DOWNLOAD_TIMEOUT_MS = 3 * 60_000L
 
-        /** Only one transcription at a time: whisper uses most of the CPU and lots of memory. */
-        private val engineLock = Mutex()
 
         /** Phrases whisper is known to invent during music or silence (from subtitle training data). */
         private val HALLUCINATIONS = listOf(

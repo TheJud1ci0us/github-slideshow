@@ -77,7 +77,10 @@ import com.ascolta.app.data.TranscriptState
 import com.ascolta.app.data.VocabEntity
 import com.ascolta.app.data.indexAt
 import com.ascolta.app.data.languageName
+import com.ascolta.app.R
 import com.ascolta.app.graph
+import androidx.compose.ui.res.stringResource
+import androidx.compose.material.icons.filled.Stop
 import kotlinx.coroutines.launch
 
 private val SPEEDS = listOf(0.5f, 0.65f, 0.75f, 0.85f, 1f, 1.15f, 1.25f, 1.5f)
@@ -124,7 +127,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             translating = true
             runCatching { graph.repo.translateTranscript(episodeId) }
                 .onSuccess { if (it != null) transcript = it }
-                .onFailure { Toast.makeText(context, "Translation unavailable: ${it.message}", Toast.LENGTH_LONG).show() }
+                .onFailure { Toast.makeText(context, context.getString(R.string.translation_unavailable, it.message ?: ""), Toast.LENGTH_LONG).show() }
             translating = false
         }
     }
@@ -174,25 +177,25 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         }
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 actions = {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Options") }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
                     val source = languageName(transcript?.language ?: settings.learningLanguage.value)
                     val target = languageName(nativeLanguage)
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        CheckItem("Show $source", showOriginal) { settings.showOriginal.set(it) }
-                        CheckItem("Show $target", showTranslation) { settings.showTranslation.set(it) }
-                        CheckItem("Pause after each sentence", autoPause) { settings.autoPause.set(it) }
+                        CheckItem(stringResource(R.string.show_language, source), showOriginal) { settings.showOriginal.set(it) }
+                        CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
+                        CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text("Larger text") }, onClick = {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.larger_text)) }, onClick = {
                             settings.transcriptTextScale.set((textScale + 0.15f).coerceAtMost(2f))
                         })
-                        DropdownMenuItem(text = { Text("Smaller text") }, onClick = {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.smaller_text)) }, onClick = {
                             settings.transcriptTextScale.set((textScale - 0.15f).coerceAtLeast(0.7f))
                         })
                         if (ep?.transcriptState == TranscriptState.DONE) {
                             HorizontalDivider()
-                            DropdownMenuItem(text = { Text("Re-transcribe with current model") }, onClick = {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.retranscribe_current)) }, onClick = {
                                 menu = false
                                 scope.launch { graph.repo.retranscribe(episodeId) }
                             })
@@ -234,7 +237,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         },
         floatingActionButton = {
             if (!follow && segments.isNotEmpty()) {
-                SmallFloatingActionButton(onClick = { follow = true }) { Icon(Icons.Filled.MyLocation, "Follow playback") }
+                SmallFloatingActionButton(onClick = { follow = true }) { Icon(Icons.Filled.MyLocation, stringResource(R.string.follow_playback)) }
             }
         },
     ) { padding ->
@@ -292,7 +295,7 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
     when (ep.transcriptState) {
         TranscriptState.RUNNING, TranscriptState.QUEUED -> Banner {
             Text(
-                "${ep.transcriptStatus ?: "Preparing transcript"} · ${(ep.transcriptProgress * 100).toInt()}%",
+                "${ep.transcriptStatus ?: stringResource(R.string.banner_preparing)} · ${(ep.transcriptProgress * 100).toInt()}%",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(6.dp))
@@ -303,34 +306,63 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
             }
             Spacer(Modifier.height(6.dp))
             Text(
-                if (partial) "Transcribed sentences appear below as they're ready."
-                else "Runs on your phone; you can leave the app and keep listening.",
+                stringResource(if (partial) R.string.banner_partial else R.string.banner_background),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
-                Text("Stuck? Restart")
+            Row {
+                OutlinedButton(onClick = { scope.launch { graph.repo.stopTranscription(ep.id) } }) {
+                    Icon(Icons.Filled.Stop, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.action_stop))
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
+                    Text(stringResource(R.string.stuck_restart))
+                }
             }
         }
         TranscriptState.FAILED -> Banner {
-            Text("Transcription failed: ${ep.error ?: "unknown error"}", color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) { Text("Try again") }
-        }
-        TranscriptState.NONE -> if (!partial) Banner {
-            Text("No transcript yet", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Create one on your phone. The episode is downloaded first if needed.",
+                stringResource(R.string.transcription_failed, ep.error ?: stringResource(R.string.unknown_error)),
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
+                Text(stringResource(R.string.action_try_again))
+            }
+        }
+        TranscriptState.NONE -> if (partial || ep.transcriptProgress > 0f) Banner {
+            // Stopped by the user part-way: what was transcribed is kept.
+            Text(
+                stringResource(R.string.paused_title, (ep.transcriptProgress * 100).toInt()),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(R.string.paused_text),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            Button(onClick = { scope.launch { graph.repo.transcribe(ep.id) } }) { Text("Create transcript") }
+            Button(onClick = { scope.launch { graph.repo.transcribe(ep.id) } }) {
+                Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.action_continue))
+            }
+        } else Banner {
+            Text(stringResource(R.string.no_transcript_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.no_transcript_text),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = { scope.launch { graph.repo.transcribe(ep.id) } }) {
+                Text(stringResource(R.string.ep_create_transcript))
+            }
         }
         else -> if (translating) Banner {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Translating…", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.translating), style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -438,7 +470,7 @@ private fun WordSheet(
     val scope = rememberCoroutineScope()
     val translation by produceState<String?>(null, lookup) {
         value = runCatching { graph.repo.translateWord(lookup.word, language) }
-            .getOrElse { "(translation unavailable: ${it.message})" }
+            .getOrElse { context.getString(R.string.word_translation_unavailable, it.message ?: "") }
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -471,15 +503,15 @@ private fun WordSheet(
                                     createdAt = System.currentTimeMillis(),
                                 ),
                             )
-                            Toast.makeText(context, if (added) "Saved to Words" else "Already saved", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(if (added) R.string.saved_to_words else R.string.already_saved), Toast.LENGTH_SHORT).show()
                             onDismiss()
                         }
                     },
                 ) {
-                    Icon(Icons.Filled.BookmarkAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Save word")
+                    Icon(Icons.Filled.BookmarkAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.save_word))
                 }
                 OutlinedButton(onClick = { onPlaySentence(); onDismiss() }) {
-                    Icon(Icons.Filled.Replay, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Play sentence")
+                    Icon(Icons.Filled.Replay, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.play_sentence))
                 }
             }
         }
@@ -525,13 +557,13 @@ private fun Controls(
                 TextButton(onClick = onSpeed) {
                     Text(String.format(java.util.Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.') + "×")
                 }
-                IconButton(onClick = onPrevious) { Icon(Icons.Filled.SkipPrevious, "Previous sentence") }
+                IconButton(onClick = onPrevious) { Icon(Icons.Filled.SkipPrevious, stringResource(R.string.previous_sentence)) }
                 FilledIconButton(onClick = onPlayPause, modifier = Modifier.size(64.dp)) {
                     if (buffering) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
-                    else Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/pause", Modifier.size(36.dp))
+                    else Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, stringResource(R.string.play_pause), Modifier.size(36.dp))
                 }
-                IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, "Next sentence") }
-                IconButton(onClick = onRepeat) { Icon(Icons.Filled.Replay, "Repeat sentence") }
+                IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, stringResource(R.string.next_sentence)) }
+                IconButton(onClick = onRepeat) { Icon(Icons.Filled.Replay, stringResource(R.string.repeat_sentence)) }
             }
         }
     }

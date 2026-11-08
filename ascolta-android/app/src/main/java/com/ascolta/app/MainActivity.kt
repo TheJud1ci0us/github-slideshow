@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.IntentCompat
@@ -13,7 +13,8 @@ import com.ascolta.app.ui.AscoltaRoot
 import com.ascolta.app.ui.theme.AscoltaTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+/** AppCompatActivity so the app language can be changed in Settings (per-app language). */
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -41,8 +42,8 @@ class MainActivity : ComponentActivity() {
                     ?: return
                 lifecycleScope.launch {
                     runCatching { graph.repo.importAudio(uri) }
-                        .onSuccess { Toast.makeText(this@MainActivity, "Imported, transcribing…", Toast.LENGTH_SHORT).show() }
-                        .onFailure { Toast.makeText(this@MainActivity, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                        .onSuccess { Toast.makeText(this@MainActivity, getString(R.string.imported_transcribing), Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(this@MainActivity, getString(R.string.import_failed, it.message ?: ""), Toast.LENGTH_LONG).show() }
                 }
             }
             intent.action == Intent.ACTION_SEND && type == "text/plain" -> {

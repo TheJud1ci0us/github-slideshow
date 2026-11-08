@@ -6,9 +6,10 @@ Italian with English as the native language, and also supports Spanish, French,
 German, Portuguese, Japanese and Chinese.
 
 There are no AI services, no API keys and no servers. Speech recognition
-([whisper.cpp](https://github.com/ggml-org/whisper.cpp)) and translation
+([whisper.cpp](https://github.com/ggml-org/whisper.cpp) or NVIDIA Parakeet through
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)) and translation
 ([ML Kit on-device translation](https://developers.google.com/ml-kit/language/translation))
-both run locally. The models are downloaded once; audio and transcripts never leave
+all run locally. The models are downloaded once; audio and transcripts never leave
 the phone.
 
 ## Features
@@ -30,6 +31,17 @@ the phone.
   first sentences while the rest is still processing, and an interrupted job
   continues where it stopped.
 
+**Fast, controllable transcription**
+- Choose the engine in Settings: Whisper (Tiny/Base/Small/Large v3 Turbo) or
+  **NVIDIA Parakeet TDT 0.6B v3** (fast and very accurate for 25 European languages).
+- **Skips music and silence** with a voice-activity model, so only speech is processed.
+- whisper.cpp is built for several CPU generations; the app loads the fastest one the
+  phone supports (e.g. dot-product and int8 matrix instructions on recent Snapdragons).
+- Choose how many CPU cores to use (1–8) and toggle Whisper's flash attention.
+- **Speed test** in Settings times one minute of a downloaded episode with the current settings.
+- **Stop** a running transcription (what's done is kept; *Continue* resumes), or remove
+  waiting items from the queue.
+
 **Learning**
 - Dual subtitles: the Italian sentence with the English translation under it, synced
   to the audio, with the current sentence highlighted and auto-scrolled.
@@ -37,6 +49,8 @@ the phone.
 - Previous / next / repeat sentence, **pause after each sentence**, 0.5×–1.5× speed.
 - Hide either language to test yourself; adjustable text size.
 - Background playback with lock-screen and notification controls.
+- App interface in English, Italian, French, Spanish, German or Portuguese
+  (Settings → App language, or Android's per-app language setting).
 
 ## Building
 
@@ -51,8 +65,9 @@ cd ascolta-android
 ./gradlew testDebugUnitTest      # unit tests (parsers, resampler, …)
 ```
 
-The first build downloads whisper.cpp v1.7.6 from GitHub and compiles it, which takes
-a few minutes. To build offline, clone it once into `third_party/whisper.cpp`:
+The first build downloads whisper.cpp v1.7.6 and the sherpa-onnx 1.12.40 Android
+library (checksum-verified, into `app/libs/`) from GitHub, and compiles whisper.cpp for
+several CPU generations, which takes a few minutes. To build offline, clone it once into `third_party/whisper.cpp`:
 
 ```bash
 git clone --depth 1 --branch v1.7.6 https://github.com/ggml-org/whisper.cpp third_party/whisper.cpp
@@ -71,16 +86,18 @@ Run on a **real phone**. The emulator works but whisper is very slow there.
 
 ### Choosing a speech model
 
-| Model | Download | Speed | Accuracy |
-|---|---|---|---|
-| Tiny | 32 MB | fastest | OK for slow, clear speech |
-| **Base** (default) | 60 MB | fast | decent |
-| Small | 190 MB | ~3× slower than Base | noticeably better (recommended if your phone is recent) |
-| Large v3 Turbo | 574 MB | slow | best; needs ~8 GB RAM |
+| Model | Download | Speed | Accuracy | Languages |
+|---|---|---|---|---|
+| Whisper Tiny | 32 MB | fastest | OK for slow, clear speech | all |
+| **Whisper Base** (default) | 60 MB | fast | decent | all |
+| Whisper Small | 190 MB | ~3× slower than Base | noticeably better | all |
+| Whisper Large v3 Turbo | 574 MB | slow | best Whisper; needs ~8 GB RAM | all |
+| **NVIDIA Parakeet v3** | 670 MB | fast | very good, with punctuation | 25 European (not ja/zh) |
 
-On a recent phone, Base usually processes an hour of audio in well under an hour.
-Small takes longer but makes fewer mistakes with fast native speech. Use
-*Re-transcribe* on an episode after switching models.
+In a test on Italian speech, Parakeet transcribed perfectly where Whisper Base made
+mistakes, and was about 3× faster. Run the speed test in Settings to compare models,
+core counts and flash attention on your own phone. Use *Re-transcribe* on an episode
+after switching models.
 
 ## How it works
 
@@ -96,7 +113,7 @@ PlayerScreen ◄── Media3 (PlaybackService) + transcript ──► synced du
 | Path | What |
 |---|---|
 | `app/src/main/cpp/` | CMake build of whisper.cpp + JNI bridge |
-| `whisper/` | Kotlin bindings, audio decoding/resampling, model downloads |
+| `whisper/` | Speech engines (whisper.cpp JNI, Parakeet via sherpa-onnx), voice detection, audio decoding, models, speed test |
 | `net/` | RSS/OPML parsing, published transcript parsing, podcast search, link resolution |
 | `data/` | Room database, settings, transcript storage, repository |
 | `work/` | WorkManager jobs: feed refresh, downloads, transcription |

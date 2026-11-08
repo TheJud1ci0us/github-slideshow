@@ -30,20 +30,26 @@ else ()
     set(WHISPER_SOURCE_DIR ${whisper_cpp_SOURCE_DIR})
 endif ()
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# Build the CPU code several times, each tuned for a generation of phone CPUs
+# (ARMv8.0, ARMv8.2 + dot product, + FP16, ARMv8.6 + int8 matrix multiply).
+# At runtime ggml loads the fastest variant this phone supports, so recent
+# phones get the newest instructions and older phones still work.
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL ON CACHE BOOL "" FORCE)
+set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
-set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
-set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 
-if (ANDROID_ABI STREQUAL "arm64-v8a")
-    # ARMv8.2 with half-precision math: every mainstream phone since ~2018.
-    set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16" CACHE STRING "" FORCE)
-endif ()
+add_subdirectory(${WHISPER_SOURCE_DIR} whisper_build)
 
-add_subdirectory(${WHISPER_SOURCE_DIR} whisper_build EXCLUDE_FROM_ALL)
+# whisper.cpp writes the CPU plug-ins to a bin/ folder; move them to where
+# Gradle collects the native libraries to package in the APK.
+foreach (backend ${GGML_AVAILABLE_BACKENDS})
+    set_target_properties(${backend} PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+endforeach ()
 
 add_library(ascolta_whisper SHARED whisper_jni.cpp)
-target_link_libraries(ascolta_whisper PRIVATE whisper android log)
-target_link_options(ascolta_whisper PRIVATE -Wl,--gc-sections)
+target_link_libraries(ascolta_whisper PRIVATE whisper ggml ggml-base android log)

@@ -33,15 +33,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.ascolta.app.R
 import com.ascolta.app.graph
+import androidx.compose.ui.res.stringResource
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector)
+private data class Tab(val route: String, val label: Int, val icon: ImageVector)
 
 private val TABS = listOf(
-    Tab("library", "Library", Icons.AutoMirrored.Filled.LibraryBooks),
-    Tab("discover", "Discover", Icons.Filled.Search),
-    Tab("words", "Words", Icons.Filled.Translate),
-    Tab("settings", "Settings", Icons.Filled.Settings),
+    Tab("library", R.string.tab_library, Icons.AutoMirrored.Filled.LibraryBooks),
+    Tab("discover", R.string.tab_discover, Icons.Filled.Search),
+    Tab("words", R.string.tab_words, Icons.Filled.Translate),
+    Tab("settings", R.string.tab_settings, Icons.Filled.Settings),
 )
 
 object Routes {
@@ -74,7 +76,7 @@ fun AscoltaRoot() {
                                 selected = route.substringBefore('?') == tab.route,
                                 onClick = { nav.navigateToTab(tab.route) },
                                 icon = { Icon(tab.icon, contentDescription = null) },
-                                label = { Text(tab.label) },
+                                label = { Text(stringResource(tab.label)) },
                             )
                         }
                     }

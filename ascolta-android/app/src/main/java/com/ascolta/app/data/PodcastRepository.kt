@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.ascolta.app.R
 import com.ascolta.app.net.OpmlParser
 import com.ascolta.app.net.ParsedEpisode
 import com.ascolta.app.net.ParsedFeed
@@ -208,8 +209,38 @@ class PodcastRepository(
             ?.takeIf { lang -> LANGUAGES.any { it.code == lang } && lang != settings.nativeLanguage.value }
             ?: settings.learningLanguage.value
         episodeDao.setTranscriptLanguage(episodeId, language)
-        episodeDao.setTranscript(episodeId, TranscriptState.QUEUED, 0f, "Waiting")
+        episodeDao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, context.getString(R.string.status_waiting))
         WorkScheduler.transcribe(context, episodeId, manual)
+    }
+
+    /**
+     * Stops (or removes from the queue) this episode's transcription, and its download if
+     * the transcription was waiting for it. What was already transcribed is kept, so
+     * "Continue" resumes from there.
+     */
+    suspend fun stopTranscription(episodeId: Long) {
+        AppLog.i("Repo", "Stop transcription #$episodeId")
+        val episode = episodeDao.get(episodeId) ?: return
+        WorkScheduler.cancelTranscription(context, episodeId)
+        val waitingForDownload = episode.downloadState == DownloadState.QUEUED || episode.downloadState == DownloadState.DOWNLOADING
+        if (waitingForDownload) WorkScheduler.cancelDownload(context, episodeId)
+        // Give the running job a moment to notice, so it doesn't write "running" after us.
+        withTimeoutOrNull(5_000) {
+            while (WorkScheduler.isActive(context, WorkScheduler.transcribeWorkName(episodeId))) kotlinx.coroutines.delay(200)
+        }
+        if (waitingForDownload) episodeDao.setDownload(episodeId, DownloadState.NONE, 0f)
+        val progress = transcripts.load(episodeId)?.let { t ->
+            if (episode.durationSec > 0) (t.processedMs / 1000f / episode.durationSec).coerceIn(0f, 1f) else episode.transcriptProgress
+        } ?: 0f
+        episodeDao.setTranscript(episodeId, TranscriptState.NONE, progress, null)
+    }
+
+    /** Cancels a queued or running episode download. */
+    suspend fun cancelDownload(episodeId: Long) {
+        val episode = episodeDao.get(episodeId) ?: return
+        WorkScheduler.cancelDownload(context, episodeId)
+        if (episode.transcriptState == TranscriptState.QUEUED) episodeDao.setTranscript(episodeId, TranscriptState.NONE, 0f, null)
+        episodeDao.setDownload(episodeId, DownloadState.NONE, 0f)
     }
 
     /** Stops whatever is happening for this episode and starts its transcription again (keeps saved progress). */
@@ -238,7 +269,7 @@ class PodcastRepository(
             }
             if (transcribing && !downloading && !WorkScheduler.isActive(context, WorkScheduler.transcribeWorkName(episode.id))) {
                 AppLog.i("Repo", "Recovering transcription #${episode.id}")
-                episodeDao.setTranscript(episode.id, TranscriptState.QUEUED, episode.transcriptProgress, "Resuming")
+                episodeDao.setTranscript(episode.id, TranscriptState.QUEUED, episode.transcriptProgress, context.getString(R.string.status_resuming))
                 WorkScheduler.transcribe(context, episode.id, manual = true)
             }
         }

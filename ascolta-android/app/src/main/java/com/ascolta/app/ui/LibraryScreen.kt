@@ -21,6 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.ascolta.app.R
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -82,17 +86,17 @@ fun LibraryScreen(
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
             runCatching { graph.repo.importAudio(uri) }
-                .onSuccess { Toast.makeText(context, "Imported. Transcription queued.", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                .onSuccess { Toast.makeText(context, context.getString(R.string.imported_transcribing), Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(context, context.getString(R.string.import_failed, it.message ?: ""), Toast.LENGTH_LONG).show() }
         }
     }
     val pickOpml = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        Toast.makeText(context, "Importing subscriptions…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.importing_subscriptions), Toast.LENGTH_SHORT).show()
         scope.launch {
             runCatching { graph.repo.importOpml(uri) }
-                .onSuccess { Toast.makeText(context, "Added $it podcasts", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, "OPML import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                .onSuccess { Toast.makeText(context, context.resources.getQuantityString(R.plurals.added_podcasts, it, it), Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(context, context.getString(R.string.opml_failed, it.message ?: ""), Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -100,7 +104,7 @@ fun LibraryScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text("Ascolta") },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(
                         enabled = !refreshing,
@@ -109,11 +113,16 @@ fun LibraryScreen(
                             scope.launch {
                                 val added = runCatching { graph.repo.refreshAll() }.getOrDefault(0)
                                 refreshing = false
-                                Toast.makeText(context, if (added == 0) "No new episodes" else "$added new episodes", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (added == 0) context.getString(R.string.no_new_episodes)
+                                    else context.resources.getQuantityString(R.plurals.new_episodes, added, added),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                             }
                         },
                     ) {
-                        if (refreshing) SmallSpinner() else Icon(Icons.Filled.Refresh, contentDescription = "Check for new episodes")
+                        if (refreshing) SmallSpinner() else Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh_feeds))
                     }
                 },
             )
@@ -122,22 +131,22 @@ fun LibraryScreen(
             Column(horizontalAlignment = Alignment.End) {
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Search podcasts") },
+                        text = { Text(stringResource(R.string.menu_search)) },
                         leadingIcon = { Icon(Icons.Filled.Search, null) },
                         onClick = { menuOpen = false; openDiscover(null) },
                     )
                     DropdownMenuItem(
-                        text = { Text("Paste link (RSS, Spotify, Apple)") },
+                        text = { Text(stringResource(R.string.menu_paste_link)) },
                         leadingIcon = { Icon(Icons.Filled.Link, null) },
                         onClick = { menuOpen = false; linkDialog = true },
                     )
                     DropdownMenuItem(
-                        text = { Text("Import audio file") },
+                        text = { Text(stringResource(R.string.menu_import_audio)) },
                         leadingIcon = { Icon(Icons.Filled.AudioFile, null) },
                         onClick = { menuOpen = false; pickAudio.launch(arrayOf("audio/*", "video/mp4")) },
                     )
                     DropdownMenuItem(
-                        text = { Text("Import subscriptions (OPML)") },
+                        text = { Text(stringResource(R.string.menu_import_opml)) },
                         leadingIcon = { Icon(Icons.Filled.UploadFile, null) },
                         onClick = { menuOpen = false; pickOpml.launch(arrayOf("*/*")) },
                     )
@@ -145,7 +154,7 @@ fun LibraryScreen(
                 ExtendedFloatingActionButton(
                     onClick = { menuOpen = true },
                     icon = { Icon(Icons.Filled.Add, null) },
-                    text = { Text("Add") },
+                    text = { Text(stringResource(R.string.action_add)) },
                 )
             }
         },
@@ -164,13 +173,13 @@ fun LibraryScreen(
                 contentPadding = PaddingValues(bottom = 96.dp),
             ) {
                 if (active.isNotEmpty()) {
-                    item { SectionTitle("In progress") }
+                    item { SectionTitle(stringResource(R.string.section_in_progress)) }
                     items(active, key = { "active-${it.id}" }) { ep ->
                         ActiveRow(ep, onClick = { openPlayer(ep.id) })
                     }
                 }
                 if (recent.isNotEmpty()) {
-                    item { SectionTitle("Continue listening") }
+                    item { SectionTitle(stringResource(R.string.section_continue)) }
                     items(recent, key = { "recent-${it.id}" }) { ep ->
                         ListItem(
                             modifier = Modifier.clickable { openPlayer(ep.id) },
@@ -186,13 +195,13 @@ fun LibraryScreen(
                         )
                     }
                 }
-                item { SectionTitle("Podcasts") }
+                item { SectionTitle(stringResource(R.string.section_podcasts)) }
                 if (importedCount > 0) {
                     item {
                         ListItem(
                             modifier = Modifier.clickable { openPodcast(null) },
-                            headlineContent = { Text("Imported files") },
-                            supportingContent = { Text("$importedCount files") },
+                            headlineContent = { Text(stringResource(R.string.imported_files)) },
+                            supportingContent = { Text(pluralStringResource(R.plurals.files_count, importedCount, importedCount)) },
                             leadingContent = { Artwork(null, 56.dp) },
                         )
                     }
@@ -205,8 +214,8 @@ fun LibraryScreen(
                             Text(
                                 listOfNotNull(
                                     p.podcast.author,
-                                    "${p.episodeCount} episodes",
-                                    if (p.transcribedCount > 0) "${p.transcribedCount} transcribed" else null,
+                                    pluralStringResource(R.plurals.episodes_count, p.episodeCount, p.episodeCount),
+                                    if (p.transcribedCount > 0) stringResource(R.string.transcribed_count, p.transcribedCount) else null,
                                 ).joinToString(" · "),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                             )
@@ -239,15 +248,33 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun ActiveRow(ep: EpisodeEntity, onClick: () -> Unit) {
+    val graph = LocalContext.current.graph
+    val scope = rememberCoroutineScope()
+    val downloading = ep.downloadState == DownloadState.DOWNLOADING || ep.downloadState == DownloadState.QUEUED
     val (label, progress) = when {
-        ep.downloadState == DownloadState.DOWNLOADING -> "Downloading" to ep.downloadProgress
-        ep.downloadState == DownloadState.QUEUED -> (ep.error ?: "Waiting to download") to null
-        ep.transcriptState == TranscriptState.RUNNING -> (ep.transcriptStatus ?: "Transcribing") to ep.transcriptProgress
-        else -> (ep.transcriptStatus ?: "Waiting to transcribe") to null
+        ep.downloadState == DownloadState.DOWNLOADING -> stringResource(R.string.status_downloading) to ep.downloadProgress
+        ep.downloadState == DownloadState.QUEUED -> (ep.error ?: stringResource(R.string.status_waiting_to_download)) to null
+        ep.transcriptState == TranscriptState.RUNNING -> (ep.transcriptStatus ?: stringResource(R.string.status_transcribing)) to ep.transcriptProgress
+        else -> (ep.transcriptStatus ?: stringResource(R.string.status_waiting_to_transcribe)) to null
     }
     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clickable(onClick = onClick)) {
-        Column(Modifier.padding(12.dp)) {
-            Text(ep.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.padding(start = 12.dp, top = 4.dp, bottom = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    ep.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                )
+                // Stops a running job, or removes a waiting one from the queue.
+                IconButton(onClick = {
+                    scope.launch {
+                        if (ep.transcriptState == TranscriptState.QUEUED || ep.transcriptState == TranscriptState.RUNNING) {
+                            graph.repo.stopTranscription(ep.id)
+                        } else if (downloading) {
+                            graph.repo.cancelDownload(ep.id)
+                        }
+                    }
+                }) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_cancel)) }
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 if (progress != null) "$label · ${(progress * 100).toInt()}%" else label,
@@ -255,8 +282,8 @@ private fun ActiveRow(ep: EpisodeEntity, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(6.dp))
-            if (progress != null) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            else LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (progress != null) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().padding(end = 12.dp))
+            else LinearProgressIndicator(Modifier.fillMaxWidth().padding(end = 12.dp))
         }
     }
 }
@@ -268,24 +295,23 @@ private fun EmptyLibrary(modifier: Modifier, onSearch: () -> Unit, onLink: () ->
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Learn with podcasts", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.empty_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Text(
-            "Subscribe to a podcast and new episodes are downloaded and transcribed on your phone, " +
-                "with a translation under every sentence. Nothing is sent to a server.",
+            stringResource(R.string.empty_text),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
         Button(onClick = onSearch, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Search, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Find a podcast")
+            Icon(Icons.Filled.Search, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.empty_find))
         }
         OutlinedButton(onClick = onLink, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Paste a link")
+            Icon(Icons.Filled.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.empty_paste))
         }
         OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.AudioFile, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Import an audio file")
+            Icon(Icons.Filled.AudioFile, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.empty_import))
         }
     }
 }

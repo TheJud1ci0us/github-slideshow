@@ -54,7 +54,9 @@ import androidx.core.text.HtmlCompat
 import com.ascolta.app.data.DownloadState
 import com.ascolta.app.data.EpisodeEntity
 import com.ascolta.app.data.TranscriptState
+import com.ascolta.app.R
 import com.ascolta.app.graph
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,19 +76,19 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text(podcast?.title ?: "Imported files", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(podcast?.title ?: stringResource(R.string.imported_files), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
                 },
                 actions = {
                     if (podcastId != null) {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Check for new episodes") }, onClick = {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.refresh_feeds)) }, onClick = {
                                 menu = false
                                 scope.launch { podcast?.let { runCatching { graph.repo.refresh(it) } } }
                             })
-                            DropdownMenuItem(text = { Text("Unfollow") }, onClick = {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.unfollow)) }, onClick = {
                                 menu = false
                                 confirmUnsubscribe = true
                             })
@@ -112,9 +114,9 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("Auto-download & transcribe", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.auto_download_title), style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "New episodes are prepared in the background",
+                                stringResource(R.string.auto_download_text),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -128,7 +130,7 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
             }
             if (episodes.isEmpty()) {
                 item {
-                    Text("No episodes yet.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.no_episodes), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             items(episodes, key = { it.id }) { ep ->
@@ -141,8 +143,8 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
     if (confirmUnsubscribe) {
         AlertDialog(
             onDismissRequest = { confirmUnsubscribe = false },
-            title = { Text("Unfollow?") },
-            text = { Text("Downloaded episodes and transcripts of this podcast will be deleted.") },
+            title = { Text(stringResource(R.string.unfollow_title)) },
+            text = { Text(stringResource(R.string.unfollow_text)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmUnsubscribe = false
@@ -150,9 +152,9 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                         podcastId?.let { graph.repo.unsubscribe(it) }
                         onBack()
                     }
-                }) { Text("Unfollow") }
+                }) { Text(stringResource(R.string.unfollow)) }
             },
-            dismissButton = { TextButton(onClick = { confirmUnsubscribe = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmUnsubscribe = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -187,25 +189,37 @@ private fun EpisodeRow(ep: EpisodeEntity, onOpen: () -> Unit) {
             StatusLine(ep)
         }
         Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Episode actions") }
+            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (ep.downloadState != DownloadState.DONE && ep.audioUrl != null) {
-                    DropdownMenuItem(text = { Text("Download") }, onClick = {
+                val downloading = ep.downloadState == DownloadState.QUEUED || ep.downloadState == DownloadState.DOWNLOADING
+                val transcribing = ep.transcriptState == TranscriptState.QUEUED || ep.transcriptState == TranscriptState.RUNNING
+                if (downloading) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ep_cancel_download)) }, onClick = {
+                        menu = false; scope.launch { graph.repo.cancelDownload(ep.id) }
+                    })
+                } else if (ep.downloadState != DownloadState.DONE && ep.audioUrl != null) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ep_download)) }, onClick = {
                         menu = false; scope.launch { graph.repo.download(ep.id) }
                     })
                 }
+                if (transcribing) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ep_stop_transcript)) }, onClick = {
+                        menu = false; scope.launch { graph.repo.stopTranscription(ep.id) }
+                    })
+                }
                 if (ep.transcriptState == TranscriptState.NONE || ep.transcriptState == TranscriptState.FAILED) {
-                    DropdownMenuItem(text = { Text("Create transcript") }, onClick = {
+                    val label = if (ep.transcriptProgress > 0f) R.string.ep_continue_transcript else R.string.ep_create_transcript
+                    DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = {
                         menu = false; scope.launch { graph.repo.transcribe(ep.id) }
                     })
                 }
                 if (ep.transcriptState == TranscriptState.DONE) {
-                    DropdownMenuItem(text = { Text("Re-transcribe (current model)") }, onClick = {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ep_retranscribe)) }, onClick = {
                         menu = false; scope.launch { graph.repo.retranscribe(ep.id) }
                     })
                 }
                 if (ep.localPath != null) {
-                    DropdownMenuItem(text = { Text(if (ep.podcastId == null) "Delete file" else "Delete download") }, onClick = {
+                    DropdownMenuItem(text = { Text(stringResource(if (ep.podcastId == null) R.string.ep_delete_file else R.string.ep_delete_download)) }, onClick = {
                         menu = false; scope.launch { graph.repo.deleteDownload(ep.id) }
                     })
                 }
@@ -218,18 +232,20 @@ private fun EpisodeRow(ep: EpisodeEntity, onOpen: () -> Unit) {
 private fun StatusLine(ep: EpisodeEntity) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         when (ep.downloadState) {
-            DownloadState.DONE -> Chip(Icons.Filled.CheckCircle, "Downloaded", MaterialTheme.colorScheme.primary)
-            DownloadState.DOWNLOADING -> ProgressChip("Downloading", ep.downloadProgress)
-            DownloadState.QUEUED -> ProgressChip("Waiting to download", null)
-            DownloadState.FAILED -> Chip(Icons.Filled.ErrorOutline, "Download failed", MaterialTheme.colorScheme.error)
-            else -> if (ep.audioUrl != null) Chip(Icons.Filled.Download, "Streams online", MaterialTheme.colorScheme.onSurfaceVariant)
+            DownloadState.DONE -> Chip(Icons.Filled.CheckCircle, stringResource(R.string.chip_downloaded), MaterialTheme.colorScheme.primary)
+            DownloadState.DOWNLOADING -> ProgressChip(stringResource(R.string.status_downloading), ep.downloadProgress)
+            DownloadState.QUEUED -> ProgressChip(stringResource(R.string.status_waiting_to_download), null)
+            DownloadState.FAILED -> Chip(Icons.Filled.ErrorOutline, stringResource(R.string.chip_download_failed), MaterialTheme.colorScheme.error)
+            else -> if (ep.audioUrl != null) Chip(Icons.Filled.Download, stringResource(R.string.chip_streams), MaterialTheme.colorScheme.onSurfaceVariant)
         }
         when (ep.transcriptState) {
-            TranscriptState.DONE -> Chip(Icons.Filled.Subtitles, "Transcript", MaterialTheme.colorScheme.primary)
-            TranscriptState.RUNNING -> ProgressChip(ep.transcriptStatus ?: "Transcribing", ep.transcriptProgress)
-            TranscriptState.QUEUED -> ProgressChip(ep.transcriptStatus ?: "Queued", null)
-            TranscriptState.FAILED -> Chip(Icons.Filled.ErrorOutline, "Transcript failed", MaterialTheme.colorScheme.error)
-            else -> {}
+            TranscriptState.DONE -> Chip(Icons.Filled.Subtitles, stringResource(R.string.chip_transcript), MaterialTheme.colorScheme.primary)
+            TranscriptState.RUNNING -> ProgressChip(ep.transcriptStatus ?: stringResource(R.string.status_transcribing), ep.transcriptProgress)
+            TranscriptState.QUEUED -> ProgressChip(ep.transcriptStatus ?: stringResource(R.string.chip_queued), null)
+            TranscriptState.FAILED -> Chip(Icons.Filled.ErrorOutline, stringResource(R.string.chip_transcript_failed), MaterialTheme.colorScheme.error)
+            else -> if (ep.transcriptProgress > 0f) {
+                Chip(Icons.Filled.Subtitles, stringResource(R.string.chip_paused, (ep.transcriptProgress * 100).toInt()), MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

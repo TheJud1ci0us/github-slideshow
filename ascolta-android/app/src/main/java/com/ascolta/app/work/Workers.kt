@@ -11,7 +11,7 @@ import com.ascolta.app.data.DownloadState
 import com.ascolta.app.data.TranscriptState
 import com.ascolta.app.graph
 import com.ascolta.app.net.downloadTo
-import com.ascolta.app.whisper.WhisperModel
+import com.ascolta.app.whisper.SpeechModel
 import kotlinx.coroutines.CancellationException
 import java.io.File
 
@@ -48,7 +48,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
         val ext = url.substringBefore('?').substringAfterLast('.', "mp3").takeIf { it.length in 2..4 } ?: "mp3"
         val dest = File(applicationContext.filesDir, "episodes/$id.$ext")
-        trySetForeground(Notifications.foregroundInfo(applicationContext, notificationId, "Downloading", episode.title, null, false))
+        trySetForeground(Notifications.foregroundInfo(applicationContext, notificationId, applicationContext.getString(com.ascolta.app.R.string.status_downloading), episode.title, null, false))
         dao.setDownload(id, DownloadState.DOWNLOADING, 0f)
         AppLog.i(TAG, "Downloading #$id from $url")
         return try {
@@ -80,24 +80,30 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
     }
 }
 
-/** Downloads a whisper speech model (from Settings). */
+/** Downloads a speech model (from Settings), plus the small voice-activity model. */
 class ModelDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val model = WhisperModel.byId(inputData.getString(WorkScheduler.KEY_MODEL_ID) ?: return Result.failure())
+        val model = SpeechModel.byId(inputData.getString(WorkScheduler.KEY_MODEL_ID) ?: return Result.failure())
         val graph = applicationContext.graph
-        if (graph.models.isDownloaded(model)) return Result.success()
+        if (graph.models.isDownloaded(model) && graph.models.isVadDownloaded()) return Result.success()
         trySetForeground(
-            Notifications.foregroundInfo(applicationContext, 900, "Downloading speech model", model.label, null, false),
+            Notifications.foregroundInfo(
+                applicationContext, 900,
+                applicationContext.getString(com.ascolta.app.R.string.status_downloading_model, model.label),
+                model.label, null, false,
+            ),
         )
         return try {
+            graph.models.downloadVad()
             graph.models.download(model) { written, total ->
                 setProgress(workDataOf(WorkScheduler.KEY_PROGRESS to if (total > 0) written.toFloat() / total else -1f))
             }
+            AppLog.i(TAG, "Model ${model.id} downloaded from Settings")
             Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "Model download failed", e)
+            AppLog.w(TAG, "Model ${model.id} download failed", e)
             if (runAttemptCount < 3) Result.retry() else Result.failure(workDataOf("error" to e.message))
         }
     }

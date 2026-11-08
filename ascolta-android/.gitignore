@@ -10,3 +10,6 @@ captures/
 .externalNativeBuild/
 # Optional local checkout of whisper.cpp (otherwise CMake fetches it)
 third_party/whisper.cpp/
+
+# Downloaded by app/build.gradle.kts
+app/libs/*.aar

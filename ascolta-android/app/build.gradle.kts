@@ -1,3 +1,6 @@
+import java.net.URI
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -24,7 +27,7 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DANDROID_STL=c++_static")
+                arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }
     }
@@ -53,6 +56,19 @@ android {
     buildFeatures {
         compose = true
     }
+
+    androidResources {
+        // Lists the app's translations so Android's per-app language setting offers them.
+        generateLocaleConfig = true
+    }
+
+    packaging {
+        jniLibs {
+            // Extract native libraries to disk: ggml looks for its CPU-variant
+            // plug-ins (libggml-cpu-*.so) in the app's native library folder.
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {
@@ -65,7 +81,27 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// sherpa-onnx (runs NVIDIA Parakeet on the phone) is published as an AAR on its
+// GitHub releases, not on Maven. Download the pinned release once and verify it.
+val sherpaVersion = "1.12.40"
+val sherpaSha256 = "a7699d6a2e638a38791b2459cb0099c7577e6e5fca6b8ae916742c872a618b82"
+val sherpaAar = file("libs/sherpa-onnx-$sherpaVersion.aar")
+if (!sherpaAar.exists()) {
+    sherpaAar.parentFile.mkdirs()
+    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaVersion/sherpa-onnx-$sherpaVersion.aar"
+    logger.lifecycle("Downloading $url")
+    val tmp = file("${sherpaAar.path}.tmp")
+    URI(url).toURL().openStream().use { input -> tmp.outputStream().use { input.copyTo(it) } }
+    val digest = MessageDigest.getInstance("SHA-256").digest(tmp.readBytes())
+        .joinToString("") { "%02x".format(it) }
+    check(digest == sherpaSha256) { "sherpa-onnx AAR checksum mismatch: $digest" }
+    tmp.renameTo(sherpaAar)
+}
+
 dependencies {
+    implementation(files(sherpaAar))
+    implementation("androidx.appcompat:appcompat:1.7.1")
+
     val composeBom = platform("androidx.compose:compose-bom:2025.06.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")

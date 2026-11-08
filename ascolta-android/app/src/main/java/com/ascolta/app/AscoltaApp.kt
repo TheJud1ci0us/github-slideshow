@@ -12,7 +12,7 @@ import com.ascolta.app.net.Http
 import com.ascolta.app.net.PodcastDirectory
 import com.ascolta.app.player.PlayerConnection
 import com.ascolta.app.translate.TranslationService
-import com.ascolta.app.whisper.WhisperModelManager
+import com.ascolta.app.whisper.ModelManager
 import com.ascolta.app.work.Notifications
 import com.ascolta.app.work.WorkScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +44,7 @@ class AppGraph(app: Application) {
     val db = AppDatabase.build(app)
     val http = Http.client()
     val transcripts = TranscriptStore(File(app.filesDir, "transcripts"))
-    val models = WhisperModelManager(app, http)
+    val models = ModelManager(app, http)
     val translation = TranslationService()
     val directory = PodcastDirectory(http)
     val repo = PodcastRepository(app, db, http, settings, transcripts, translation)

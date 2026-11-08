@@ -44,7 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.ascolta.app.R
 import com.ascolta.app.graph
+import androidx.compose.ui.res.stringResource
 import com.ascolta.app.net.LinkResolution
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -126,7 +128,7 @@ fun MiniPlayer(onOpen: (Long) -> Unit) {
                     }
                 }
                 IconButton(onClick = { player.togglePlay() }) {
-                    Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = "Play/pause")
+                    Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.play_pause))
                 }
             }
         }
@@ -153,14 +155,10 @@ fun AddLinkDialog(
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("Add a podcast") },
+        title = { Text(stringResource(R.string.add_podcast_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Paste an RSS feed, or a link from Apple Podcasts or Spotify. " +
-                        "Tip: in Spotify, tap Share → Ascolta.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Text(stringResource(R.string.add_podcast_hint), style = MaterialTheme.typography.bodyMedium)
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it; error = null },
@@ -187,15 +185,15 @@ fun AddLinkDialog(
                                 is LinkResolution.Unsupported -> error = r.reason
                             }
                         } catch (e: Exception) {
-                            error = "Couldn't add it: ${e.message}"
+                            error = context.getString(R.string.add_podcast_error, e.message ?: "")
                         } finally {
                             busy = false
                         }
                     }
                 },
-            ) { Text("Add") }
+            ) { Text(stringResource(R.string.action_add)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 

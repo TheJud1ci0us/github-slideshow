@@ -2,7 +2,7 @@ package com.ascolta.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.ascolta.app.whisper.WhisperModel
+import com.ascolta.app.whisper.SpeechModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -20,7 +20,13 @@ val LANGUAGES = listOf(
     Language("zh", "Chinese", "TW"),
 )
 
-fun languageName(code: String?) = LANGUAGES.firstOrNull { it.code == code }?.name ?: code ?: "?"
+/** Language name in the app's current language, e.g. "Italiano" / "Italian" / "Italien". */
+fun languageName(code: String?): String {
+    if (code == null) return "?"
+    val locale = java.util.Locale.getDefault()
+    val name = java.util.Locale.forLanguageTag(code).getDisplayLanguage(locale)
+    return name.replaceFirstChar { it.titlecase(locale) }.ifBlank { code }
+}
 
 class Pref<T>(
     private val prefs: SharedPreferences,
@@ -54,6 +60,12 @@ class Settings(context: Context) {
         { k, v -> putBoolean(k, v) },
     )
 
+    private fun int(key: String, default: Int) = Pref(
+        prefs, key, default,
+        { k, d -> getInt(k, d) },
+        { k, v -> putInt(k, v) },
+    )
+
     private fun float(key: String, default: Float) = Pref(
         prefs, key, default,
         { k, d -> getFloat(k, d) },
@@ -64,7 +76,14 @@ class Settings(context: Context) {
     val learningLanguage = string("learning_language", "it")
     /** Language translations are shown in. */
     val nativeLanguage = string("native_language", "en")
-    val modelId = string("whisper_model", WhisperModel.BASE.id)
+    val modelId = string("whisper_model", SpeechModel.BASE.id)
+
+    /** CPU cores used for speech recognition (1–8). */
+    val threads = int("threads", 4)
+    /** whisper.cpp flash attention ("faster calculation mode"). */
+    val flashAttention = bool("flash_attention", true)
+    /** Skip music and silence with voice-activity detection. */
+    val skipNonSpeech = bool("skip_non_speech", true)
 
     val autoDownloadNew = bool("auto_download_new", true)
     val autoTranscribe = bool("auto_transcribe", true)
@@ -77,5 +96,5 @@ class Settings(context: Context) {
     val playbackSpeed = float("playback_speed", 1f)
     val transcriptTextScale = float("transcript_text_scale", 1f)
 
-    val model: WhisperModel get() = WhisperModel.byId(modelId.value)
+    val model: SpeechModel get() = SpeechModel.byId(modelId.value)
 }
