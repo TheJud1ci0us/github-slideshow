@@ -187,8 +187,6 @@
     <string name="auto_new_text">For newly followed podcasts</string>
     <string name="auto_transcribe_title">Transcribe after downloading</string>
     <string name="auto_transcribe_text">Creates the transcript in the background</string>
-    <string name="wifi_only_title">Download only on Wi-Fi</string>
-    <string name="wifi_only_text">Episodes you download yourself ignore this</string>
     <string name="charging_only_title">Transcribe only while charging</string>
     <string name="charging_only_text">Saves battery; manual requests ignore this</string>
     <string name="check_feeds">Check all feeds now</string>
@@ -234,4 +232,24 @@
     <string name="speed_test_spread">Runs: %1$s s (spread %2$s%%)</string>
     <string name="speed_test_warmup">Warm-up run…</string>
     <string name="speed_test_run">Timed run %1$d of %2$d…</string>
+    <string name="status_buffered_ahead">Transcribed %1$d s ahead — waiting</string>
+    <string name="highlight_words">Highlight each word</string>
+    <string name="save_sentence">Save sentence</string>
+    <string name="sentence_saved">Sentence saved to your words</string>
+    <string name="section_network">Network</string>
+    <string name="network_wifi_title">Wi-Fi only</string>
+    <string name="network_wifi_text">Episodes, models and feeds download on Wi-Fi only; streaming on mobile data asks first</string>
+    <string name="network_mobile_title">Wi-Fi and mobile data</string>
+    <string name="network_mobile_text">Uses mobile data when there\'s no Wi-Fi</string>
+    <string name="waiting_for_wifi">Wi-Fi only mode: it will download when you\'re on Wi-Fi</string>
+    <string name="translation_needs_wifi">Wi-Fi only mode: the translation model downloads on Wi-Fi</string>
+    <string name="stream_mobile_title">You\'re on mobile data</string>
+    <string name="stream_mobile_text">Wi-Fi only mode is on. Stream this episode over mobile data anyway, or download it when you\'re on Wi-Fi?</string>
+    <string name="stream_anyway">Stream anyway</string>
+    <string name="download_on_wifi">Download on Wi-Fi</string>
+    <string name="npu_verbose_title">Detailed NPU logging</string>
+    <string name="npu_verbose_text">Records ONNX Runtime and Qualcomm messages when the NPU is tried</string>
+    <string name="npu_log_title">NPU log</string>
+    <string name="npu_log_text">Checks the phone\'s NPU setup now and shows every NPU attempt</string>
+    <string name="action_clear">Clear</string>
 </resources>

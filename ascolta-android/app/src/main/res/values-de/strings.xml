@@ -149,8 +149,6 @@
     <string name="auto_new_text">Für ab jetzt abonnierte Podcasts</string>
     <string name="auto_transcribe_title">Nach dem Download transkribieren</string>
     <string name="auto_transcribe_text">Erstellt das Transkript im Hintergrund</string>
-    <string name="wifi_only_title">Nur über WLAN herunterladen</string>
-    <string name="wifi_only_text">Gilt nicht für Folgen, die du selbst herunterlädst</string>
     <string name="charging_only_title">Nur beim Laden transkribieren</string>
     <string name="charging_only_text">Spart Akku; gilt nicht für manuelle Anfragen</string>
     <string name="check_feeds">Alle Feeds jetzt prüfen</string>
@@ -207,4 +205,24 @@
     <string name="speed_test_spread">Durchläufe: %1$s s (Streuung %2$s %%)</string>
     <string name="speed_test_warmup">Aufwärmdurchlauf…</string>
     <string name="speed_test_run">Gemessener Durchlauf %1$d von %2$d…</string>
+    <string name="status_buffered_ahead">%1$d s im Voraus transkribiert – wartet</string>
+    <string name="highlight_words">Jedes Wort hervorheben</string>
+    <string name="save_sentence">Satz speichern</string>
+    <string name="sentence_saved">Satz in deinen Wörtern gespeichert</string>
+    <string name="section_network">Netzwerk</string>
+    <string name="network_wifi_title">Nur WLAN</string>
+    <string name="network_wifi_text">Folgen, Modelle und Feeds laden nur über WLAN; Streaming über mobile Daten fragt vorher nach</string>
+    <string name="network_mobile_title">WLAN und mobile Daten</string>
+    <string name="network_mobile_text">Nutzt mobile Daten, wenn kein WLAN da ist</string>
+    <string name="waiting_for_wifi">Nur-WLAN-Modus: Download startet im WLAN</string>
+    <string name="translation_needs_wifi">Nur-WLAN-Modus: Das Übersetzungsmodell lädt im WLAN</string>
+    <string name="stream_mobile_title">Du nutzt mobile Daten</string>
+    <string name="stream_mobile_text">Der Nur-WLAN-Modus ist an. Diese Folge trotzdem über mobile Daten streamen oder im WLAN herunterladen?</string>
+    <string name="stream_anyway">Trotzdem streamen</string>
+    <string name="download_on_wifi">Im WLAN laden</string>
+    <string name="npu_verbose_title">Ausführliches NPU-Protokoll</string>
+    <string name="npu_verbose_text">Zeichnet Meldungen von ONNX Runtime und Qualcomm beim NPU-Versuch auf</string>
+    <string name="npu_log_title">NPU-Protokoll</string>
+    <string name="npu_log_text">Prüft jetzt die NPU-Einrichtung des Telefons und zeigt jeden Versuch</string>
+    <string name="action_clear">Leeren</string>
 </resources>

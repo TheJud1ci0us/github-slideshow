@@ -50,6 +50,7 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ascolta.app.data.EpisodeEntity
+import com.ascolta.app.work.WorkScheduler
 import com.ascolta.app.data.Segment
 import com.ascolta.app.data.Transcript
 import com.ascolta.app.data.TranscriptState
@@ -157,18 +159,39 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val currentWord = if (!wordHighlight) -1
         else segments.getOrNull(currentIndex)?.words?.indexOfLast { it.startMs <= position } ?: -1
 
+    // Streaming over mobile data in Wi-Fi only mode needs the listener's OK first.
+    var confirmStream by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun startPlayback(e: EpisodeEntity) {
+        val start = { scope.launch { graph.player.play(e, podcast?.title, e.imageUrl ?: podcast?.imageUrl) }; Unit }
+        val local = e.localPath?.let { java.io.File(it).exists() } == true
+        if (!local && WorkScheduler.blockedByNetworkMode(context)) confirmStream = start else start()
+    }
+
     fun startOrToggle() {
         val e = episode ?: return
-        if (isCurrent) graph.player.togglePlay()
-        else scope.launch { graph.player.play(e, podcast?.title, e.imageUrl ?: podcast?.imageUrl) }
+        if (isCurrent) graph.player.togglePlay() else startPlayback(e)
     }
 
     fun seek(ms: Long, play: Boolean = true) {
         val e = episode ?: return
-        if (isCurrent) graph.player.seekTo(ms, play)
-        else scope.launch {
-            graph.player.play(e.copy(playbackPositionMs = ms), podcast?.title, e.imageUrl ?: podcast?.imageUrl)
-        }
+        if (isCurrent) graph.player.seekTo(ms, play) else startPlayback(e.copy(playbackPositionMs = ms))
+    }
+
+    confirmStream?.let { start ->
+        AlertDialog(
+            onDismissRequest = { confirmStream = null },
+            title = { Text(stringResource(R.string.stream_mobile_title)) },
+            text = { Text(stringResource(R.string.stream_mobile_text)) },
+            confirmButton = {
+                TextButton(onClick = { confirmStream = null; start() }) { Text(stringResource(R.string.stream_anyway)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    confirmStream = null
+                    episode?.let { scope.launch { graph.repo.download(it.id) } }
+                }) { Text(stringResource(R.string.download_on_wifi)) }
+            },
+        )
     }
 
     val listState = rememberLazyListState()

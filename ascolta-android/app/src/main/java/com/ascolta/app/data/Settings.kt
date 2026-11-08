@@ -93,6 +93,8 @@ class Settings(context: Context) {
     /** Network mode: true = Wi-Fi only (downloads, streaming, models); false = Wi-Fi and mobile data. */
     val wifiOnly = bool("wifi_only", true)
     val chargingOnly = bool("charging_only", false)
+    /** Verbose ONNX Runtime / QNN messages in the NPU log (see NpuDebug). */
+    val npuVerboseLog = bool("npu_verbose_log", true)
 
     val showOriginal = bool("show_original", true)
     val showTranslation = bool("show_translation", true)

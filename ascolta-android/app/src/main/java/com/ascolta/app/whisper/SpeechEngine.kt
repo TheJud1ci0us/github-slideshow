@@ -59,21 +59,35 @@ interface SpeechEngine : Closeable {
             ParakeetNpuEngine.prepareProcess(context)
             val dir = models.primaryPath(model)
             installSplitGraphs(context, dir)
+            val verbose = NpuDebug.verbose(context)
+            NpuDebug.section("NPU attempt", NpuDebug.environmentReport(context, dir))
             val layouts = listOf("full", "split").let { all ->
                 NpuSupport.preferredLayout(context)?.let { pref -> listOf(pref) + (all - pref) } ?: all
             }
             val errors = mutableListOf<String>()
             for (layout in layouts) {
+                val mark = NpuDebug.mark()
+                val started = System.currentTimeMillis()
+                NpuDebug.note("Trying the $layout encoder (verbose=$verbose)")
                 try {
                     val engine = ParakeetNpuEngine(
                         dir, models.parakeetTokens(), options, npu = true, split = layout == "split", cacheDir = dir,
+                        verboseLog = verbose,
                     )
                     NpuSupport.rememberLayout(context, layout)
                     AppLog.i("Npu", "NPU engine ready ($layout encoder) on ${NpuSupport.chipName()}")
+                    NpuDebug.section(
+                        "$layout encoder ready in ${System.currentTimeMillis() - started} ms",
+                        NpuDebug.captureLogcat(mark),
+                    )
                     return engine
                 } catch (e: Throwable) {
                     AppLog.w("Npu", "NPU engine ($layout encoder) failed to start", e)
                     errors += "$layout: ${e.message ?: e.javaClass.simpleName}"
+                    NpuDebug.section(
+                        "$layout encoder FAILED after ${System.currentTimeMillis() - started} ms",
+                        NpuDebug.describe(e) + "\n-- logcat during the attempt\n" + NpuDebug.captureLogcat(mark),
+                    )
                 }
             }
             val reason = errors.joinToString(" | ")

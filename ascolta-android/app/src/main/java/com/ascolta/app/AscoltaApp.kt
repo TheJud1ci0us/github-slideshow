@@ -28,6 +28,7 @@ class AscoltaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.init(this)
+        com.ascolta.app.whisper.NpuDebug.init(this)
         // Write crashes to the in-app log (Settings → Diagnostics → View log) before the app closes.
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->

@@ -62,6 +62,7 @@ import com.ascolta.app.data.LANGUAGES
 import com.ascolta.app.data.Pref
 import com.ascolta.app.data.languageName
 import com.ascolta.app.graph
+import com.ascolta.app.whisper.NpuDebug
 import com.ascolta.app.whisper.CpuTopology
 import com.ascolta.app.whisper.Engine
 import com.ascolta.app.whisper.NpuSupport
@@ -139,10 +140,13 @@ fun SettingsScreen() {
             SpeedTestRow()
 
             HorizontalDivider()
+            Section(stringResource(R.string.section_network))
+            NetworkModeRows(settings.wifiOnly)
+
+            HorizontalDivider()
             Section(stringResource(R.string.section_auto))
             SwitchRow(stringResource(R.string.auto_new_title), stringResource(R.string.auto_new_text), settings.autoDownloadNew)
             SwitchRow(stringResource(R.string.auto_transcribe_title), stringResource(R.string.auto_transcribe_text), settings.autoTranscribe)
-            SwitchRow(stringResource(R.string.wifi_only_title), stringResource(R.string.wifi_only_text), settings.wifiOnly)
             SwitchRow(stringResource(R.string.charging_only_title), stringResource(R.string.charging_only_text), settings.chargingOnly)
             TextButton(onClick = {
                 WorkScheduler.refreshNow(context)
@@ -257,7 +261,7 @@ private fun TranslationModelRow(source: String, target: String) {
                     busy = true
                     error = null
                     scope.launch {
-                        runCatching { graph.translation.ensureModel(source, target, requireWifi = false) }
+                        runCatching { graph.repo.ensureTranslationModel(source, target) }
                             .onFailure { error = it.message }
                         busy = false
                         key++
@@ -352,7 +356,12 @@ private fun ModelRow(
                     downloaded -> TextButton(onClick = { graph.models.delete(model); onChanged() }) {
                         Text(stringResource(R.string.action_delete))
                     }
-                    model != SpeechModel.CUSTOM -> TextButton(enabled = enabled, onClick = { WorkScheduler.downloadModel(context, model) }) {
+                    model != SpeechModel.CUSTOM -> TextButton(enabled = enabled, onClick = {
+                        WorkScheduler.downloadModel(context, model)
+                        if (WorkScheduler.blockedByNetworkMode(context)) {
+                            Toast.makeText(context, context.getString(R.string.waiting_for_wifi), Toast.LENGTH_LONG).show()
+                        }
+                    }) {
                         Text(stringResource(R.string.action_get))
                     }
                 }
@@ -470,6 +479,7 @@ private fun SpeedTestRow() {
 private fun DiagnosticsSection() {
     val context = LocalContext.current
     var showLog by remember { mutableStateOf(false) }
+    var showNpuLog by remember { mutableStateOf(false) }
     val powerManager = remember { context.getSystemService(PowerManager::class.java) }
     var unrestricted by remember { mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) }
     val engine = remember {
@@ -503,6 +513,52 @@ private fun DiagnosticsSection() {
         supportingContent = { Text(stringResource(R.string.view_log_text)) },
     )
     Hint(stringResource(R.string.speech_engine_info, engine))
+    SwitchRow(stringResource(R.string.npu_verbose_title), stringResource(R.string.npu_verbose_text), context.graph.settings.npuVerboseLog)
+    ListItem(
+        modifier = Modifier.clickable {
+            // Records the phone's NPU setup now, without running the model.
+            NpuDebug.section(
+                "NPU check from Settings",
+                NpuDebug.environmentReport(context, null) + "\n-- recent NPU logcat\n" +
+                    NpuDebug.captureLogcat(NpuDebug.mark().let { "${it.substring(0, 5)} 00:00:00.000" }, maxLines = 300),
+            )
+            showNpuLog = true
+        },
+        headlineContent = { Text(stringResource(R.string.npu_log_title)) },
+        supportingContent = { Text(stringResource(R.string.npu_log_text)) },
+    )
+
+    if (showNpuLog) {
+        val log = remember { NpuDebug.read().takeLast(30_000) }
+        AlertDialog(
+            onDismissRequest = { showNpuLog = false },
+            title = { Text(stringResource(R.string.npu_log_title)) },
+            text = {
+                Text(
+                    log,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.height(400.dp).verticalScroll(rememberScrollState(Int.MAX_VALUE)),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // The whole NPU log can be large: shared as a file-sized text.
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Ascolta NPU log")
+                        putExtra(Intent.EXTRA_TEXT, NpuDebug.read().takeLast(400_000))
+                    }
+                    context.startActivity(Intent.createChooser(send, context.getString(R.string.share_log)))
+                }) { Text(stringResource(R.string.action_share)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { NpuDebug.clear(); showNpuLog = false }) { Text(stringResource(R.string.action_clear)) }
+                    TextButton(onClick = { showNpuLog = false }) { Text(stringResource(R.string.action_close)) }
+                }
+            },
+        )
+    }
 
     if (showLog) {
         val log = remember { AppLog.read().takeLast(20_000) }
@@ -526,6 +582,28 @@ private fun DiagnosticsSection() {
                 }) { Text(stringResource(R.string.action_share)) }
             },
             dismissButton = { TextButton(onClick = { showLog = false }) { Text(stringResource(R.string.action_close)) } },
+        )
+    }
+}
+
+/** Network mode: Wi-Fi only, or Wi-Fi and mobile data. */
+@Composable
+private fun NetworkModeRows(wifiOnly: Pref<Boolean>) {
+    val value by wifiOnly.flow.collectAsState()
+    val context = LocalContext.current
+    fun choose(wifi: Boolean) {
+        wifiOnly.set(wifi)
+        WorkScheduler.schedulePeriodicRefresh(context) // feed checks follow the new mode
+    }
+    for ((wifi, title, text) in listOf(
+        Triple(true, R.string.network_wifi_title, R.string.network_wifi_text),
+        Triple(false, R.string.network_mobile_title, R.string.network_mobile_text),
+    )) {
+        ListItem(
+            modifier = Modifier.clickable { choose(wifi) },
+            leadingContent = { RadioButton(selected = value == wifi, onClick = { choose(wifi) }) },
+            headlineContent = { Text(stringResource(title)) },
+            supportingContent = { Text(stringResource(text)) },
         )
     }
 }

@@ -36,21 +36,33 @@ object WorkScheduler {
     fun transcribeWorkName(episodeId: Long) = "transcribe-$episodeId"
     fun downloadWorkName(episodeId: Long) = "download-$episodeId"
 
+    /** Network allowed by the network mode: Wi-Fi only (unmetered), or any connection. */
+    fun allowedNetwork(context: Context): NetworkType =
+        if (context.graph.settings.wifiOnly.value) NetworkType.UNMETERED else NetworkType.CONNECTED
+
+    /** True if the network mode forbids using the current connection (mobile data in Wi-Fi mode). */
+    fun blockedByNetworkMode(context: Context): Boolean {
+        if (!context.graph.settings.wifiOnly.value) return false
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java) ?: return false
+        return cm.isActiveNetworkMetered
+    }
+
     fun schedulePeriodicRefresh(context: Context) {
         val request = PeriodicWorkRequestBuilder<RefreshWorker>(6, TimeUnit.HOURS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(allowedNetwork(context)).build())
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniquePeriodicWork(REFRESH_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+            .enqueueUniquePeriodicWork(REFRESH_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     fun download(context: Context, episodeId: Long, transcribeAfter: Boolean, manual: Boolean) {
-        val wifiOnly = context.graph.settings.wifiOnly.value && !manual
+        // The network mode applies to every download, including ones started by hand
+        // (in Wi-Fi mode they wait for Wi-Fi).
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setInputData(workDataOf(KEY_EPISODE_ID to episodeId, KEY_TRANSCRIBE_AFTER to transcribeAfter))
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                    .setRequiredNetworkType(allowedNetwork(context))
                     .build(),
             )
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -99,7 +111,7 @@ object WorkScheduler {
     fun downloadModel(context: Context, model: SpeechModel) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
             .setInputData(workDataOf(KEY_MODEL_ID to model.id))
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(allowedNetwork(context)).build())
             .build()
         WorkManager.getInstance(context)
             .enqueueUniqueWork(modelWorkName(model), ExistingWorkPolicy.KEEP, request)
@@ -112,7 +124,7 @@ object WorkScheduler {
     fun refreshNow(context: Context) {
         WorkManager.getInstance(context).enqueue(
             OneTimeWorkRequestBuilder<RefreshWorker>()
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(allowedNetwork(context)).build())
                 .build(),
         )
     }

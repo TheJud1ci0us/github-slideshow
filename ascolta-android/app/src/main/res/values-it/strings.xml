@@ -149,8 +149,6 @@
     <string name="auto_new_text">Per i podcast seguiti da ora in poi</string>
     <string name="auto_transcribe_title">Trascrivi dopo il download</string>
     <string name="auto_transcribe_text">Crea la trascrizione in background</string>
-    <string name="wifi_only_title">Scarica solo con Wi-Fi</string>
-    <string name="wifi_only_text">Non vale per gli episodi che scarichi tu</string>
     <string name="charging_only_title">Trascrivi solo in carica</string>
     <string name="charging_only_text">Risparmia batteria; non vale per le richieste manuali</string>
     <string name="check_feeds">Controlla ora tutti i feed</string>
@@ -211,4 +209,24 @@
     <string name="speed_test_spread">Prove: %1$s s (variazione %2$s%%)</string>
     <string name="speed_test_warmup">Prova di riscaldamento…</string>
     <string name="speed_test_run">Prova cronometrata %1$d di %2$d…</string>
+    <string name="status_buffered_ahead">Trascritto %1$d s in anticipo — in attesa</string>
+    <string name="highlight_words">Evidenzia ogni parola</string>
+    <string name="save_sentence">Salva frase</string>
+    <string name="sentence_saved">Frase salvata nelle tue parole</string>
+    <string name="section_network">Rete</string>
+    <string name="network_wifi_title">Solo Wi-Fi</string>
+    <string name="network_wifi_text">Episodi, modelli e feed si scaricano solo con il Wi-Fi; lo streaming con i dati mobili chiede prima conferma</string>
+    <string name="network_mobile_title">Wi-Fi e dati mobili</string>
+    <string name="network_mobile_text">Usa i dati mobili quando non c’è il Wi-Fi</string>
+    <string name="waiting_for_wifi">Modalità solo Wi-Fi: verrà scaricato quando sarai connesso al Wi-Fi</string>
+    <string name="translation_needs_wifi">Modalità solo Wi-Fi: il modello di traduzione si scarica con il Wi-Fi</string>
+    <string name="stream_mobile_title">Stai usando i dati mobili</string>
+    <string name="stream_mobile_text">La modalità solo Wi-Fi è attiva. Vuoi ascoltare l’episodio in streaming con i dati mobili o scaricarlo quando sarai sul Wi-Fi?</string>
+    <string name="stream_anyway">Ascolta comunque</string>
+    <string name="download_on_wifi">Scarica con il Wi-Fi</string>
+    <string name="npu_verbose_title">Log NPU dettagliato</string>
+    <string name="npu_verbose_text">Registra i messaggi di ONNX Runtime e Qualcomm quando si prova la NPU</string>
+    <string name="npu_log_title">Log NPU</string>
+    <string name="npu_log_text">Controlla ora la configurazione NPU del telefono e mostra ogni tentativo</string>
+    <string name="action_clear">Cancella</string>
 </resources>

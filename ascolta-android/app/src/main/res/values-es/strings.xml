@@ -149,8 +149,6 @@
     <string name="auto_new_text">Para los podcasts que sigas a partir de ahora</string>
     <string name="auto_transcribe_title">Transcribir tras descargar</string>
     <string name="auto_transcribe_text">Crea la transcripción en segundo plano</string>
-    <string name="wifi_only_title">Descargar solo con Wi-Fi</string>
-    <string name="wifi_only_text">No se aplica a los episodios que descargas tú</string>
     <string name="charging_only_title">Transcribir solo mientras carga</string>
     <string name="charging_only_text">Ahorra batería; no se aplica a las peticiones manuales</string>
     <string name="check_feeds">Comprobar todos los feeds ahora</string>
@@ -211,4 +209,24 @@
     <string name="speed_test_spread">Pruebas: %1$s s (variación %2$s %%)</string>
     <string name="speed_test_warmup">Prueba de calentamiento…</string>
     <string name="speed_test_run">Prueba cronometrada %1$d de %2$d…</string>
+    <string name="status_buffered_ahead">Transcrito %1$d s por delante — en espera</string>
+    <string name="highlight_words">Resaltar cada palabra</string>
+    <string name="save_sentence">Guardar frase</string>
+    <string name="sentence_saved">Frase guardada en tus palabras</string>
+    <string name="section_network">Red</string>
+    <string name="network_wifi_title">Solo Wi-Fi</string>
+    <string name="network_wifi_text">Episodios, modelos y feeds se descargan solo con Wi-Fi; el streaming con datos móviles pregunta antes</string>
+    <string name="network_mobile_title">Wi-Fi y datos móviles</string>
+    <string name="network_mobile_text">Usa datos móviles cuando no hay Wi-Fi</string>
+    <string name="waiting_for_wifi">Modo solo Wi-Fi: se descargará cuando estés en Wi-Fi</string>
+    <string name="translation_needs_wifi">Modo solo Wi-Fi: el modelo de traducción se descarga con Wi-Fi</string>
+    <string name="stream_mobile_title">Estás usando datos móviles</string>
+    <string name="stream_mobile_text">El modo solo Wi-Fi está activado. ¿Reproducir este episodio en streaming con datos móviles o descargarlo cuando estés en Wi-Fi?</string>
+    <string name="stream_anyway">Reproducir igualmente</string>
+    <string name="download_on_wifi">Descargar con Wi-Fi</string>
+    <string name="npu_verbose_title">Registro NPU detallado</string>
+    <string name="npu_verbose_text">Registra los mensajes de ONNX Runtime y Qualcomm al probar la NPU</string>
+    <string name="npu_log_title">Registro NPU</string>
+    <string name="npu_log_text">Comprueba ahora la configuración NPU del teléfono y muestra cada intento</string>
+    <string name="action_clear">Borrar</string>
 </resources>

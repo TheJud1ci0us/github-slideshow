@@ -156,6 +156,8 @@ class ParakeetNpuEngine(
      */
     private val split: Boolean = false,
     private val cacheDir: File? = null,
+    /** Verbose ONNX Runtime / QNN messages in logcat, for the NPU log. Logging only. */
+    private val verboseLog: Boolean = false,
 ) : SpeechEngine {
     @Volatile private var aborted = false
     private val env = OrtEnvironment.getEnvironment()
@@ -200,14 +202,20 @@ class ParakeetNpuEngine(
         // ("context binary") next to the cache so later loads are quick.
         val ctxModel = File(cacheDir ?: modelDir, if (split) "encoder_post_qnn_ctx.onnx" else "encoder_qnn_ctx.onnx")
         val useCached = ctxModel.exists() && ctxModel.length() > 0
-        so.addQnn(
-            mapOf(
-                "backend_path" to "libQnnHtp.so",
-                "htp_performance_mode" to "burst",
-                "enable_htp_fp16_precision" to "1",
-                "htp_graph_finalization_optimization_mode" to "3",
-            ),
+        val qnnOptions = mutableMapOf(
+            "backend_path" to "libQnnHtp.so",
+            "htp_performance_mode" to "burst",
+            "enable_htp_fp16_precision" to "1",
+            "htp_graph_finalization_optimization_mode" to "3",
         )
+        if (verboseLog) {
+            // Logging only: ONNX Runtime and the QNN runtime explain each rejected node in logcat.
+            qnnOptions["qnn_log_level"] = "verbose"
+            so.setSessionLogLevel(ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE)
+            so.setSessionLogVerbosityLevel(1)
+        }
+        NpuDebug.note("Creating encoder session: model=${model.name} cached=$useCached ctx=${ctxModel.name} options=$qnnOptions")
+        so.addQnn(qnnOptions)
         so.addConfigEntry("session.disable_cpu_ep_fallback", "0")
         if (!useCached) {
             so.addConfigEntry("ep.context_enable", "1")

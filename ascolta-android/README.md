@@ -27,9 +27,14 @@ the phone.
   (Wi-Fi only by default) and then transcribed in the background.
 - If a podcast publishes its own transcript (`<podcast:transcript>`, VTT/SRT/JSON),
   that is used instead of running speech recognition.
-- Transcription works in 5-minute chunks and saves after each one. You can read the
-  first sentences while the rest is still processing, and an interrupted job
-  continues where it stopped.
+- **Transcription follows what you listen to**, like a video buffer: jump from minute 1 to
+  minute 20 and it drops the current block within a second and starts at minute 20 (a short
+  first block so text appears quickly). Finished parts are kept; go back to minute 1 and it
+  continues there. While you listen it stops once it is far enough ahead (the margin depends on
+  the measured speed of the engine and your playback speed) and resumes as you catch up; when
+  you aren't listening it runs as fast as possible. An interrupted job continues where it stopped.
+- **Network mode**: *Wi-Fi only* (episodes, models, feeds and translation models download on
+  Wi-Fi; streaming on mobile data asks first) or *Wi-Fi and mobile data*.
 
 **Fast, controllable transcription**
 - Choose the engine in Settings: Whisper (Tiny/Base/Small/Large v3 Turbo) or
@@ -44,6 +49,10 @@ the phone.
   to the CPU version if the NPU refuses the model.
 - **Work split across the chip**: the next block of audio is decoded and searched for speech on
   the efficiency cores while the current one is recognised on the fast cores (thread affinity).
+- **Detailed NPU log** (Settings → Diagnostics → *NPU log*): the phone's NPU setup (chip,
+  FastRPC driver access, public vendor libraries, bundled QNN/Hexagon libraries, model files) and,
+  for each NPU attempt, the full error and this app's ONNX Runtime / QNN / FastRPC logcat lines,
+  with optional verbose logging. Shareable as text.
 - **Speed test** in Settings: the same bundled 30 s recording every time; one warm-up run, then
   three timed runs (median and spread), plus word accuracy.
 - **Stop** a running transcription (what's done is kept; *Continue* resumes), or remove
@@ -53,7 +62,8 @@ the phone.
 - Dual subtitles: the Italian sentence with the English translation under it, synced
   to the audio, with the current sentence and the current **word** highlighted and auto-scrolled
   (exact seeking in variable-bit-rate MP3s keeps the highlight in sync).
-- Tap a word to translate it and save it to **Words**. Export to Anki as tab-separated text.
+- Tap a word to translate it and save it to **Words**, or **save the whole sentence** for context.
+- Word-by-word highlighting can be turned off (player menu → *Highlight each word*). Export to Anki as tab-separated text.
 - Previous / next / repeat sentence, **pause after each sentence**, 0.5×–1.5× speed.
 - Hide either language to test yourself; adjustable text size.
 - Background playback with lock-screen and notification controls.

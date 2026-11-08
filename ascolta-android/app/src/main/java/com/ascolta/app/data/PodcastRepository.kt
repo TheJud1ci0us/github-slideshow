@@ -200,6 +200,11 @@ class PodcastRepository(
         if (episode.downloadState in listOf(DownloadState.QUEUED, DownloadState.DOWNLOADING, DownloadState.DONE)) return
         episodeDao.setDownload(episodeId, DownloadState.QUEUED, 0f)
         WorkScheduler.download(context, episodeId, transcribeAfter = settings.autoTranscribe.value || manual, manual = manual)
+        if (manual && WorkScheduler.blockedByNetworkMode(context)) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                android.widget.Toast.makeText(context, context.getString(R.string.waiting_for_wifi), android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     suspend fun transcribe(episodeId: Long, manual: Boolean = true) {
@@ -316,7 +321,7 @@ class PodcastRepository(
         if (!translation.isSupported(transcript.language, target)) return null
         val stale = transcript.translationLanguage != null && transcript.translationLanguage != target
         if (!stale && transcript.segments.all { it.translation != null }) return transcript
-        withTimeoutOrNull(3 * 60_000L) { translation.ensureModel(transcript.language, target, requireWifi = false) }
+        withTimeoutOrNull(3 * 60_000L) { ensureTranslationModel(transcript.language, target) }
             ?: throw IOException("the translation model couldn't be downloaded. Check your connection and try again.")
         val segments = transcript.segments.map { segment ->
             if (segment.translation != null && !stale) segment
@@ -332,10 +337,22 @@ class PodcastRepository(
         return merged
     }
 
+    /**
+     * Makes sure the translation model is on the phone. In Wi-Fi only mode it isn't downloaded
+     * over mobile data; the error says so instead.
+     */
+    suspend fun ensureTranslationModel(source: String, target: String) {
+        val present = runCatching { translation.isModelDownloaded(source, target) }.getOrDefault(false)
+        if (!present && WorkScheduler.blockedByNetworkMode(context)) {
+            throw IOException(context.getString(R.string.translation_needs_wifi))
+        }
+        translation.ensureModel(source, target, requireWifi = false)
+    }
+
     suspend fun translateWord(text: String, source: String): String {
         val target = settings.nativeLanguage.value
         return withTimeoutOrNull(60_000L) {
-            translation.ensureModel(source, target, requireWifi = false)
+            ensureTranslationModel(source, target)
             translation.translate(text, source, target)
         } ?: throw IOException("translation model not available yet")
     }
