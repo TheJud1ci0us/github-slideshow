@@ -5,6 +5,9 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.mp3.Mp3Extractor
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.ascolta.app.MainActivity
@@ -15,7 +18,13 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val player = ExoPlayer.Builder(this)
+        // Exact seeking in MP3 files with a variable bit rate (most podcasts). Without an index,
+        // ExoPlayer estimates the position after a seek, which can be seconds off and would
+        // make the highlighted sentence not match what is being said.
+        val extractors = DefaultExtractorsFactory()
+            .setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING)
+            .setConstantBitrateSeekingEnabled(true)
+        val player = ExoPlayer.Builder(this, DefaultMediaSourceFactory(this, extractors))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

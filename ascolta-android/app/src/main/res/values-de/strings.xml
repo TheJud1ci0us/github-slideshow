@@ -135,10 +135,10 @@
     <string name="skip_title">Musik und Stille überspringen</string>
     <string name="skip_text">Erkennt zuerst die Sprache, damit nur Gesprochenes transkribiert wird. Bei Parakeet immer aktiv.</string>
     <string name="speed_test">Geschwindigkeitstest starten</string>
-    <string name="speed_test_text">Transkribiert jedes Mal dieselbe 30-sekündige italienische Aufnahme, damit du Modelle und Einstellungen vergleichen kannst.</string>
+    <string name="speed_test_text">Transkribiert dieselbe 30-sekündige italienische Aufnahme: ein Aufwärmdurchlauf, dann 3 gemessene Durchläufe (der mittlere wird angezeigt), damit du Modelle und Einstellungen vergleichen kannst.</string>
     <string name="speed_test_running">Geschwindigkeitstest läuft…</string>
     <string name="speed_test_result">%1$s: 30 s Audio in %2$s s (%3$s× Echtzeit).</string>
-    <string name="speed_test_details">Modell geladen in %1$s s · %2$d Kerne · Flash %3$s · Musik/Stille überspringen %4$s\nCPU: %5$s</string>
+    <string name="speed_test_details">Modell geladen in %1$s s · %2$s Kerne · Flash %3$s · Musik/Stille überspringen %4$s\nCPU: %5$s</string>
     <string name="speed_test_on">an</string>
     <string name="speed_test_off">aus</string>
     <string name="speed_test_need_model">Lade zuerst %1$s herunter.</string>
@@ -198,4 +198,13 @@
         <item quantity="other">%d Folgen</item>
     </plurals>
     <string name="speed_test_accuracy">Genauigkeit: %1$d %% der Wörter richtig</string>
+    <string name="model_desc_parakeet_npu">Parakeet v3 auf dem KI-Chip des Handys (Qualcomm-NPU): Der rechenintensive Teil läuft auf der NPU, der Rest auf der CPU. Möglicherweise um ein Vielfaches schneller und akkuschonender. Großer Download (2,3 GB); beim ersten Einsatz wird die NPU vorbereitet, was einige Minuten dauern kann.</string>
+    <string name="npu_unavailable">Auf diesem Handy nicht verfügbar: %1$s</string>
+    <string name="npu_check_again">Erneut prüfen</string>
+    <string name="npu_chip">NPU gefunden: %1$s</string>
+    <string name="threads_auto">Verwendete Kerne: automatisch (%1$d schnelle Kerne)</string>
+    <string name="threads_text_cores">Dieses Handy hat %1$d schnelle und %2$d Effizienzkerne. Die Erkennung läuft auf den schnellen Kernen; Audio-Vorbereitung, Spracherkennung und Speichern auf den Effizienzkernen. Mehr Threads als schnelle Kerne machen es meist langsamer.</string>
+    <string name="speed_test_spread">Durchläufe: %1$s s (Streuung %2$s %%)</string>
+    <string name="speed_test_warmup">Aufwärmdurchlauf…</string>
+    <string name="speed_test_run">Gemessener Durchlauf %1$d von %2$d…</string>
 </resources>

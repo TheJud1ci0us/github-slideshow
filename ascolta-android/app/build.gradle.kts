@@ -1,5 +1,8 @@
 import java.net.URI
 import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 plugins {
     id("com.android.application")
@@ -18,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.2.1"
+        versionCode = 5
+        versionName = "0.3.0"
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
@@ -57,6 +60,16 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            listOf("parakeetNpuDir", "parakeetTokens").forEach { key ->
+                System.getProperty(key)?.let { test.systemProperty(key, it) }
+            }
+            test.maxHeapSize = "6g"
+        }
+    }
+
     androidResources {
         // Lists the app's translations so Android's per-app language setting offers them.
         generateLocaleConfig = true
@@ -64,6 +77,8 @@ android {
 
     packaging {
         jniLibs {
+            // Qualcomm runtime: only the NPU (HTP) backend is used; drop the others.
+            excludes += listOf("**/libQnnGpu*.so", "**/libQnnDsp*.so", "**/libQnnCpu.so", "**/libQnnSaver.so", "**/libQnnLpai*.so")
             // Extract native libraries to disk: ggml looks for its CPU-variant
             // plug-ins (libggml-cpu-*.so) in the app's native library folder.
             useLegacyPackaging = true
@@ -98,8 +113,56 @@ if (!sherpaAar.exists()) {
     tmp.renameTo(sherpaAar)
 }
 
+// ONNX Runtime with Qualcomm's QNN execution provider, for the NPU version of Parakeet.
+// sherpa-onnx ships its own ONNX Runtime (1.24, symbol-versioned) under the same file name,
+// so this copy is renamed to libonnxruntimq.so (same length, patched in place) and the app
+// tells ONNX Runtime's Java code to skip loading the default name. Both then coexist.
+val ortQnnVersion = "1.29.0"
+val ortQnnSha256 = "cc4cfd72a47703aee65d8e6ce7448fa7488e3fff6556f9d6d354ec1687347cfd"
+val ortQnnAar = file("libs/onnxruntime-android-qnn-$ortQnnVersion-renamed.aar")
+if (!ortQnnAar.exists()) {
+    ortQnnAar.parentFile.mkdirs()
+    val url = "https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android-qnn/" +
+        "$ortQnnVersion/onnxruntime-android-qnn-$ortQnnVersion.aar"
+    logger.lifecycle("Downloading $url")
+    val bytes = URI(url).toURL().openStream().use { it.readBytes() }
+    val digest = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    check(digest == ortQnnSha256) { "onnxruntime-android-qnn checksum mismatch: $digest" }
+    val from = "libonnxruntime.so\u0000".toByteArray(Charsets.ISO_8859_1)
+    val to = "libonnxruntimq.so\u0000".toByteArray(Charsets.ISO_8859_1)
+    fun ByteArray.replaceAll(a: ByteArray, b: ByteArray): ByteArray {
+        val out = copyOf()
+        var i = 0
+        while (i <= out.size - a.size) {
+            var match = true
+            for (k in a.indices) if (out[i + k] != a[k]) { match = false; break }
+            if (match) { System.arraycopy(b, 0, out, i, b.size); i += a.size } else i++
+        }
+        return out
+    }
+    ZipInputStream(bytes.inputStream()).use { zin ->
+        ZipOutputStream(ortQnnAar.outputStream()).use { zout ->
+            while (true) {
+                val entry = zin.nextEntry ?: break
+                var name = entry.name
+                var data = zin.readBytes()
+                if (name.endsWith("/libonnxruntime.so") || name.endsWith("/libonnxruntime4j_jni.so")) {
+                    data = data.replaceAll(from, to)
+                    name = name.replace("/libonnxruntime.so", "/libonnxruntimq.so")
+                }
+                zout.putNextEntry(ZipEntry(name))
+                zout.write(data)
+                zout.closeEntry()
+            }
+        }
+    }
+}
+
 dependencies {
     implementation(files(sherpaAar))
+    implementation(files(ortQnnAar))
+    // Qualcomm's NPU runtime (HTP backend) used by ONNX Runtime's QNN provider.
+    implementation("com.qualcomm.qti:qnn-runtime:2.42.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
 
     val composeBom = platform("androidx.compose:compose-bom:2025.06.01")
@@ -133,5 +196,7 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
 
     testImplementation("junit:junit:4.13.2")
+    // Desktop ONNX Runtime so the NPU engine's code can be checked on a computer (CPU).
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.29.0")
     testImplementation("net.sf.kxml:kxml2:2.3.0")
 }

@@ -1,12 +1,19 @@
 package com.ascolta.app.whisper
 
-/** One recognised stretch of speech; times are relative to the audio passed in. */
-data class WhisperSegment(val startMs: Long, val endMs: Long, val text: String)
+import com.ascolta.app.data.Word
 
-/** Receives progress and each sentence as soon as whisper.cpp has decoded it. */
+/** One recognised stretch of speech; times are relative to the audio passed in. */
+data class WhisperSegment @JvmOverloads constructor(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
+    val words: List<Word>? = null,
+)
+
+/** Receives progress and each sentence (with word start times) as soon as whisper.cpp has decoded it. */
 interface TranscribeListener {
     fun onProgress(percent: Int)
-    fun onSegment(startMs: Long, endMs: Long, text: String)
+    fun onSegment(startMs: Long, endMs: Long, text: String, words: Array<String>, wordStartsMs: LongArray)
 }
 
 /** Raw JNI bindings to whisper.cpp (see app/src/main/cpp/whisper_jni.cpp). */
@@ -33,6 +40,8 @@ object WhisperLib {
     ): Array<WhisperSegment>?
     /** Returns [start0, end0, start1, end1, …] in ms of the parts that contain speech. */
     @JvmStatic external fun nativeDetectSpeech(vadModelPath: String, samples: FloatArray, threads: Int): LongArray?
+    /** Restricts the calling thread (and threads it starts later) to these CPU cores. */
+    @JvmStatic external fun nativeSetThreadAffinity(cpus: IntArray): Boolean
 
     @Volatile private var backendsLoaded = false
 

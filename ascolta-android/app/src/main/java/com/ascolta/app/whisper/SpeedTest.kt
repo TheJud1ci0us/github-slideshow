@@ -5,6 +5,7 @@ import com.ascolta.app.R
 import com.ascolta.app.data.AppLog
 import com.ascolta.app.graph
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -14,17 +15,23 @@ data class SpeedResult(
     val model: String,
     val audioMs: Long,
     val loadMs: Long,
-    val transcribeMs: Long,
+    /** Recognition time of each timed run (after an untimed warm-up run). */
+    val runsMs: List<Long>,
     /** Share of reference words recognised correctly (1 − word error rate), 0..1. */
     val accuracy: Float,
     val transcript: String,
     val cpu: String,
+    val cores: List<Int>,
     val threads: Int,
     val flashAttention: Boolean,
     val skipNonSpeech: Boolean,
 ) {
-    /** How many seconds of audio are processed per second. */
-    val speedFactor: Float get() = audioMs.toFloat() / transcribeMs.coerceAtLeast(1)
+    val medianMs: Long get() = runsMs.sorted()[runsMs.size / 2]
+    val minMs: Long get() = runsMs.min()
+    val maxMs: Long get() = runsMs.max()
+
+    /** How many seconds of audio are processed per second (median run). */
+    val speedFactor: Float get() = audioMs.toFloat() / medianMs.coerceAtLeast(1)
 }
 
 /**
@@ -32,11 +39,15 @@ data class SpeedResult(
  * (any model, core count or setting) is measured on identical audio. The sample is
  * from Pirandello's "Novelle per un anno", read by a LibriVox volunteer
  * (Multilingual LibriSpeech, CC BY 4.0).
+ *
+ * One untimed warm-up run first (the model is read into memory and the CPU ramps up its
+ * clock), then [TIMED_RUNS] timed runs; the median is reported with the spread.
  */
 object SpeedTest {
     private const val SAMPLE_ASSET = "benchmark_it.wav"
     private const val REFERENCE_ASSET = "benchmark_it.txt"
     private const val SAMPLE_LANGUAGE = "it"
+    const val TIMED_RUNS = 3
 
     suspend fun run(context: Context, onStatus: (String) -> Unit = {}): SpeedResult = withContext(Dispatchers.Default) {
         val graph = context.graph
@@ -46,16 +57,13 @@ object SpeedTest {
             throw IllegalStateException(context.getString(R.string.speed_test_need_model, model.label))
         }
 
-        val useVad = settings.skipNonSpeech.value || model.engine == Engine.PARAKEET
+        val useVad = settings.skipNonSpeech.value || model.engine != Engine.WHISPER
         if (useVad && !graph.models.isVadDownloaded()) {
             onStatus(context.getString(R.string.status_downloading_vad))
             graph.models.downloadVad()
         }
-        val options = EngineOptions(
-            threads = settings.threads.value.coerceIn(1, 8),
-            flashAttention = settings.flashAttention.value,
-            vadModelPath = if (useVad) graph.models.vadFile().path else null,
-        )
+        val threads = settings.effectiveThreads()
+        val options = EngineOptions(threads = threads, flashAttention = settings.flashAttention.value)
 
         // The decoder reads files, so copy the bundled sample out of the APK once.
         val sampleFile = File(context.cacheDir, SAMPLE_ASSET)
@@ -73,36 +81,55 @@ object SpeedTest {
         onStatus(context.getString(R.string.status_loading_model))
         EngineLock.mutex.withLock {
             WhisperLib.ensureBackends(context.applicationInfo.nativeLibraryDir)
+            // Speech detection runs beforehand on the efficiency cores, as during transcription.
+            val speech = if (useVad) withContext(CoreDispatchers.light) {
+                WhisperLib.nativeDetectSpeech(graph.models.vadFile().path, audio, 2)?.let { SpeechAlignment.pairs(it) }
+            } else null
+            CoreDispatchers.prepareRecognition(threads)
             val cpu = runCatching { WhisperLib.nativeCpuVariant() }.getOrDefault("?")
             val loadStart = System.currentTimeMillis()
-            SpeechEngine.load(model, graph.models, options).use { engine ->
+            val engine = withContext(CoreDispatchers.recognition) { SpeechEngine.load(context, model, graph.models, options) }
+            try {
                 val loadMs = System.currentTimeMillis() - loadStart
-                onStatus(context.getString(R.string.status_transcribing))
-                val segments = mutableListOf<WhisperSegment>()
-                val t0 = System.currentTimeMillis()
-                engine.transcribe(audio, SAMPLE_LANGUAGE, null, onProgress = {}, onSegment = { segments += it })
-                val took = System.currentTimeMillis() - t0
-                val text = segments.joinToString(" ") { it.text.trim() }
+                var text = ""
+                val runs = mutableListOf<Long>()
+                for (run in 0..TIMED_RUNS) {
+                    onStatus(
+                        if (run == 0) context.getString(R.string.speed_test_warmup)
+                        else context.getString(R.string.speed_test_run, run, TIMED_RUNS),
+                    )
+                    val segments = mutableListOf<WhisperSegment>()
+                    val t0 = System.currentTimeMillis()
+                    withContext(CoreDispatchers.recognition) {
+                        engine.transcribe(audio, speech, SAMPLE_LANGUAGE, null, onProgress = {}, onSegment = { segments += it })
+                    }
+                    val took = System.currentTimeMillis() - t0
+                    if (run > 0) runs += took
+                    text = segments.joinToString(" ") { it.text.trim() }
+                }
                 SpeedResult(
                     model = model.label,
                     audioMs = audio.size / 16L,
                     loadMs = loadMs,
-                    transcribeMs = took,
+                    runsMs = runs,
                     accuracy = WordAccuracy.accuracy(reference, text),
                     transcript = text,
                     cpu = cpu,
-                    threads = options.threads,
+                    cores = CpuTopology.current.recognitionCores(threads),
+                    threads = threads,
                     flashAttention = options.flashAttention,
                     skipNonSpeech = useVad,
                 ).also {
                     AppLog.i(
                         "SpeedTest",
-                        "${it.model}: ${it.audioMs / 1000}s sample in ${it.transcribeMs}ms " +
-                            "(${"%.1f".format(java.util.Locale.US, it.speedFactor)}x), accuracy " +
-                            "${(it.accuracy * 100).toInt()}%, load ${it.loadMs}ms, threads=${it.threads} " +
-                            "flash=${it.flashAttention} vad=${it.skipNonSpeech} cpu=${it.cpu}",
+                        "${it.model}: ${it.audioMs / 1000}s sample, runs ${it.runsMs} ms (median ${it.medianMs}, " +
+                            "${"%.1f".format(java.util.Locale.US, it.speedFactor)}x), accuracy ${(it.accuracy * 100).toInt()}%, " +
+                            "load ${it.loadMs}ms, threads=${it.threads} cores=${it.cores} flash=${it.flashAttention} " +
+                            "vad=${it.skipNonSpeech} cpu=${it.cpu}",
                     )
                 }
+            } finally {
+                withContext(NonCancellable + CoreDispatchers.recognition) { engine.close() }
             }
         }
     }

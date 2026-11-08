@@ -1,5 +1,8 @@
 package com.ascolta.app.whisper
 
+import android.content.Context
+import com.ascolta.app.data.AppLog
+import com.ascolta.app.data.Word
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
@@ -12,18 +15,19 @@ import java.io.File
 data class EngineOptions(
     val threads: Int,
     val flashAttention: Boolean,
-    /** Silero model used to skip music and silence; null = process everything. */
-    val vadModelPath: String?,
 )
 
 /** A loaded speech recognition model. Not thread-safe: one transcription at a time. */
 interface SpeechEngine : Closeable {
     /**
-     * Transcribes 16 kHz mono audio. Each sentence is passed to [onSegment] as soon as it
-     * is recognised (times relative to [samples]). Returns false if [abort] was called.
+     * Transcribes 16 kHz mono audio. [speech] lists the parts that contain speech (from the
+     * voice-activity detector, in ms); everything else (music, silence) is skipped. With
+     * null, all of the audio is processed. Each sentence is passed to [onSegment] as soon
+     * as it is recognised (times relative to [samples]). Returns false if [abort] was called.
      */
     fun transcribe(
         samples: FloatArray,
+        speech: List<Pair<Long, Long>>?,
         language: String,
         prompt: String?,
         onProgress: (Int) -> Unit,
@@ -33,15 +37,44 @@ interface SpeechEngine : Closeable {
     /** Can be called from any thread to stop the running transcription early. */
     fun abort()
 
+    /** Whether this engine needs speech regions (it can't process a long block in one go). */
+    val needsSpeechRegions: Boolean get() = false
+
     companion object {
-        fun load(model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine = when (model.engine) {
-            Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
-            Engine.PARAKEET -> ParakeetEngine(models.primaryPath(model), options)
+        fun load(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine =
+            when (model.engine) {
+                Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
+                Engine.PARAKEET -> ParakeetEngine(models.primaryPath(model), options)
+                Engine.PARAKEET_NPU -> loadNpu(context, model, models, options)
+            }
+
+        /**
+         * The NPU engine, or — if the NPU refuses the model — the CPU version of Parakeet when
+         * it's downloaded. A failure is remembered so the NPU option is disabled with the reason.
+         */
+        private fun loadNpu(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine {
+            NpuSupport.unavailableReason(context)?.let { throw IllegalStateException("NPU unavailable: $it") }
+            ParakeetNpuEngine.prepareProcess(context)
+            return try {
+                ParakeetNpuEngine(models.primaryPath(model), models.parakeetTokens(), options, npu = true, cacheDir = models.primaryPath(model))
+            } catch (e: Throwable) {
+                AppLog.w("Npu", "NPU engine failed to start", e)
+                NpuSupport.markFailed(context, e.message ?: e.javaClass.simpleName)
+                if (models.isDownloaded(SpeechModel.PARAKEET)) {
+                    AppLog.i("Npu", "Falling back to Parakeet on the CPU")
+                    ParakeetEngine(models.primaryPath(SpeechModel.PARAKEET), options)
+                } else {
+                    throw IllegalStateException("The NPU couldn't run this model (${e.message}). Choose NVIDIA Parakeet v3 (CPU) in Settings.")
+                }
+            }
         }
     }
 }
 
-/** whisper.cpp. With a VAD model, music and silence are skipped inside whisper.cpp. */
+/**
+ * whisper.cpp. To skip music and silence, the speech parts are joined (with short pauses
+ * between them) and every timestamp is mapped back to the original audio exactly.
+ */
 class WhisperEngine(modelPath: String, private val options: EngineOptions) : SpeechEngine {
     private var handle = WhisperLib.nativeInit(modelPath, options.flashAttention)
 
@@ -51,27 +84,31 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
 
     override fun transcribe(
         samples: FloatArray,
+        speech: List<Pair<Long, Long>>?,
         language: String,
         prompt: String?,
         onProgress: (Int) -> Unit,
         onSegment: (WhisperSegment) -> Unit,
     ): Boolean {
         check(handle != 0L) { "Model already released" }
-        // whisper.cpp maps times back from the speech-only audio only approximately; a
-        // sentence after a music break can appear to start during the music. Snap each
-        // sentence to the stretch of speech it belongs to.
-        val blocks = options.vadModelPath
-            ?.let { WhisperLib.nativeDetectSpeech(it, samples, options.threads) }
-            ?.let { SpeechAlignment.speechBlocks(SpeechAlignment.pairs(it)) }
-            .orEmpty()
+        val map = speech?.let { SpeechMap.build(it, samples.size / 16L) }
+        if (map != null && map.isEmpty) {
+            onProgress(100)
+            return true // no speech in this block
+        }
+        val audio = map?.let { SpeechMap.joinSpeech(samples, it) } ?: samples
         val listener = object : TranscribeListener {
             override fun onProgress(percent: Int) = onProgress(percent)
-            override fun onSegment(startMs: Long, endMs: Long, text: String) =
-                onSegment(SpeechAlignment.alignSegment(WhisperSegment(startMs, endMs, text), blocks))
+            override fun onSegment(startMs: Long, endMs: Long, text: String, words: Array<String>, wordStartsMs: LongArray) {
+                val start = map?.toOriginal(startMs) ?: startMs
+                val end = map?.toOriginal(endMs, isEnd = true) ?: endMs
+                val timed = words.indices.map { i ->
+                    Word(map?.toOriginal(wordStartsMs[i]) ?: wordStartsMs[i], words[i].trim())
+                }.filter { it.text.isNotEmpty() }
+                onSegment(WhisperSegment(start, maxOf(start, end), text, timed.ifEmpty { null }))
+            }
         }
-        return WhisperLib.nativeTranscribe(
-            handle, samples, language, options.threads, prompt, listener, options.vadModelPath,
-        ) != null
+        return WhisperLib.nativeTranscribe(handle, audio, language, options.threads, prompt, listener, null) != null
     }
 
     override fun abort() {
@@ -87,13 +124,14 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
 }
 
 /**
- * NVIDIA Parakeet TDT 0.6B v3 through sherpa-onnx. It works on short utterances, so
- * the audio is first split at pauses with the voice-activity model (which also
- * skips music and silence), then each piece is recognised and split into sentences.
+ * NVIDIA Parakeet TDT 0.6B v3 through sherpa-onnx (on the CPU). It works on short
+ * utterances, so each stretch of speech is recognised separately and split into sentences.
  */
 class ParakeetEngine(modelDir: File, private val options: EngineOptions) : SpeechEngine {
     @Volatile private var aborted = false
     private val recognizer: OfflineRecognizer
+
+    override val needsSpeechRegions: Boolean get() = true
 
     init {
         val config = OfflineRecognizerConfig(
@@ -115,18 +153,15 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
 
     override fun transcribe(
         samples: FloatArray,
+        speech: List<Pair<Long, Long>>?,
         language: String,
         prompt: String?,
         onProgress: (Int) -> Unit,
         onSegment: (WhisperSegment) -> Unit,
     ): Boolean {
         aborted = false
-        val vad = options.vadModelPath
-            ?: error("Parakeet needs the voice-activity model")
-        val speech = WhisperLib.nativeDetectSpeech(vad, samples, options.threads)
-            ?.let { SpeechAlignment.pairs(it) }
-            ?: listOf(0L to samples.size / 16L)
-        val pieces = SpeechAlignment.splitLong(speech, MAX_PIECE_MS)
+        val regions = speech ?: listOf(0L to samples.size / 16L)
+        val pieces = SpeechAlignment.splitLong(regions, MAX_PIECE_MS)
         pieces.forEachIndexed { i, (startMs, endMs) ->
             if (aborted) return false
             onProgress(i * 100 / pieces.size.coerceAtLeast(1))
@@ -159,6 +194,69 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
 
     private companion object {
         const val MAX_PIECE_MS = 25_000L
+    }
+}
+
+/**
+ * Maps between the original audio and the "speech only" audio given to whisper
+ * (speech regions joined with a short pause between them).
+ */
+class SpeechMap private constructor(
+    /** (start in joined audio, start in original, length), all in ms. */
+    val parts: List<Triple<Long, Long, Long>>,
+    val gapMs: Long,
+) {
+    val isEmpty get() = parts.isEmpty()
+    val joinedLengthMs: Long get() = parts.lastOrNull()?.let { it.first + it.third } ?: 0
+
+    /** Converts a time in the joined audio to the original audio. */
+    fun toOriginal(joinedMs: Long, isEnd: Boolean = false): Long {
+        if (parts.isEmpty()) return joinedMs
+        var idx = parts.indexOfLast { it.first <= joinedMs }
+        if (idx < 0) idx = 0
+        val (joinedStart, origStart, len) = parts[idx]
+        val offset = joinedMs - joinedStart
+        if (offset <= len) return origStart + offset.coerceAtLeast(0)
+        // Inside the pause after this part: an end belongs to this part, a start to the next.
+        return if (isEnd || idx + 1 >= parts.size) origStart + len else parts[idx + 1].second
+    }
+
+    companion object {
+        /** Merges regions closer than [gapMs] and builds the map. */
+        fun build(regions: List<Pair<Long, Long>>, audioMs: Long, gapMs: Long = 300): SpeechMap {
+            val merged = mutableListOf<Pair<Long, Long>>()
+            for ((s0, e0) in regions.sortedBy { it.first }) {
+                val s = s0.coerceIn(0, audioMs)
+                val e = e0.coerceIn(s, audioMs)
+                if (e <= s) continue
+                val last = merged.lastOrNull()
+                if (last != null && s - last.second <= gapMs) merged[merged.lastIndex] = last.first to maxOf(last.second, e)
+                else merged += s to e
+            }
+            val parts = mutableListOf<Triple<Long, Long, Long>>()
+            var joined = 0L
+            for ((s, e) in merged) {
+                parts += Triple(joined, s, e - s)
+                joined += (e - s) + gapMs
+            }
+            return SpeechMap(parts, gapMs)
+        }
+
+        /** The speech parts of [samples] joined together, with [SpeechMap.gapMs] of silence between them. */
+        fun joinSpeech(samples: FloatArray, map: SpeechMap): FloatArray {
+            val gap = (map.gapMs * 16).toInt()
+            val total = map.parts.sumOf { (it.third * 16).toInt() } + gap * (map.parts.size - 1).coerceAtLeast(0)
+            val out = FloatArray(total.coerceAtLeast(0))
+            var pos = 0
+            map.parts.forEachIndexed { i, (_, origStart, len) ->
+                val from = (origStart * 16).toInt().coerceIn(0, samples.size)
+                val n = (len * 16).toInt().coerceAtMost(samples.size - from).coerceAtMost(out.size - pos)
+                System.arraycopy(samples, from, out, pos, n)
+                pos += (len * 16).toInt()
+                if (i < map.parts.size - 1) pos += gap
+            }
+            return out
+        }
     }
 }
 
@@ -214,8 +312,8 @@ object SpeechAlignment {
     private val SENTENCE_END = Regex("""[.!?…]["»”’)]*$""")
 
     /**
-     * Builds sentence segments from recogniser tokens (text pieces; a leading space or
-     * "▁" starts a new word) and their start times in seconds within the piece.
+     * Builds sentence segments (with word timings) from recogniser tokens (text pieces; a
+     * leading space or "▁" starts a new word) and their start times in seconds within the piece.
      */
     fun sentencesFromTokens(
         tokens: List<String>,
@@ -230,21 +328,26 @@ object SpeechAlignment {
         }
         val out = mutableListOf<WhisperSegment>()
         val sb = StringBuilder()
+        val words = mutableListOf<Word>()
         var start = -1L
         for (i in tokens.indices) {
             val t = pieceStartMs + (timestamps[i] * 1000).toLong()
             if (start < 0) start = t
-            sb.append(tokens[i].replace('▁', ' '))
+            val piece = tokens[i].replace('▁', ' ')
+            if (words.isEmpty() || piece.startsWith(" ")) words += Word(t, piece.trim())
+            else words[words.lastIndex] = words.last().copy(text = words.last().text + piece)
+            sb.append(piece)
             val text = sb.toString().trim()
             if (SENTENCE_END.containsMatchIn(text) && text.length > 1) {
                 val end = if (i + 1 < tokens.size) pieceStartMs + (timestamps[i + 1] * 1000).toLong() else pieceEndMs
-                out += WhisperSegment(start, end, text)
+                out += WhisperSegment(start, end, text, words.filter { it.text.isNotEmpty() }.toList())
                 sb.clear()
+                words.clear()
                 start = -1
             }
         }
         val rest = sb.toString().trim()
-        if (rest.isNotEmpty()) out += WhisperSegment(start, pieceEndMs, rest)
+        if (rest.isNotEmpty()) out += WhisperSegment(start, pieceEndMs, rest, words.filter { it.text.isNotEmpty() }.toList())
         return out
     }
 }

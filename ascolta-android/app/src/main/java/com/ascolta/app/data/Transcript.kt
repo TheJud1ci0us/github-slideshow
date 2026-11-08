@@ -8,12 +8,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
 
+/** A word of a sentence and when it starts, for word-by-word highlighting. */
+@Serializable
+data class Word(val startMs: Long, val text: String)
+
 @Serializable
 data class Segment(
     val startMs: Long,
     val endMs: Long,
     val text: String,
     val translation: String? = null,
+    /** Word timings when the speech engine provides them. */
+    val words: List<Word>? = null,
 )
 
 @Serializable

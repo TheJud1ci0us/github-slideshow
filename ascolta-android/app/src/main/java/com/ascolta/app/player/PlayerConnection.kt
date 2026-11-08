@@ -171,7 +171,7 @@ class PlayerConnection(
                     syncState()
                     if (System.currentTimeMillis() - lastSavedAt > 5_000) saveCurrentPosition()
                 }
-                delay(if (settings.autoPause.value) 50 else 200)
+                delay(if (settings.autoPause.value) 50 else 100) // 10× a second: smooth word highlighting
             }
         }
     }

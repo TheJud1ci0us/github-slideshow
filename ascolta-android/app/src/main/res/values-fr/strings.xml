@@ -135,10 +135,10 @@
     <string name="skip_title">Ignorer la musique et les silences</string>
     <string name="skip_text">Détecte d\'abord la parole pour ne transcrire que les passages parlés. Toujours actif pour Parakeet.</string>
     <string name="speed_test">Lancer le test de vitesse</string>
-    <string name="speed_test_text">Transcrit à chaque fois le même enregistrement italien de 30 secondes, pour comparer modèles et réglages.</string>
+    <string name="speed_test_text">Transcrit le même enregistrement italien de 30 secondes : un essai de chauffe, puis 3 essais chronométrés (celui du milieu est affiché), pour comparer modèles et réglages.</string>
     <string name="speed_test_running">Test de vitesse en cours…</string>
     <string name="speed_test_result">%1$s : 30 s d\'audio en %2$s s (%3$s× le temps réel).</string>
-    <string name="speed_test_details">Modèle chargé en %1$s s · %2$d cœurs · flash %3$s · ignorer musique/silence %4$s\nProcesseur : %5$s</string>
+    <string name="speed_test_details">Modèle chargé en %1$s s · %2$s cœurs · flash %3$s · ignorer musique/silence %4$s\nProcesseur : %5$s</string>
     <string name="speed_test_on">oui</string>
     <string name="speed_test_off">non</string>
     <string name="speed_test_need_model">Téléchargez d\'abord %1$s.</string>
@@ -202,4 +202,13 @@
         <item quantity="other">%d épisodes</item>
     </plurals>
     <string name="speed_test_accuracy">Précision : %1$d %% de mots corrects</string>
+    <string name="model_desc_parakeet_npu">Parakeet v3 sur la puce IA du téléphone (NPU Qualcomm) : la partie lourde tourne sur le NPU, le reste sur le processeur. Potentiellement plusieurs fois plus rapide et plus économe en batterie. Gros téléchargement (2,3 Go) ; la première utilisation prépare le NPU, ce qui peut prendre quelques minutes.</string>
+    <string name="npu_unavailable">Indisponible sur ce téléphone : %1$s</string>
+    <string name="npu_check_again">Vérifier à nouveau</string>
+    <string name="npu_chip">NPU détecté : %1$s</string>
+    <string name="threads_auto">Cœurs utilisés : automatique (%1$d cœurs rapides)</string>
+    <string name="threads_text_cores">Ce téléphone a %1$d cœurs rapides et %2$d cœurs économes. La reconnaissance tourne sur les cœurs rapides ; la préparation de l\'audio, la détection de la parole et l\'enregistrement sur les cœurs économes. Utiliser plus de threads que de cœurs rapides ralentit généralement.</string>
+    <string name="speed_test_spread">Essais : %1$s s (écart %2$s %%)</string>
+    <string name="speed_test_warmup">Essai de chauffe…</string>
+    <string name="speed_test_run">Essai chronométré %1$d sur %2$d…</string>
 </resources>

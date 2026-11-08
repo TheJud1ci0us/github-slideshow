@@ -135,10 +135,10 @@
     <string name="skip_title">Pular música e silêncio</string>
     <string name="skip_text">Detecta a fala primeiro para transcrever só o que é falado. Sempre ativo no Parakeet.</string>
     <string name="speed_test">Fazer teste de velocidade</string>
-    <string name="speed_test_text">Transcreve sempre a mesma gravação em italiano de 30 segundos, para comparar modelos e configurações.</string>
+    <string name="speed_test_text">Transcreve a mesma gravação em italiano de 30 segundos: uma execução de aquecimento e depois 3 cronometradas (mostra-se a do meio), para comparar modelos e configurações.</string>
     <string name="speed_test_running">Teste de velocidade em andamento…</string>
     <string name="speed_test_result">%1$s: 30 s de áudio em %2$s s (%3$s× o tempo real).</string>
-    <string name="speed_test_details">Modelo carregado em %1$s s · %2$d núcleos · flash %3$s · pular música/silêncio %4$s\nCPU: %5$s</string>
+    <string name="speed_test_details">Modelo carregado em %1$s s · %2$s núcleos · flash %3$s · pular música/silêncio %4$s\nCPU: %5$s</string>
     <string name="speed_test_on">sim</string>
     <string name="speed_test_off">não</string>
     <string name="speed_test_need_model">Baixe %1$s primeiro.</string>
@@ -202,4 +202,13 @@
         <item quantity="other">%d episódios</item>
     </plurals>
     <string name="speed_test_accuracy">Precisão: %1$d%% das palavras corretas</string>
+    <string name="model_desc_parakeet_npu">Parakeet v3 no chip de IA do celular (NPU Qualcomm): a parte pesada roda na NPU e o resto na CPU. Potencialmente várias vezes mais rápido e econômico na bateria. Download grande (2,3 GB); o primeiro uso prepara a NPU, o que pode levar alguns minutos.</string>
+    <string name="npu_unavailable">Indisponível neste celular: %1$s</string>
+    <string name="npu_check_again">Verificar de novo</string>
+    <string name="npu_chip">NPU encontrada: %1$s</string>
+    <string name="threads_auto">Núcleos usados: automático (%1$d núcleos rápidos)</string>
+    <string name="threads_text_cores">Este celular tem %1$d núcleos rápidos e %2$d de eficiência. O reconhecimento usa os núcleos rápidos; a preparação do áudio, a detecção de fala e o salvamento usam os de eficiência. Usar mais threads do que núcleos rápidos costuma deixar mais lento.</string>
+    <string name="speed_test_spread">Execuções: %1$s s (variação %2$s%%)</string>
+    <string name="speed_test_warmup">Execução de aquecimento…</string>
+    <string name="speed_test_run">Execução cronometrada %1$d de %2$d…</string>
 </resources>

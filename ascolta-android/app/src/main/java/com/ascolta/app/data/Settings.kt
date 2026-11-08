@@ -78,8 +78,11 @@ class Settings(context: Context) {
     val nativeLanguage = string("native_language", "en")
     val modelId = string("whisper_model", SpeechModel.BASE.id)
 
-    /** CPU cores used for speech recognition (1–8). */
-    val threads = int("threads", 4)
+    /** CPU cores used for speech recognition (1–8); 0 = automatic (the phone's fast cores). */
+    val threads = int("threads", 0)
+
+    fun effectiveThreads(): Int =
+        threads.value.takeIf { it in 1..8 } ?: com.ascolta.app.whisper.CoreDispatchers.defaultThreads()
     /** whisper.cpp flash attention ("faster calculation mode"). */
     val flashAttention = bool("flash_attention", true)
     /** Skip music and silence with voice-activity detection. */

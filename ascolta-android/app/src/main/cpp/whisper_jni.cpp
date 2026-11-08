@@ -5,7 +5,9 @@
 #include <atomic>
 #include <cstring>
 #include <mutex>
+#include <sched.h>
 #include <string>
+#include <vector>
 
 #include "ggml-backend.h"
 #include "whisper.h"
@@ -26,6 +28,7 @@ struct ListenerData {
     jobject listener;
     jmethodID onProgress;
     jmethodID onSegment;
+    whisper_token eot;
 };
 
 std::once_flag backendsLoaded;
@@ -39,21 +42,55 @@ void progressCallback(whisper_context *, whisper_state *, int progress, void *us
     if (data->env->ExceptionCheck()) data->env->ExceptionClear();
 }
 
-/** Called by whisper.cpp as soon as new sentences are decoded, so they can be shown right away. */
-void newSegmentCallback(whisper_context *, whisper_state *state, int nNew, void *userData) {
+/**
+ * Called by whisper.cpp as soon as new sentences are decoded, so they can be shown right away.
+ * Also passes each word's start time (from token timestamps) for word-by-word highlighting.
+ * Words are assembled from tokens at byte level, because one UTF-8 character can be split
+ * across two tokens.
+ */
+void newSegmentCallback(whisper_context *ctx, whisper_state *state, int nNew, void *userData) {
     auto *data = static_cast<ListenerData *>(userData);
     if (data == nullptr || data->listener == nullptr || data->onSegment == nullptr) return;
     JNIEnv *env = data->env;
     const int n = whisper_full_n_segments_from_state(state);
+    jclass strClass = env->FindClass("java/lang/String");
     for (int i = n - nNew; i < n; i++) {
         if (i < 0) continue;
         jlong t0 = (jlong) whisper_full_get_segment_t0_from_state(state, i) * 10; // centiseconds -> ms
         jlong t1 = (jlong) whisper_full_get_segment_t1_from_state(state, i) * 10;
+
+        std::vector<std::string> words;
+        std::vector<jlong> starts;
+        const int nTokens = whisper_full_n_tokens_from_state(state, i);
+        for (int j = 0; j < nTokens; j++) {
+            whisper_token_data td = whisper_full_get_token_data_from_state(state, i, j);
+            if (td.id >= data->eot) continue; // special / timestamp tokens
+            const char *piece = whisper_full_get_token_text_from_state(ctx, state, i, j);
+            if (piece == nullptr || piece[0] == '\0') continue;
+            if (words.empty() || piece[0] == ' ') {
+                words.emplace_back(piece);
+                starts.push_back((jlong) td.t0 * 10);
+            } else {
+                words.back() += piece;
+            }
+        }
+        jobjectArray wordArray = env->NewObjectArray((jsize) words.size(), strClass, nullptr);
+        jlongArray startArray = env->NewLongArray((jsize) starts.size());
+        for (size_t w = 0; w < words.size(); w++) {
+            jstring ws = utf8String(env, words[w].c_str());
+            env->SetObjectArrayElement(wordArray, (jsize) w, ws);
+            env->DeleteLocalRef(ws);
+        }
+        if (!starts.empty()) env->SetLongArrayRegion(startArray, 0, (jsize) starts.size(), starts.data());
+
         jstring text = utf8String(env, whisper_full_get_segment_text_from_state(state, i));
-        env->CallVoidMethod(data->listener, data->onSegment, t0, t1, text);
+        env->CallVoidMethod(data->listener, data->onSegment, t0, t1, text, wordArray, startArray);
         env->DeleteLocalRef(text);
+        env->DeleteLocalRef(wordArray);
+        env->DeleteLocalRef(startArray);
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
+    env->DeleteLocalRef(strClass);
 }
 
 bool abortCallback(void *userData) {
@@ -200,6 +237,7 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
     params.no_context = true;
     params.suppress_blank = true;
     params.suppress_nst = true;
+    params.token_timestamps = true; // per-word times for word highlighting
     if (!promptText.empty()) params.initial_prompt = promptText.c_str();
     if (!vadPath.empty()) {
         params.vad = true;
@@ -207,11 +245,12 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
         params.vad_params = vadParams();
     }
 
-    ListenerData callbacks{env, listener, nullptr, nullptr};
+    ListenerData callbacks{env, listener, nullptr, nullptr, whisper_token_eot(session->ctx)};
     if (listener != nullptr) {
         jclass cls = env->GetObjectClass(listener);
         callbacks.onProgress = env->GetMethodID(cls, "onProgress", "(I)V");
-        callbacks.onSegment = env->GetMethodID(cls, "onSegment", "(JJLjava/lang/String;)V");
+        callbacks.onSegment = env->GetMethodID(
+            cls, "onSegment", "(JJLjava/lang/String;[Ljava/lang/String;[J)V");
         env->DeleteLocalRef(cls);
         params.progress_callback = progressCallback;
         params.progress_callback_user_data = &callbacks;
@@ -284,4 +323,22 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeDetectSpeech(
     }
     whisper_vad_free(vctx);
     return result;
+}
+
+/**
+ * Restricts the calling thread to the given CPU cores. Threads it creates afterwards
+ * (whisper.cpp's and ONNX Runtime's worker threads) inherit the same cores.
+ */
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_ascolta_app_whisper_WhisperLib_nativeSetThreadAffinity(JNIEnv *env, jclass, jintArray cpus) {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    jsize n = env->GetArrayLength(cpus);
+    jint *ids = env->GetIntArrayElements(cpus, nullptr);
+    for (jsize i = 0; i < n; i++) {
+        if (ids[i] >= 0 && ids[i] < CPU_SETSIZE) CPU_SET(ids[i], &set);
+    }
+    env->ReleaseIntArrayElements(cpus, ids, JNI_ABORT);
+    if (n == 0) return JNI_FALSE;
+    return sched_setaffinity(0, sizeof(set), &set) == 0 ? JNI_TRUE : JNI_FALSE;
 }

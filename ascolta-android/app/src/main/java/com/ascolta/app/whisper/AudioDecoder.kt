@@ -4,7 +4,7 @@ import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.nio.ByteOrder
@@ -38,7 +38,7 @@ class AudioDecoder(private val path: String) {
         firstChunkSamples: Int = chunkSamples,
         onDecoded: (Long) -> Unit = {},
         onChunk: suspend (FloatArray, Long) -> Boolean,
-    ) = withContext(Dispatchers.IO) {
+    ) = withContext(currentCoroutineContext()) { // runs on the caller's thread (e.g. the efficiency-core thread)
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {

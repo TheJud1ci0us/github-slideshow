@@ -172,10 +172,10 @@
     <string name="skip_title">Skip music and silence</string>
     <string name="skip_text">Finds the speech first so only the talking is transcribed. Always on for Parakeet.</string>
     <string name="speed_test">Run speed test</string>
-    <string name="speed_test_text">Transcribes the same 30-second Italian recording every time, so you can compare models and settings.</string>
+    <string name="speed_test_text">Transcribes the same 30-second Italian recording: one warm-up run, then 3 timed runs (the middle one is shown), so you can compare models and settings.</string>
     <string name="speed_test_running">Running speed test…</string>
     <string name="speed_test_result">%1$s: 30 s of audio in %2$s s (%3$s× real time).</string>
-    <string name="speed_test_details">Model loaded in %1$s s · %2$d cores · flash %3$s · skip music/silence %4$s\nCPU: %5$s</string>
+    <string name="speed_test_details">Model loaded in %1$s s · %2$s cores · flash %3$s · skip music/silence %4$s\nCPU: %5$s</string>
     <string name="speed_test_on">on</string>
     <string name="speed_test_off">off</string>
     <string name="speed_test_need_model">Download %1$s first.</string>
@@ -225,4 +225,13 @@
     <string name="error_model_language">%1$s doesn\'t support %2$s. Choose a Whisper model in Settings.</string>
     <string name="speed_test_accuracy">Accuracy: %1$d%% of words correct</string>
     <string name="speed_test_credit" translatable="false">Sample: Luigi Pirandello, “Novelle per un anno”, read by a LibriVox volunteer (Multilingual LibriSpeech, CC BY 4.0).</string>
+    <string name="model_desc_parakeet_npu">Parakeet v3 on the phone\'s AI chip (Qualcomm NPU): the heavy part runs on the NPU, the rest on the CPU. Potentially several times faster and lighter on the battery. Large download (2.3 GB); the first use prepares the NPU, which can take a few minutes.</string>
+    <string name="npu_unavailable">Not available on this phone: %1$s</string>
+    <string name="npu_check_again">Check again</string>
+    <string name="npu_chip">NPU found: %1$s</string>
+    <string name="threads_auto">CPU cores used: automatic (%1$d fast cores)</string>
+    <string name="threads_text_cores">This phone has %1$d fast and %2$d efficiency cores. Recognition runs on the fast cores; audio preparation, speech detection and saving run on the efficiency cores. Using more threads than fast cores usually makes it slower.</string>
+    <string name="speed_test_spread">Runs: %1$s s (spread %2$s%%)</string>
+    <string name="speed_test_warmup">Warm-up run…</string>
+    <string name="speed_test_run">Timed run %1$d of %2$d…</string>
 </resources>

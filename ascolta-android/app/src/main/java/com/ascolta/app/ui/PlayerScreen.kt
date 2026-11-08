@@ -76,6 +76,11 @@ import com.ascolta.app.data.Transcript
 import com.ascolta.app.data.TranscriptState
 import com.ascolta.app.data.VocabEntity
 import com.ascolta.app.data.indexAt
+import com.ascolta.app.data.Word
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import com.ascolta.app.data.languageName
 import com.ascolta.app.R
 import com.ascolta.app.graph
@@ -119,7 +124,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             if (id == episodeId) transcript = graph.repo.loadTranscript(episodeId)
         }
     }
-    val segments = transcript?.segments.orEmpty()
+    // Always in time order, so finding the sentence being spoken can't pick the wrong one.
+    val segments = remember(transcript) { transcript?.segments.orEmpty().sortedBy { it.startMs } }
 
     // Fill in missing translations (e.g. translation model wasn't available during transcription).
     var translating by remember { mutableStateOf(false) }
@@ -142,7 +148,12 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
 
     val position = if (isCurrent) player.positionMs else ep?.playbackPositionMs ?: 0
     val duration = if (isCurrent && player.durationMs > 0) player.durationMs else (ep?.durationSec ?: 0) * 1000
-    val currentIndex = segments.indexAt(position)
+    // Sentence at (or just before) the playback position; used for navigation and scrolling.
+    val navIndex = segments.indexAt(position)
+    // Highlighted sentence: none during music or long silences after a sentence has ended.
+    val currentIndex = navIndex.takeIf { it >= 0 && position <= segments[it].endMs + HIGHLIGHT_LINGER_MS } ?: -1
+    // Word being spoken inside the highlighted sentence (when the engine gave word timings).
+    val currentWord = segments.getOrNull(currentIndex)?.words?.indexOfLast { it.startMs <= position } ?: -1
 
     fun startOrToggle() {
         val e = episode ?: return
@@ -162,8 +173,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val dragged by listState.interactionSource.collectIsDraggedAsState()
     var follow by remember { mutableStateOf(true) }
     LaunchedEffect(dragged) { if (dragged) follow = false }
-    LaunchedEffect(currentIndex, follow) {
-        if (follow && currentIndex >= 0) listState.animateScrollToItem((currentIndex - 1).coerceAtLeast(0))
+    LaunchedEffect(navIndex, follow) {
+        if (follow && navIndex >= 0) listState.animateScrollToItem((navIndex - 1).coerceAtLeast(0))
     }
 
     var menu by remember { mutableStateOf(false) }
@@ -220,18 +231,18 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 onPrevious = {
                     if (segments.isEmpty()) seek((position - 10_000).coerceAtLeast(0))
                     else {
-                        val cur = segments.getOrNull(currentIndex)
+                        val cur = segments.getOrNull(navIndex)
                         val target = if (cur != null && position - cur.startMs > 1500) cur.startMs
-                        else segments.getOrNull(currentIndex - 1)?.startMs ?: 0
+                        else segments.getOrNull(navIndex - 1)?.startMs ?: 0
                         seek(target)
                     }
                 },
                 onNext = {
                     if (segments.isEmpty()) seek(position + 30_000)
-                    else segments.getOrNull(currentIndex + 1)?.let { seek(it.startMs) }
+                    else segments.getOrNull(navIndex + 1)?.let { seek(it.startMs) }
                 },
                 onRepeat = {
-                    segments.getOrNull(currentIndex)?.let { seek(it.startMs) } ?: seek((position - 5_000).coerceAtLeast(0))
+                    segments.getOrNull(navIndex)?.let { seek(it.startMs) } ?: seek((position - 5_000).coerceAtLeast(0))
                 },
                 onSpeed = {
                     val next = SPEEDS.firstOrNull { it > player.speed + 0.01f } ?: SPEEDS.first()
@@ -257,6 +268,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     SegmentItem(
                         segment = segment,
                         active = i == currentIndex,
+                        activeWord = if (i == currentIndex) currentWord else -1,
                         showOriginal = showOriginal,
                         showTranslation = showTranslation,
                         textScale = textScale,
@@ -383,6 +395,7 @@ private fun Banner(content: @Composable () -> Unit) {
 private fun SegmentItem(
     segment: Segment,
     active: Boolean,
+    activeWord: Int,
     showOriginal: Boolean,
     showTranslation: Boolean,
     textScale: Float,
@@ -403,8 +416,21 @@ private fun SegmentItem(
             modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures { onSeek() } }.padding(bottom = 2.dp),
         )
         if (showOriginal) {
+            val wordRanges = remember(segment) { wordRanges(segment.text, segment.words) }
+            val highlight = MaterialTheme.colorScheme.primary
+            val text = remember(segment.text, activeWord, wordRanges, highlight) {
+                buildAnnotatedString {
+                    append(segment.text)
+                    wordRanges.getOrNull(activeWord)?.let { range ->
+                        addStyle(
+                            SpanStyle(background = highlight.copy(alpha = 0.22f), fontWeight = FontWeight.SemiBold),
+                            range.first, range.last + 1,
+                        )
+                    }
+                }
+            }
             TappableText(
-                segment.text,
+                text,
                 MaterialTheme.typography.bodyLarge.copy(
                     fontSize = (18 * textScale).sp,
                     lineHeight = (26 * textScale).sp,
@@ -430,19 +456,42 @@ private fun SegmentItem(
 
 /** Text where tapping a word reports that word. */
 @Composable
-private fun TappableText(text: String, style: TextStyle, onWord: (String) -> Unit) {
+private fun TappableText(text: AnnotatedString, style: TextStyle, onWord: (String) -> Unit) {
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     Text(
         text,
         style = style,
         onTextLayout = { layout = it },
-        modifier = Modifier.pointerInput(text) {
+        modifier = Modifier.pointerInput(text.text) {
             detectTapGestures { pos ->
                 val l = layout ?: return@detectTapGestures
-                wordAt(text, l.getOffsetForPosition(pos))?.let(onWord)
+                wordAt(text.text, l.getOffsetForPosition(pos))?.let(onWord)
             }
         },
     )
+}
+
+/** Keeps a sentence highlighted this long after it ends, then clears it (music, pauses). */
+private const val HIGHLIGHT_LINGER_MS = 1_500L
+
+/**
+ * Character ranges of each timed word inside the sentence text, found in order so a
+ * repeated word maps to the right occurrence. Words that can't be found get an empty range.
+ */
+fun wordRanges(text: String, words: List<Word>?): List<IntRange> {
+    if (words.isNullOrEmpty()) return emptyList()
+    val lower = text.lowercase()
+    var cursor = 0
+    return words.map { w ->
+        val needle = w.text.trim().lowercase()
+        if (needle.isEmpty()) return@map IntRange.EMPTY
+        val at = lower.indexOf(needle, cursor)
+        if (at < 0) IntRange.EMPTY
+        else {
+            cursor = at + needle.length
+            at until cursor
+        }
+    }
 }
 
 private fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '\'' || c == '’' || c == '-'

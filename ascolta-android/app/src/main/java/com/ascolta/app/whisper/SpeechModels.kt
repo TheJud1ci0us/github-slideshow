@@ -8,12 +8,16 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 
-enum class Engine { WHISPER, PARAKEET }
+enum class Engine { WHISPER, PARAKEET, PARAKEET_NPU }
 
-data class ModelFile(val url: String, val name: String, val approxBytes: Long)
+/** A file to download; with [extractTo], it is a zip unpacked into that folder (its top folder stripped). */
+data class ModelFile(val url: String, val name: String, val approxBytes: Long, val extractTo: String? = null)
 
 private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 private const val PARAKEET_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main"
+/** Qualcomm AI Hub's export of Parakeet v3 for its NPU (encoder/decoder/joint ONNX, float). */
+private const val PARAKEET_NPU_ZIP =
+    "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/parakeet_tdt/releases/v0.66.0/parakeet_tdt-onnx-float.zip"
 
 /** Languages NVIDIA Parakeet TDT 0.6B v3 understands (25 European languages). */
 val PARAKEET_LANGUAGES = setOf(
@@ -51,6 +55,13 @@ enum class SpeechModel(
         ),
         languages = PARAKEET_LANGUAGES,
     ),
+    PARAKEET_NPU("parakeet-v3-npu", Engine.PARAKEET_NPU, "NVIDIA Parakeet v3 (NPU)", 2270,
+        listOf(
+            ModelFile("$PARAKEET_HF/tokens.txt", "parakeet-v3-npu/tokens.txt", 93_939),
+            ModelFile(PARAKEET_NPU_ZIP, "parakeet-v3-npu.zip", 2_266_000_000, extractTo = "parakeet-v3-npu"),
+        ),
+        languages = PARAKEET_LANGUAGES,
+    ),
     CUSTOM("custom", Engine.WHISPER, "Imported Whisper model", 0, emptyList());
 
     fun supports(language: String) = languages == null || language in languages
@@ -73,15 +84,22 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
     fun file(name: String) = File(dir, name)
 
     /** The main model file: whisper's .bin, or Parakeet's folder. */
-    fun primaryPath(model: SpeechModel): File = when (model) {
-        SpeechModel.CUSTOM -> file("custom.bin")
-        else -> if (model.engine == Engine.PARAKEET) file(model.files.first().name).parentFile!!
-        else file(model.files.first().name)
+    fun primaryPath(model: SpeechModel): File = when {
+        model == SpeechModel.CUSTOM -> file("custom.bin")
+        model.engine == Engine.WHISPER -> file(model.files.first().name)
+        else -> file(model.files.first().name).parentFile!!
     }
+
+    /** Parakeet's word-piece list for the NPU engine. */
+    fun parakeetTokens(): File = file("parakeet-v3-npu/tokens.txt")
+
+    private fun isPresent(f: ModelFile): Boolean =
+        if (f.extractTo != null) File(file(f.extractTo), ".complete").exists()
+        else file(f.name).let { it.exists() && it.length() > 0 }
 
     fun isDownloaded(model: SpeechModel): Boolean = when (model) {
         SpeechModel.CUSTOM -> file("custom.bin").let { it.exists() && it.length() > 0 }
-        else -> model.files.all { file(it.name).let { f -> f.exists() && f.length() > 0 } }
+        else -> model.files.all(::isPresent)
     }
 
     fun vadFile(): File = file(VAD_MODEL.name)
@@ -97,13 +115,36 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
         val total = model.files.sumOf { it.approxBytes }
         var done = 0L
         for (f in model.files) {
-            val dest = file(f.name)
-            if (!(dest.exists() && dest.length() > 0)) {
+            if (!isPresent(f)) {
+                val dest = file(f.name)
                 http.downloadWithBytes(f.url, dest) { written, _ -> onProgress(done + written, total) }
+                f.extractTo?.let { target ->
+                    unzip(dest, file(target))
+                    dest.delete()
+                }
             }
             done += f.approxBytes
             onProgress(done, total)
         }
+    }
+
+    /** Unpacks [zip] into [target], dropping the archive's top-level folder. */
+    private suspend fun unzip(zip: File, target: File) = withContext(Dispatchers.IO) {
+        target.mkdirs()
+        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zin ->
+            while (true) {
+                val entry = zin.nextEntry ?: break
+                val relative = entry.name.substringAfter('/', entry.name)
+                if (relative.isEmpty() || relative.contains("..")) continue
+                val out = File(target, relative)
+                if (entry.isDirectory) out.mkdirs()
+                else {
+                    out.parentFile?.mkdirs()
+                    out.outputStream().use { zin.copyTo(it, 1 shl 20) }
+                }
+            }
+        }
+        File(target, ".complete").writeText("ok")
     }
 
     fun delete(model: SpeechModel) {
@@ -114,6 +155,7 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
         model.files.forEach {
             file(it.name).delete()
             File(file(it.name).path + ".part").delete()
+            it.extractTo?.let { dir -> file(dir).deleteRecursively() }
         }
     }
 

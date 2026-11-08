@@ -62,7 +62,11 @@ import com.ascolta.app.data.LANGUAGES
 import com.ascolta.app.data.Pref
 import com.ascolta.app.data.languageName
 import com.ascolta.app.graph
+import com.ascolta.app.whisper.CpuTopology
+import com.ascolta.app.whisper.Engine
+import com.ascolta.app.whisper.NpuSupport
 import com.ascolta.app.whisper.SpeechModel
+import androidx.compose.ui.graphics.Color
 import com.ascolta.app.whisper.SpeedResult
 import com.ascolta.app.whisper.SpeedTest
 import com.ascolta.app.whisper.WhisperLib
@@ -270,6 +274,7 @@ private fun SpeechModel.descriptionRes() = when (this) {
     SpeechModel.SMALL -> R.string.model_desc_small
     SpeechModel.TURBO -> R.string.model_desc_turbo
     SpeechModel.PARAKEET -> R.string.model_desc_parakeet
+    SpeechModel.PARAKEET_NPU -> R.string.model_desc_parakeet_npu
     SpeechModel.CUSTOM -> R.string.model_desc_custom
 }
 
@@ -292,17 +297,35 @@ private fun ModelRow(
     val progress = info?.progress?.getFloat(WorkScheduler.KEY_PROGRESS, -1f) ?: -1f
     val downloaded = remember(model, refreshKey, info?.state) { graph.models.isDownloaded(model) }
     val supported = model.supports(learning)
+    // The NPU model needs a Qualcomm Snapdragon NPU; elsewhere it is shown but disabled.
+    var npuProblem by remember(refreshKey) {
+        mutableStateOf(if (model.engine == Engine.PARAKEET_NPU) NpuSupport.unavailableReason(context) else null)
+    }
+    val enabled = npuProblem == null
     LaunchedEffect(info?.state) { if (info?.state == WorkInfo.State.SUCCEEDED) onChanged() }
 
     ListItem(
-        modifier = Modifier.clickable(onClick = onSelect),
-        leadingContent = { RadioButton(selected = selected, onClick = onSelect) },
+        modifier = Modifier.clickable(enabled = enabled, onClick = onSelect),
+        leadingContent = { RadioButton(selected = selected, onClick = onSelect, enabled = enabled) },
         headlineContent = {
-            Text(if (model.approxSizeMb > 0) "${model.label} · ${model.approxSizeMb} MB" else model.label)
+            Text(
+                if (model.approxSizeMb > 0) "${model.label} · ${model.approxSizeMb} MB" else model.label,
+                color = if (enabled) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            )
         },
         supportingContent = {
             Column {
                 Text(stringResource(model.descriptionRes()))
+                npuProblem?.let { reason ->
+                    Text(stringResource(R.string.npu_unavailable, reason), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = {
+                        NpuSupport.clearFailure(context)
+                        npuProblem = NpuSupport.unavailableReason(context)
+                    }) { Text(stringResource(R.string.npu_check_again)) }
+                }
+                if (model.engine == Engine.PARAKEET_NPU && enabled) {
+                    Text(stringResource(R.string.npu_chip, NpuSupport.chipName()), color = MaterialTheme.colorScheme.primary)
+                }
                 if (!supported) {
                     Text(stringResource(R.string.model_not_for_language, languageName(learning)), color = MaterialTheme.colorScheme.error)
                 }
@@ -329,7 +352,7 @@ private fun ModelRow(
                     downloaded -> TextButton(onClick = { graph.models.delete(model); onChanged() }) {
                         Text(stringResource(R.string.action_delete))
                     }
-                    model != SpeechModel.CUSTOM -> TextButton(onClick = { WorkScheduler.downloadModel(context, model) }) {
+                    model != SpeechModel.CUSTOM -> TextButton(enabled = enabled, onClick = { WorkScheduler.downloadModel(context, model) }) {
                         Text(stringResource(R.string.action_get))
                     }
                 }
@@ -337,28 +360,32 @@ private fun ModelRow(
         },
     )
 }
-
 @Composable
 private fun ThreadsRow(pref: Pref<Int>) {
     val threads by pref.flow.collectAsState()
     var dragging by remember { mutableStateOf<Float?>(null) }
-    val shown = dragging?.toInt() ?: threads
+    val shown = dragging?.let { Math.round(it) } ?: threads
+    val fastCores = remember { CpuTopology.current.fast.size }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(stringResource(R.string.threads_title, shown), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            if (shown == 0) stringResource(R.string.threads_auto, fastCores)
+            else stringResource(R.string.threads_title, shown),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        // 0 = automatic: as many threads as the phone has fast cores.
         Slider(
             value = dragging ?: threads.toFloat(),
             onValueChange = { dragging = it },
             onValueChangeFinished = {
-                dragging?.let { pref.set(Math.round(it).coerceIn(1, 8)) }
+                dragging?.let { pref.set(Math.round(it).coerceIn(0, 8)) }
                 dragging = null
             },
-            valueRange = 1f..8f,
-            steps = 6,
+            valueRange = 0f..8f,
+            steps = 7,
         )
-        Hint(stringResource(R.string.threads_text), Modifier)
+        Hint(stringResource(R.string.threads_text_cores, CpuTopology.current.fast.size, CpuTopology.current.efficiency.size), Modifier)
     }
 }
-
 @Composable
 private fun SpeedTestRow() {
     val context = LocalContext.current
@@ -397,10 +424,19 @@ private fun SpeedTestRow() {
                         stringResource(
                             R.string.speed_test_result,
                             r.model,
-                            String.format(Locale.getDefault(), "%.1f", r.transcribeMs / 1000f),
+                            String.format(Locale.getDefault(), "%.1f", r.medianMs / 1000f),
                             String.format(Locale.getDefault(), "%.1f", r.speedFactor),
                         ),
                         style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        stringResource(
+                            R.string.speed_test_spread,
+                            r.runsMs.joinToString(" · ") { String.format(Locale.getDefault(), "%.1f", it / 1000f) },
+                            String.format(Locale.getDefault(), "%.0f", (r.maxMs - r.minMs) * 100f / r.medianMs.coerceAtLeast(1)),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         stringResource(R.string.speed_test_accuracy, (r.accuracy * 100).toInt()),
@@ -411,7 +447,7 @@ private fun SpeedTestRow() {
                         stringResource(
                             R.string.speed_test_details,
                             String.format(Locale.getDefault(), "%.1f", r.loadMs / 1000f),
-                            r.threads,
+                            "${r.threads} (${r.cores.joinToString(",")})",
                             if (r.flashAttention) on else off,
                             if (r.skipNonSpeech) on else off,
                             r.cpu,
