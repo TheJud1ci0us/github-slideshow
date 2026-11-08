@@ -331,7 +331,7 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
  */
 extern "C" JNIEXPORT jlongArray JNICALL
 Java_com_ascolta_app_whisper_WhisperLib_nativeDetectSpeech(
-        JNIEnv *env, jclass, jstring vadModelPath, jfloatArray samples, jint threads) {
+        JNIEnv *env, jclass, jstring vadModelPath, jfloatArray samples, jint threads, jboolean fine) {
     std::string path = toStdString(env, vadModelPath);
     whisper_vad_context_params cparams = whisper_vad_default_context_params();
     cparams.n_threads = threads;
@@ -343,7 +343,15 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeDetectSpeech(
     }
     jsize count = env->GetArrayLength(samples);
     jfloat *data = env->GetFloatArrayElements(samples, nullptr);
-    whisper_vad_segments *segments = whisper_vad_segments_from_samples(vctx, vadParams(), data, count);
+    whisper_vad_params vp = vadParams();
+    if (fine) {
+        // Shorter pieces (cut at pauses of 0.25 s, at most 10 s) for models trained on short
+        // utterances, which drop words on long input (ReazonSpeech).
+        vp.min_silence_duration_ms = 250;
+        vp.max_speech_duration_s = 10.0f;
+        vp.speech_pad_ms = 120;
+    }
+    whisper_vad_segments *segments = whisper_vad_segments_from_samples(vctx, vp, data, count);
     env->ReleaseFloatArrayElements(samples, data, JNI_ABORT);
 
     jlongArray result = nullptr;

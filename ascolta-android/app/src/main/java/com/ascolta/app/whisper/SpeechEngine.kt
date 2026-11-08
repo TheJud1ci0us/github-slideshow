@@ -125,6 +125,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
     @Volatile private var aborted = false
     private val recognizer: OfflineRecognizer
     private val language = options.language
+    private val engine = model.engine
 
     override val needsSpeechRegions: Boolean get() = true
 
@@ -161,6 +162,8 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 modelType = "nemo_transducer",
             )
         }
+        // ReazonSpeech gives no punctuation: its sentences are found with the Japanese dictionary.
+        if (engine == Engine.REAZONSPEECH) com.ascolta.app.data.Japanese.loadBlocking()
         recognizer = OfflineRecognizer(
             null,
             OfflineRecognizerConfig(
@@ -181,7 +184,8 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
     ): Boolean {
         aborted = false
         val regions = speech ?: listOf(0L to samples.size / 16L)
-        val pieces = SpeechAlignment.splitLong(regions, MAX_PIECE_MS)
+        // ReazonSpeech drops words on long input (it was trained on short utterances).
+        val pieces = SpeechAlignment.splitLong(regions, if (engine == Engine.REAZONSPEECH) REAZON_MAX_PIECE_MS else MAX_PIECE_MS)
         pieces.forEachIndexed { i, (startMs, endMs) ->
             if (aborted) return false
             onProgress(i * 100 / pieces.size.coerceAtLeast(1))
@@ -197,7 +201,12 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 val keep = result.tokens.indices.filter { !TAG.matches(result.tokens[it]) }
                 val tokens = keep.map { result.tokens[it] }
                 val times = if (result.timestamps.size == result.tokens.size) keep.map { result.timestamps[it] } else emptyList()
-                SpeechAlignment.sentencesFromTokens(tokens, times, startMs, endMs, TAG.replace(result.text, "")).forEach { seg ->
+                val sentences = if (engine == Engine.REAZONSPEECH && tokens.isNotEmpty() && times.size == tokens.size) {
+                    reazonSentences(tokens, times, startMs, endMs)
+                } else {
+                    SpeechAlignment.sentencesFromTokens(tokens, times, startMs, endMs, TAG.replace(result.text, ""))
+                }
+                sentences.forEach { seg ->
                     // Real words (also in Japanese / Chinese), timed from the tokens.
                     val words = com.ascolta.app.data.WordSplitter.timedWords(seg.text, seg.words, seg.startMs, seg.endMs, this.language ?: language)
                     onSegment(seg.copy(words = words))
@@ -218,8 +227,22 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         recognizer.release()
     }
 
+    /**
+     * ReazonSpeech: its token times run about 0.3 s early (measured against SenseVoice and the
+     * audio's onsets) and the first token is always at 0, so they are corrected; sentences are
+     * then found from the grammar (JapaneseSentences), with 。 / 、 added.
+     */
+    private fun reazonSentences(tokens: List<String>, times: List<Float>, startMs: Long, endMs: Long): List<WhisperSegment> {
+        val ms = times.map { (startMs + it * 1000).toLong() + REAZON_SHIFT_MS }.toMutableList()
+        if (ms.size >= 2) ms[0] = maxOf(ms[0], ms[1] - 150)
+        val fixed = ms.map { it.coerceIn(startMs, maxOf(startMs, endMs - 1)) }
+        return com.ascolta.app.data.JapaneseSentences.build(tokens, fixed, endMs)
+    }
+
     private companion object {
         const val MAX_PIECE_MS = 25_000L
+        const val REAZON_MAX_PIECE_MS = 12_000L
+        const val REAZON_SHIFT_MS = 300L
         val TAG = Regex("""<\|[^|]*\|>""")
     }
 }

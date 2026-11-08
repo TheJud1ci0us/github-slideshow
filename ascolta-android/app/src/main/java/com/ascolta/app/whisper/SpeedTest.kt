@@ -90,7 +90,7 @@ object SpeedTest {
             WhisperLib.ensureBackends(context.applicationInfo.nativeLibraryDir)
             // Speech detection runs beforehand on the efficiency cores, as during transcription.
             val speech = if (useVad) withContext(CoreDispatchers.light) {
-                WhisperLib.nativeDetectSpeech(graph.models.vadFile().path, audio, 2)?.let { SpeechAlignment.pairs(it) }
+                WhisperLib.nativeDetectSpeech(graph.models.vadFile().path, audio, 2, model.engine == Engine.REAZONSPEECH)?.let { SpeechAlignment.pairs(it) }
             } else null
             CoreDispatchers.prepareRecognition(threads)
             val cpu = runCatching { WhisperLib.nativeCpuVariant() }.getOrDefault("?")

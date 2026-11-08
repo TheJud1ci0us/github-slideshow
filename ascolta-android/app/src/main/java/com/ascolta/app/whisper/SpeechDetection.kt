@@ -12,19 +12,19 @@ import kotlinx.coroutines.coroutineScope
 object SpeechDetection {
     private const val OVERLAP_MS = 1_000L
 
-    suspend fun detect(vadModel: String, samples: FloatArray): List<Pair<Long, Long>> = coroutineScope {
+    suspend fun detect(vadModel: String, samples: FloatArray, fine: Boolean = false): List<Pair<Long, Long>> = coroutineScope {
         val totalMs = samples.size / 16L
         val parts = partition(totalMs, CoreDispatchers.speechDetectionThreads)
         val found = parts.map { (startMs, endMs) ->
             async(CoreDispatchers.speechDetection) {
                 val from = (startMs * 16).toInt()
                 val to = minOf(samples.size, (endMs * 16).toInt())
-                val regions = WhisperLib.nativeDetectSpeech(vadModel, samples.copyOfRange(from, to), 1)
+                val regions = WhisperLib.nativeDetectSpeech(vadModel, samples.copyOfRange(from, to), 1, fine)
                     ?.let { SpeechAlignment.pairs(it) }.orEmpty()
                 regions.map { (s, e) -> (s + startMs) to (e + startMs) }
             }
         }.awaitAll()
-        merge(found.flatten())
+        merge(found.flatten(), if (fine) 0 else 100)
     }
 
     /** [n] parts covering 0..[totalMs], each extended by [OVERLAP_MS] into the next. */
@@ -39,11 +39,11 @@ object SpeechDetection {
     }
 
     /** Union of possibly overlapping regions; regions less than 100 ms apart are joined. */
-    fun merge(regions: List<Pair<Long, Long>>): List<Pair<Long, Long>> {
+    fun merge(regions: List<Pair<Long, Long>>, joinBelowMs: Long = 100): List<Pair<Long, Long>> {
         val out = mutableListOf<Pair<Long, Long>>()
         for ((s, e) in regions.sortedBy { it.first }) {
             val last = out.lastOrNull()
-            if (last != null && s <= last.second + 100) out[out.lastIndex] = last.first to maxOf(last.second, e)
+            if (last != null && s <= last.second + joinBelowMs) out[out.lastIndex] = last.first to maxOf(last.second, e)
             else out += s to e
         }
         return out

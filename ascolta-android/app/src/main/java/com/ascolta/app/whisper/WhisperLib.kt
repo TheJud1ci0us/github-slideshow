@@ -42,7 +42,8 @@ object WhisperLib {
         vadModelPath: String?,
     ): Array<WhisperSegment>?
     /** Returns [start0, end0, start1, end1, …] in ms of the parts that contain speech. */
-    @JvmStatic external fun nativeDetectSpeech(vadModelPath: String, samples: FloatArray, threads: Int): LongArray?
+    /** [fine]: shorter pieces (0.25 s pauses, at most 10 s) for models trained on short utterances. */
+    @JvmStatic external fun nativeDetectSpeech(vadModelPath: String, samples: FloatArray, threads: Int, fine: Boolean = false): LongArray?
     /** Restricts the calling thread (and threads it starts later) to these CPU cores. */
     @JvmStatic external fun nativeSetThreadAffinity(cpus: IntArray): Boolean
 

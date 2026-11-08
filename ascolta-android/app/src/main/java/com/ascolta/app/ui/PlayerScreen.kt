@@ -246,6 +246,19 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         if (navIndex > 0 && room > 0) listState.animateScrollBy(-minOf(contextPx, room).toFloat())
     }
 
+    // A sentence taller than the screen: scroll within it so the word being spoken stays in
+    // view (its position estimated from its place among the sentence's words).
+    LaunchedEffect(currentWord, currentIndex) {
+        if (!follow || currentIndex < 0 || currentWord < 0 || coverMode) return@LaunchedEffect
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.index == currentIndex } ?: return@LaunchedEffect
+        val viewport = info.viewportEndOffset - info.viewportStartOffset
+        if (item.size <= viewport) return@LaunchedEffect
+        val count = timedWords.getOrNull(currentIndex)?.size?.takeIf { it > 0 } ?: return@LaunchedEffect
+        val wordY = item.offset + (item.size * currentWord.toFloat() / count).toInt()
+        if (wordY < viewport * 0.15f || wordY > viewport * 0.7f) listState.animateScrollBy(wordY - viewport * 0.3f)
+    }
+
     var menu by remember { mutableStateOf(false) }
     var sleepDialog by remember { mutableStateOf(false) }
     var lookup by remember { mutableStateOf<WordLookup?>(null) }

@@ -38,6 +38,9 @@ data class JaToken(
     val hasKanji: Boolean get() = surface.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
 }
 
+/** A word with its part of speech (e.g. 助動詞 / 終助詞) and conjugation form (e.g. 基本形). */
+data class JaAnalysis(val position: Int, val surface: String, val pos1: String, val pos2: String, val conjugation: String)
+
 /**
  * Japanese readings, offline: the Kuromoji morphological analyzer (IPADIC dictionary) splits
  * a sentence into words and gives each its reading, from which furigana and romaji are made.
@@ -75,6 +78,14 @@ object Japanese {
             )
         }
     }
+
+    /** Grammatical analysis (part of speech, conjugation) for sentence splitting; null until loaded. */
+    fun analyze(text: String): List<JaAnalysis>? = tokenizer?.tokenize(text)?.map {
+        JaAnalysis(it.position, it.surface, it.partOfSpeechLevel1, it.partOfSpeechLevel2, it.conjugationForm)
+    }
+
+    /** Loads the dictionary from code that isn't a coroutine (the speech engine's thread). */
+    fun loadBlocking() = kotlinx.coroutines.runBlocking { load() }
 
     /** "てんき" for "テンキ" (other characters unchanged). */
     fun toHiragana(text: String): String = buildString {
