@@ -147,6 +147,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         transcript = translateRemaining(transcript, target)
         graph.transcripts.save(episodeId, transcript)
         dao.setTranscript(episodeId, TranscriptState.DONE, 1f, null)
+        runCatching { graph.repo.refreshProgressCounts() }
         AppLog.i(TAG, "Done #$episodeId: ${transcript.segments.size} sentences")
         return Result.success()
     }

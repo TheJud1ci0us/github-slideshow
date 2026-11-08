@@ -106,4 +106,6 @@ data class VocabEntity(
     @ColumnInfo(defaultValue = "0") val reps: Int = 0,
     /** A whole sentence saved as a card (rather than a single word). */
     @ColumnInfo(defaultValue = "0") val isSentence: Boolean = false,
+    /** Clip of the original audio of the sentence (a WAV file in the app's storage). */
+    val audioPath: String? = null,
 )

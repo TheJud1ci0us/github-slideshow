@@ -47,6 +47,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ascolta.app.R
 import com.ascolta.app.data.LANGUAGES
+import com.ascolta.app.data.CEFR_LEVELS
+import com.ascolta.app.data.GENRES
+import com.ascolta.app.data.GENRE_LEARNING
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.verticalScroll
 import com.ascolta.app.data.languageFlag
 import com.ascolta.app.data.languageName
 import com.ascolta.app.graph
@@ -169,6 +174,24 @@ fun OnboardingScreen(onDone: () -> Unit) {
     var query by remember { mutableStateOf("") }
     val sorted = remember { LANGUAGES.sortedBy { languageName(it.code) } }
     val shown = sorted.filter { it.code != native && (query.isBlank() || languageName(it.code).contains(query, ignoreCase = true)) }
+    var step by remember { mutableStateOf(0) }
+    val levels = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    val interests = remember { mutableStateListOf<Int>() }
+
+    fun finish() {
+        settings.nativeLanguage.set(native)
+        settings.setLearningList(learning.toList())
+        settings.learningLanguage.set(learning.first())
+        levels.forEach { (code, level) -> settings.setLevel(code, level) }
+        settings.interests.set(interests.joinToString(","))
+        settings.onboarded.set(true)
+        onDone()
+    }
+
+    if (step == 1) {
+        LevelAndInterests(learning, levels, interests, onBack = { step = 0 }, onDone = { finish() })
+        return
+    }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(24.dp))
@@ -210,13 +233,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
         )
         Button(
             enabled = learning.isNotEmpty(),
-            onClick = {
-                settings.nativeLanguage.set(native)
-                settings.setLearningList(learning.toList())
-                settings.learningLanguage.set(learning.first())
-                settings.onboarded.set(true)
-                onDone()
-            },
+            onClick = { step = 1 },
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         ) {
             Text(
@@ -248,4 +265,54 @@ fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun FlagRow(codes: List<String>) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { codes.forEach { Text(languageFlag(it)) } }
+}
+
+/**
+ * Second onboarding step: the level in each language (CEFR, A1–C2) and favourite themes, so
+ * Discover can suggest podcasts that fit.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun LevelAndInterests(
+    learning: List<String>,
+    levels: MutableMap<String, String>,
+    interests: MutableList<Int>,
+    onBack: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+    ) {
+        Spacer(Modifier.height(24.dp))
+        Text(stringResource(R.string.onboarding_level_title), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.onboarding_level_text), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        learning.forEach { code ->
+            Spacer(Modifier.height(12.dp))
+            Text(flagAndName(code), style = MaterialTheme.typography.titleSmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CEFR_LEVELS.forEach { level ->
+                    FilterChip(
+                        selected = levels[code] == level,
+                        onClick = { levels[code] = level },
+                        label = { Text(level) },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(stringResource(R.string.onboarding_interests_title), style = MaterialTheme.typography.titleMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            GENRES.filter { it.id != GENRE_LEARNING }.forEach { g ->
+                val on = g.id in interests
+                FilterChip(selected = on, onClick = { if (on) interests.remove(g.id) else interests.add(g.id) }, label = { Text(stringResource(g.nameRes)) })
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+            TextButton(onClick = onBack) { Text(stringResource(R.string.action_back)) }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = onDone) { Text(stringResource(R.string.onboarding_finish)) }
+        }
+    }
 }

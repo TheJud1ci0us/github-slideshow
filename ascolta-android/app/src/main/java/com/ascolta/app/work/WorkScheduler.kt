@@ -140,6 +140,28 @@ object Notifications {
     const val CHANNEL_WORK = "background-work"
     const val CHANNEL_EPISODES = "new-episodes"
 
+    const val CHANNEL_MILESTONES = "milestones"
+
+    /** A badge earned while the app was in the background (e.g. listening with the screen off). */
+    fun badge(context: Context, badge: com.ascolta.app.data.Badge) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        val intent = PendingIntent.getActivity(
+            context, 7,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_MILESTONES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("${badge.emoji} " + context.getString(R.string.badge_unlocked))
+            .setContentText(context.getString(badge.titleRes, badge.amount) + " — " + context.getString(badge.descRes, badge.amount))
+            .setContentIntent(intent)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(badge.id.hashCode(), notification)
+    }
+
     /** "New episode of <favourite podcast>", opening the app. Skipped without permission. */
     fun newEpisodes(context: Context, podcast: com.ascolta.app.data.PodcastEntity, episodes: List<com.ascolta.app.data.EpisodeEntity>) {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -171,6 +193,9 @@ object Notifications {
             NotificationChannel(CHANNEL_WORK, context.getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW).apply {
                 description = context.getString(R.string.notif_channel_desc)
             },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_MILESTONES, context.getString(R.string.notif_channel_milestones), NotificationManager.IMPORTANCE_DEFAULT),
         )
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_EPISODES, context.getString(R.string.notif_channel_episodes), NotificationManager.IMPORTANCE_DEFAULT),

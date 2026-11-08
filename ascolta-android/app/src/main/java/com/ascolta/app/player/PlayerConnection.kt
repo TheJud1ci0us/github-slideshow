@@ -38,6 +38,12 @@ data class PlayerState(
 )
 
 /**
+ * Sleep timer: playback stops at [endsAt] (wall clock), or at the end of the episode. With a
+ * transcript it waits for the sentence being spoken to finish ([snapToMs]) and fades out.
+ */
+data class SleepTimer(val endsAt: Long?, val endOfEpisode: Boolean = false, val snapToMs: Long? = null)
+
+/**
  * The UI's handle on [PlaybackService]. Exposes playback state as a flow and
  * implements "pause after each sentence" for language practice.
  */
@@ -45,13 +51,31 @@ class PlayerConnection(
     private val context: Context,
     db: AppDatabase,
     private val settings: Settings,
+    private val progress: com.ascolta.app.data.ProgressStore,
 ) {
+    private val podcastDao = db.podcastDao()
+    /** Language of the episode playing, for listening statistics. */
+    @Volatile private var playingLanguage: String? = null
+    private var lastTickWall = 0L
     private val episodeDao = db.episodeDao()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var controller: MediaController? = null
 
     private val _state = MutableStateFlow(PlayerState(speed = settings.playbackSpeed.value))
     val state: StateFlow<PlayerState> = _state
+
+    private val _sleep = MutableStateFlow<SleepTimer?>(null)
+    val sleep: StateFlow<SleepTimer?> = _sleep
+
+    /** Starts the sleep timer: [minutes] from now, 0 = at the end of the episode, null = off. */
+    fun setSleepTimer(minutes: Int?) {
+        controller?.volume = 1f
+        _sleep.value = when (minutes) {
+            null -> null
+            0 -> SleepTimer(endsAt = null, endOfEpisode = true)
+            else -> SleepTimer(endsAt = System.currentTimeMillis() + minutes * 60_000L)
+        }
+    }
 
     /** Sentence end times of the current episode, used for auto-pause. */
     @Volatile var sentenceEnds: LongArray = LongArray(0)
@@ -74,7 +98,10 @@ class PlayerConnection(
         c.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
                 syncState()
-                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) saveCurrentPosition()
+                if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
+                    saveCurrentPosition()
+                    progress.flush()
+                }
             }
         })
         controller = c
@@ -110,6 +137,7 @@ class PlayerConnection(
             )
             .build()
         sentenceEnds = LongArray(0)
+        playingLanguage = episode.podcastId?.let { podcastDao.get(it)?.libraryLanguage } ?: episode.transcriptLanguage
         _state.value = _state.value.copy(episodeId = episode.id, title = episode.title, subtitle = podcastTitle, artworkUrl = artworkUrl)
         c.setMediaItem(item, episode.playbackPositionMs)
         c.setPlaybackParameters(PlaybackParameters(settings.playbackSpeed.value))
@@ -164,15 +192,50 @@ class PlayerConnection(
         scope.launch {
             while (true) {
                 val c = controller
+                val wall = System.currentTimeMillis()
                 if (c != null && c.isPlaying) {
+                    // Listening time ("auditory milestones"), real time, per language.
+                    if (lastTickWall > 0) progress.addListening(playingLanguage ?: settings.learningLanguage.value, (wall - lastTickWall).coerceIn(0, 1_000))
                     val position = c.currentPosition
                     checkAutoPause(c, position)
+                    checkSleep(c, position)
                     lastTickPosition = position
                     syncState()
                     if (System.currentTimeMillis() - lastSavedAt > 5_000) saveCurrentPosition()
                 }
-                delay(if (settings.autoPause.value) 50 else 100) // 10× a second: smooth word highlighting
+                lastTickWall = if (c != null && c.isPlaying) wall else 0L
+                if (c != null && !c.isPlaying && _sleep.value?.endOfEpisode == true && c.playbackState == Player.STATE_ENDED) {
+                    _sleep.value = null
+                }
+                delay(if (settings.autoPause.value || _sleep.value?.snapToMs != null) 50 else 100) // 10× a second: smooth word highlighting
             }
+        }
+    }
+
+    /**
+     * Sleep timer with sentence snapping: when the time is up, playback continues to the end
+     * of the sentence being spoken (if it ends within 30 s) and fades out over its last
+     * second and a half, so it never stops mid-word. Without a transcript it fades out over 3 s.
+     */
+    private fun checkSleep(c: MediaController, position: Long) {
+        val timer = _sleep.value ?: return
+        val endsAt = timer.endsAt ?: return
+        val now = System.currentTimeMillis()
+        if (now < endsAt) return
+        val target = timer.snapToMs ?: run {
+            val next = sentenceEnds.firstOrNull { it > position }
+            val snap = if (next != null && next - position <= 30_000) next else position + 3_000
+            _sleep.value = timer.copy(snapToMs = snap)
+            snap
+        }
+        val left = target - position
+        val fadeMs = 1_500L
+        if (left <= 0) {
+            c.pause()
+            c.volume = 1f
+            _sleep.value = null
+        } else if (left < fadeMs) {
+            c.volume = (left.toFloat() / fadeMs).coerceIn(0f, 1f)
         }
     }
 

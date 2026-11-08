@@ -138,6 +138,9 @@ interface EpisodeDao {
 
     @Query("DELETE FROM episodes WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("SELECT COUNT(*) FROM episodes WHERE transcriptState = 3")
+    suspend fun countTranscribed(): Int
 }
 
 @Dao
@@ -154,6 +157,12 @@ interface VocabDao {
     @Update
     suspend fun update(entry: VocabEntity)
 
+    @Query("SELECT * FROM vocab WHERE id = :id")
+    suspend fun get(id: Long): VocabEntity?
+
+    @Query("SELECT COUNT(*) FROM vocab")
+    suspend fun countAll(): Int
+
     @Query("SELECT * FROM vocab ORDER BY createdAt DESC")
     suspend fun all(): List<VocabEntity>
 
@@ -169,7 +178,7 @@ interface VocabDao {
 
 @Database(
     entities = [PodcastEntity::class, EpisodeEntity::class, VocabEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -179,7 +188,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2).build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+
+        /** v0.7: audio clips of saved words. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE vocab ADD COLUMN audioPath TEXT")
+            }
+        }
 
         /** v0.6: favourites, per-language libraries, download dates, flashcard scheduling. */
         val MIGRATION_1_2 = object : Migration(1, 2) {

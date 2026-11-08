@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -22,6 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +47,7 @@ private val TABS = listOf(
     Tab("library", R.string.tab_library, Icons.AutoMirrored.Filled.LibraryBooks),
     Tab("discover", R.string.tab_discover, Icons.Filled.Search),
     Tab("words", R.string.tab_words, Icons.Filled.Translate),
+    Tab("progress", R.string.tab_progress, Icons.Filled.EmojiEvents),
     Tab("settings", R.string.tab_settings, Icons.Filled.Settings),
 )
 
@@ -109,6 +114,7 @@ fun AscoltaRoot() {
             }
             composable("words") { WordsScreen(openReview = { nav.navigate("review") }) }
             composable("review") { ReviewScreen(onBack = { nav.popBackStack() }) }
+            composable("progress") { ProgressScreen() }
             composable("settings") { SettingsScreen() }
             composable(
                 "podcast/{id}",
@@ -132,6 +138,16 @@ fun AscoltaRoot() {
 
     // A link shared from another app (Spotify, Apple Podcasts, a browser…).
     val context = LocalContext.current
+
+    // Badges earned: a celebration in the app, or a notification when it's in the background.
+    var celebrate by remember { mutableStateOf<com.ascolta.app.data.Badge?>(null) }
+    LaunchedEffect(Unit) {
+        context.graph.progress.unlocked.collect { badge ->
+            if (com.ascolta.app.AppVisibility.visible.value) celebrate = badge
+            else com.ascolta.app.work.Notifications.badge(context, badge)
+        }
+    }
+    celebrate?.let { BadgeUnlockedDialog(it, onDismiss = { celebrate = null }) }
     val shared by context.graph.pendingSharedText.collectAsState()
     shared?.let { text ->
         AddLinkDialog(

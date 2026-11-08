@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.IosShare
@@ -133,7 +134,7 @@ fun WordsScreen(openReview: () -> Unit) {
                                     if (w.isSentence) {
                                         Text(w.translation, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic)
                                     } else {
-                                        w.sentence?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                        w.sentence?.let { Text(highlightWord(it, w.word), style = MaterialTheme.typography.bodySmall) }
                                         w.sentenceTranslation?.let {
                                             Text(it, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -142,8 +143,16 @@ fun WordsScreen(openReview: () -> Unit) {
                                 }
                             },
                             trailingContent = {
-                                IconButton(onClick = { scope.launch { graph.repo.deleteWord(w.id) } }) {
-                                    Icon(Icons.Filled.Delete, stringResource(R.string.action_delete))
+                                Row {
+                                    // The sentence as it was said in the episode.
+                                    w.audioPath?.let { clip ->
+                                        IconButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }) {
+                                            Icon(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.play_clip))
+                                        }
+                                    }
+                                    IconButton(onClick = { scope.launch { graph.repo.deleteWord(w.id) } }) {
+                                        Icon(Icons.Filled.Delete, stringResource(R.string.action_delete))
+                                    }
                                 }
                             },
                         )
@@ -250,7 +259,7 @@ fun ReviewScreen(onBack: () -> Unit) {
                                 if (!card.isSentence) {
                                     card.sentence?.let {
                                         Spacer(Modifier.height(16.dp))
-                                        Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                                        Text(highlightWord(it, card.word), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                                     }
                                     card.sentenceTranslation?.let {
                                         Text(it, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, textAlign = TextAlign.Center,
@@ -263,6 +272,13 @@ fun ReviewScreen(onBack: () -> Unit) {
                             }
                         }
                     }
+                }
+            }
+            card.audioPath?.let { clip ->
+                // Hear it as the native speaker said it.
+                LaunchedEffect(card.id, flipped) { if (flipped) com.ascolta.app.whisper.AudioClip.play(clip) }
+                TextButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Icon(Icons.AutoMirrored.Filled.VolumeUp, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.play_clip))
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -292,4 +308,16 @@ fun ReviewScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(8.dp).size(0.dp))
         }
     }
+}
+
+/** The sentence with the saved word in bold, so its context stands out. */
+@Composable
+private fun highlightWord(sentence: String, word: String) = androidx.compose.ui.text.buildAnnotatedString {
+    val i = sentence.lowercase().indexOf(word.lowercase())
+    if (i < 0 || word.isBlank()) { append(sentence); return@buildAnnotatedString }
+    append(sentence.substring(0, i))
+    pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+    append(sentence.substring(i, i + word.length))
+    pop()
+    append(sentence.substring(i + word.length))
 }

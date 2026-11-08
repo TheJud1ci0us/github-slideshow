@@ -150,6 +150,21 @@ class Settings(context: Context) {
         if (learningLanguage.value !in list) learningLanguage.set(list.first())
     }
 
+    /** CEFR level per learning language, e.g. "it:B1,es:A2". */
+    val levels = string("levels", "")
+    /** Favourite podcast themes (Apple genre ids), comma-separated. */
+    val interests = string("interests", "")
+
+    fun levelFor(code: String): String? =
+        levels.value.split(',').mapNotNull { it.split(':').takeIf { p -> p.size == 2 } }.firstOrNull { it[0] == code }?.get(1)
+
+    fun setLevel(code: String, level: String) {
+        val map = levels.value.split(',').mapNotNull { it.split(':').takeIf { p -> p.size == 2 }?.let { p -> p[0] to p[1] } }.toMap() + (code to level)
+        levels.set(map.entries.joinToString(",") { "${it.key}:${it.value}" })
+    }
+
+    fun interestList(): List<Int> = interests.value.split(',').mapNotNull { it.trim().toIntOrNull() }
+
     fun switchLanguage(code: String) {
         if (code !in learningList()) setLearningList(learningList() + code)
         learningLanguage.set(code)

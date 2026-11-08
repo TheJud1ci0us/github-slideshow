@@ -61,6 +61,13 @@ the phone.
   **flag bar** on the Library, Discover and Words screens. Podcasts go into their own
   language's library automatically and can be moved (podcast menu → *Move to another language*).
 
+**Finding podcasts by theme and level**
+- Browse by **theme** (news, history, culture, science, comedy, kids, language courses, …) from
+  Apple's charts in the learning language's country, with English shows filtered out, or search.
+- Each result shows an **estimated CEFR level** (from an explicit level in the title, words such
+  as *facile / lento / beginner*, the Language Learning genre, or native content = C1–C2) and
+  can be filtered by A1–A2 / B1–B2 / C1–C2. The first launch asks your level and themes.
+
 **Favourites, feeds and storage**
 - ★ **Favourite** podcasts are listed first and send a **notification** when a new episode is out.
 - Per-podcast automatic download; feed check every 1/3/6/12/24 hours or only by hand.
@@ -68,6 +75,9 @@ the phone.
 - Theme: like the phone, light or dark; colours from the wallpaper or Ascolta's own.
 
 **Flashcards**
+- Saved words keep their **sentence and its translation** (the word highlighted in it) and a
+  **clip of the original audio** of that sentence (downloaded episodes), played in the Words list
+  and when a card is turned during review.
 - Save a word or the whole sentence from the player, or **add your own cards** (word or
   sentence; translated automatically if you leave the meaning empty).
 - **Review** in the app with spaced repetition (Again / Hard / Good / Easy, as in Anki).
@@ -78,6 +88,11 @@ the phone.
   (exact seeking in variable-bit-rate MP3s keeps the highlight in sync).
 - Tap a word to translate it and save it to **Words**, or **save the whole sentence** for context.
 - Word-by-word highlighting can be turned off (player menu → *Highlight each word*). Export to Anki as tab-separated text.
+- **Sleep timer** (5–60 min or end of episode) that stops at the **end of the sentence** being
+  spoken, with a short fade, instead of mid-word.
+- **Progress**: hours listened per language with **listening milestones** (1, 5, 10, 25, 50, 100,
+  250, 500, 1000 h), daily streak, and badges for streaks, saved words, reviews, transcripts and
+  languages; a celebration when one is earned (a notification if the app is in the background).
 - Previous / next / repeat sentence, **pause after each sentence**, 0.5×–1.5× speed.
 - Hide either language to test yourself; adjustable text size. The highlighted sentence and
   its translation always stay fully on screen.

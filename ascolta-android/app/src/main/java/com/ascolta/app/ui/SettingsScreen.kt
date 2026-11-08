@@ -130,6 +130,21 @@ fun SettingsScreen() {
                 )
             }
             LanguageBar(Modifier.padding(vertical = 4.dp))
+            // CEFR level in the current language (used to suggest podcasts in Discover).
+            val levelsPref by settings.levels.flow.collectAsState()
+            var levelMenu by remember { mutableStateOf(false) }
+            Box {
+                ListItem(
+                    modifier = Modifier.clickable { levelMenu = true },
+                    headlineContent = { Text(stringResource(R.string.level_title, languageName(learning))) },
+                    supportingContent = { Text(remember(levelsPref, learning) { settings.levelFor(learning) } ?: stringResource(R.string.level_unset)) },
+                )
+                DropdownMenu(expanded = levelMenu, onDismissRequest = { levelMenu = false }) {
+                    com.ascolta.app.data.CEFR_LEVELS.forEach { l ->
+                        DropdownMenuItem(text = { Text(l) }, onClick = { settings.setLevel(learning, l); levelMenu = false })
+                    }
+                }
+            }
             SwitchRow(stringResource(R.string.translate_title), stringResource(R.string.translate_text), settings.translate)
             val translateOn by settings.translate.flow.collectAsState()
             if (translateOn) {

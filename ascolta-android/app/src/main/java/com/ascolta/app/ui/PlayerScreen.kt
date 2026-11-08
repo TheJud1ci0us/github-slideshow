@@ -95,6 +95,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Subtitles
 import kotlinx.coroutines.launch
 
@@ -234,6 +235,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     }
 
     var menu by remember { mutableStateOf(false) }
+    var sleepDialog by remember { mutableStateOf(false) }
     var lookup by remember { mutableStateOf<WordLookup?>(null) }
 
     androidx.compose.material3.Scaffold(
@@ -250,6 +252,24 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 actions = {
+                    // Sleep timer (stops at the end of a sentence).
+                    val sleepTimer by graph.player.sleep.collectAsState()
+                    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
+                    LaunchedEffect(sleepTimer) { while (sleepTimer != null) { nowTick = System.currentTimeMillis(); delay(1_000) } }
+                    TextButton(onClick = { sleepDialog = true }) {
+                        Icon(Icons.Filled.Bedtime, stringResource(R.string.sleep_timer))
+                        sleepTimer?.let { t ->
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                when {
+                                    t.endOfEpisode -> stringResource(R.string.sleep_end_short)
+                                    t.snapToMs != null -> "…"
+                                    else -> formatTime(((t.endsAt ?: 0) - nowTick).coerceAtLeast(0)).let { it }
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
                     // Switch between the episode's picture and the transcript (kept either way).
                     if (segments.isNotEmpty()) {
                         IconButton(onClick = { settings.showCover.set(!coverMode) }) {
@@ -367,6 +387,30 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (sleepDialog) {
+        val active = graph.player.sleep.collectAsState().value != null
+        AlertDialog(
+            onDismissRequest = { sleepDialog = false },
+            title = { Text(stringResource(R.string.sleep_timer)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.sleep_timer_text), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    for (minutes in listOf(5, 10, 15, 30, 45, 60, 0)) {
+                        TextButton(onClick = { graph.player.setSleepTimer(minutes); sleepDialog = false }) {
+                            Text(if (minutes == 0) stringResource(R.string.sleep_end_of_episode) else stringResource(R.string.sleep_minutes, minutes))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (active) TextButton(onClick = { graph.player.setSleepTimer(null); sleepDialog = false }) { Text(stringResource(R.string.sleep_off)) }
+            },
+            dismissButton = { TextButton(onClick = { sleepDialog = false }) { Text(stringResource(R.string.action_close)) } },
+        )
     }
 
     lookup?.let { l ->
@@ -658,18 +702,24 @@ private fun WordSheet(
                     enabled = translation != null,
                     onClick = {
                         scope.launch {
+                            // The word keeps its sentence (with translation) and a clip of the original audio.
+                            val sentenceTranslation = lookup.segment.translation
+                                ?: runCatching { graph.repo.translateWord(lookup.segment.text, language) }.getOrNull()
+                            val clip = graph.repo.makeClip(episode, lookup.segment.startMs, lookup.segment.endMs)
                             val added = graph.repo.saveWord(
                                 VocabEntity(
                                     word = lookup.word.lowercase(),
                                     translation = translation.orEmpty(),
                                     sentence = lookup.segment.text,
-                                    sentenceTranslation = lookup.segment.translation,
+                                    sentenceTranslation = sentenceTranslation,
                                     language = language,
                                     episodeId = episode?.id,
                                     episodeTitle = episode?.title,
                                     createdAt = System.currentTimeMillis(),
+                                    audioPath = clip,
                                 ),
                             )
+                            if (!added) clip?.let { java.io.File(it).delete() }
                             Toast.makeText(context, context.getString(if (added) R.string.saved_to_words else R.string.already_saved), Toast.LENGTH_SHORT).show()
                             onDismiss()
                         }
@@ -684,6 +734,7 @@ private fun WordSheet(
                             val sentence = lookup.segment.text.trim()
                             val sentenceTranslation = lookup.segment.translation
                                 ?: runCatching { graph.repo.translateWord(sentence, language) }.getOrNull()
+                            val clip = graph.repo.makeClip(episode, lookup.segment.startMs, lookup.segment.endMs)
                             val added = graph.repo.saveWord(
                                 VocabEntity(
                                     word = sentence,
@@ -695,8 +746,10 @@ private fun WordSheet(
                                     episodeTitle = episode?.title,
                                     createdAt = System.currentTimeMillis(),
                                     isSentence = true,
+                                    audioPath = clip,
                                 ),
                             )
+                            if (!added) clip?.let { java.io.File(it).delete() }
                             Toast.makeText(context, context.getString(if (added) R.string.sentence_saved else R.string.already_saved), Toast.LENGTH_SHORT).show()
                             onDismiss()
                         }

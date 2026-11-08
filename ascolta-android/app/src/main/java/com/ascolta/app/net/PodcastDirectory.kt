@@ -10,6 +10,8 @@ data class DirectoryResult(
     val feedUrl: String,
     val artworkUrl: String?,
     val genre: String?,
+    /** Short description (from the charts), used to guess the language level. */
+    val summary: String? = null,
 )
 
 /** What a pasted link turned out to be. */
@@ -37,6 +39,52 @@ class PodcastDirectory(private val http: OkHttpClient) {
         return parseResults(http.fetchString(url))
     }
 
+    /**
+     * Searches within one Apple genre (e.g. 1498 = Language Learning) in a country's store.
+     */
+    suspend fun searchGenre(term: String, genreId: Int, country: String?): List<DirectoryResult> {
+        val url = Uri.parse("https://itunes.apple.com/search").buildUpon()
+            .appendQueryParameter("media", "podcast")
+            .appendQueryParameter("entity", "podcast")
+            .appendQueryParameter("limit", "40")
+            .appendQueryParameter("genreId", genreId.toString())
+            .appendQueryParameter("term", term)
+            .apply { if (country != null) appendQueryParameter("country", country) }
+            .build().toString()
+        return parseResults(http.fetchString(url))
+    }
+
+    /**
+     * Top podcasts of a genre in a country's store (Apple's charts), with their descriptions.
+     * The chart has no feed addresses, so they are fetched with one lookup request.
+     */
+    suspend fun topByGenre(genreId: Int, country: String, limit: Int = 50): List<DirectoryResult> {
+        val chart = JSONObject(
+            http.fetchString("https://itunes.apple.com/${country.lowercase()}/rss/toppodcasts/limit=$limit/genre=$genreId/json"),
+        ).optJSONObject("feed")?.optJSONArray("entry") ?: return emptyList()
+        val entries = (0 until chart.length()).mapNotNull { i ->
+            val e = chart.getJSONObject(i)
+            val id = e.optJSONObject("id")?.optJSONObject("attributes")?.optString("im:id")?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            id to e.optJSONObject("summary")?.optString("label")
+        }
+        if (entries.isEmpty()) return emptyList()
+        val summaries = entries.toMap()
+        val body = http.fetchString(
+            "https://itunes.apple.com/lookup?entity=podcast&country=${country.lowercase()}&id=" + entries.joinToString(",") { it.first },
+        )
+        val found = JSONObject(body).optJSONArray("results") ?: return emptyList()
+        val byId = (0 until found.length()).associate { i ->
+            val o = found.getJSONObject(i)
+            o.optLong("collectionId").toString() to o
+        }
+        // Keep the chart's order.
+        return entries.mapNotNull { (id, _) ->
+            val o = byId[id] ?: return@mapNotNull null
+            parseResult(o)?.copy(summary = summaries[id])
+        }.distinctBy { it.feedUrl }
+    }
+
     suspend fun lookup(appleId: String): DirectoryResult? {
         val body = http.fetchString("https://itunes.apple.com/lookup?entity=podcast&id=$appleId")
         return parseResults(body).firstOrNull()
@@ -44,17 +92,19 @@ class PodcastDirectory(private val http: OkHttpClient) {
 
     private fun parseResults(body: String): List<DirectoryResult> {
         val results = JSONObject(body).optJSONArray("results") ?: return emptyList()
-        return (0 until results.length()).mapNotNull { i ->
-            val o = results.getJSONObject(i)
-            val feed = o.optString("feedUrl").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            DirectoryResult(
-                title = o.optString("collectionName", o.optString("trackName", "Podcast")),
-                author = o.optString("artistName").takeIf { it.isNotBlank() },
-                feedUrl = feed,
-                artworkUrl = o.optString("artworkUrl600").ifBlank { o.optString("artworkUrl100") }.ifBlank { null },
-                genre = o.optString("primaryGenreName").takeIf { it.isNotBlank() },
-            )
-        }.distinctBy { it.feedUrl } // Apple sometimes lists the same show twice
+        return (0 until results.length()).mapNotNull { i -> parseResult(results.getJSONObject(i)) }
+            .distinctBy { it.feedUrl } // Apple sometimes lists the same show twice
+    }
+
+    private fun parseResult(o: JSONObject): DirectoryResult? {
+        val feed = o.optString("feedUrl").takeIf { it.isNotBlank() } ?: return null
+        return DirectoryResult(
+            title = o.optString("collectionName", o.optString("trackName", "Podcast")),
+            author = o.optString("artistName").takeIf { it.isNotBlank() },
+            feedUrl = feed,
+            artworkUrl = o.optString("artworkUrl600").ifBlank { o.optString("artworkUrl100") }.ifBlank { null },
+            genre = o.optString("primaryGenreName").takeIf { it.isNotBlank() },
+        )
     }
 
     /**

@@ -408,10 +408,26 @@ class PodcastRepository(
     suspend fun saveWord(entry: VocabEntity): Boolean {
         if (vocabDao.count(entry.word, entry.language) > 0) return false
         vocabDao.insert(entry)
+        refreshProgressCounts()
         return true
     }
 
-    suspend fun deleteWord(id: Long) = vocabDao.delete(id)
+    suspend fun deleteWord(id: Long) {
+        vocabDao.get(id)?.audioPath?.let { File(it).delete() }
+        vocabDao.delete(id)
+    }
+
+    /**
+     * Cuts the original audio of a sentence for a saved word, when the episode's audio is on
+     * the phone (streamed episodes have no clip). Returns the clip's path.
+     */
+    suspend fun makeClip(episode: EpisodeEntity?, startMs: Long, endMs: Long): String? = withContext(Dispatchers.IO) {
+        val audio = episode?.localPath?.takeIf { File(it).exists() } ?: return@withContext null
+        val out = File(context.filesDir, "clips/${episode.id}-$startMs-${System.nanoTime() % 100000}.wav")
+        if (com.ascolta.app.whisper.AudioClip.extract(audio, startMs, endMs, out)) out.path else null
+    }
+
+    suspend fun totalWords(): Int = vocabDao.countAll()
 
     /**
      * Adds a flashcard typed in by the user (a word or a sentence). Without a translation,
@@ -443,8 +459,19 @@ class PodcastRepository(
         vocabDao.due(settings.learningLanguage.value, System.currentTimeMillis(), limit)
 
     /** Records a review answer and schedules the card's next review. */
-    suspend fun review(card: VocabEntity, grade: Flashcards.Grade) =
+    suspend fun review(card: VocabEntity, grade: Flashcards.Grade) {
         vocabDao.update(Flashcards.schedule(card, grade, System.currentTimeMillis()))
+        (context.applicationContext as com.ascolta.app.AscoltaApp).graph.progress.recordReview()
+    }
+
+    /** Refreshes the counts that badges depend on (words, transcripts, languages). */
+    suspend fun refreshProgressCounts() {
+        (context.applicationContext as com.ascolta.app.AscoltaApp).graph.progress.setCounts(
+            wordsSaved = vocabDao.countAll(),
+            transcribed = episodeDao.countTranscribed(),
+            languages = settings.learningList().size,
+        )
+    }
 
     /**
      * Deletes downloaded episode audio older than the chosen number of days (transcripts are
