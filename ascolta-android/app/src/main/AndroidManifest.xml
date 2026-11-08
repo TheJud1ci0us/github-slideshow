@@ -24,9 +24,6 @@
         android:theme="@style/Theme.Ascolta"
         android:usesCleartextTraffic="true">
 
-        <!-- Qualcomm NPU access (FastRPC to the Hexagon processor), optional. -->
-        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"

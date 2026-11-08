@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,6 +73,7 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
     val episodes by remember(podcastId) { graph.repo.episodes(podcastId) }.collectAsState(initial = emptyList())
     var menu by remember { mutableStateOf(false) }
     var confirmUnsubscribe by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -82,11 +85,21 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                 },
                 actions = {
                     if (podcastId != null) {
+                        podcast?.let { p ->
+                            IconButton(onClick = { scope.launch { graph.repo.setFavourite(p.id, !p.favourite) } }) {
+                                if (p.favourite) Icon(Icons.Filled.Star, stringResource(R.string.unfavourite), tint = MaterialTheme.colorScheme.primary)
+                                else Icon(Icons.Filled.StarBorder, stringResource(R.string.favourite))
+                            }
+                        }
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text(stringResource(R.string.refresh_feeds)) }, onClick = {
                                 menu = false
                                 scope.launch { podcast?.let { runCatching { graph.repo.refresh(it) } } }
+                            })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.move_language)) }, onClick = {
+                                menu = false
+                                moving = true
                             })
                             DropdownMenuItem(text = { Text(stringResource(R.string.unfollow)) }, onClick = {
                                 menu = false
@@ -138,6 +151,19 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                 HorizontalDivider()
             }
         }
+    }
+
+    if (moving) {
+        LanguagePickerDialog(
+            title = stringResource(R.string.move_language),
+            initial = listOfNotNull(podcast?.libraryLanguage),
+            multi = false,
+            onDone = { codes ->
+                moving = false
+                scope.launch { podcastId?.let { graph.repo.moveToLanguage(it, codes.first()) } }
+            },
+            onDismiss = { moving = false },
+        )
     }
 
     if (confirmUnsubscribe) {

@@ -60,12 +60,11 @@ import com.ascolta.app.R
 import com.ascolta.app.data.AppLog
 import com.ascolta.app.data.LANGUAGES
 import com.ascolta.app.data.Pref
+import androidx.compose.ui.res.pluralStringResource
 import com.ascolta.app.data.languageName
 import com.ascolta.app.graph
-import com.ascolta.app.whisper.NpuDebug
 import com.ascolta.app.whisper.CpuTopology
 import com.ascolta.app.whisper.Engine
-import com.ascolta.app.whisper.NpuSupport
 import com.ascolta.app.whisper.SpeechModel
 import androidx.compose.ui.graphics.Color
 import com.ascolta.app.whisper.SpeedResult
@@ -113,7 +112,24 @@ fun SettingsScreen() {
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
             Section(stringResource(R.string.section_languages))
             AppLanguagePicker()
-            LanguagePicker(stringResource(R.string.learning_language), learning) { settings.learningLanguage.set(it) }
+            // Languages being learned (the flags in the quick-switch bar) and the current one.
+            val learningAll by settings.learningLanguages.flow.collectAsState()
+            var pickLearning by remember { mutableStateOf(false) }
+            ListItem(
+                modifier = Modifier.clickable { pickLearning = true },
+                headlineContent = { Text(stringResource(R.string.languages_learning)) },
+                supportingContent = { Text(remember(learningAll, learning) { settings.learningList() }.joinToString("   ") { flagAndName(it) }) },
+            )
+            if (pickLearning) {
+                LanguagePickerDialog(
+                    title = stringResource(R.string.languages_learning),
+                    initial = settings.learningList(),
+                    multi = true,
+                    onDone = { settings.setLearningList(it); pickLearning = false },
+                    onDismiss = { pickLearning = false },
+                )
+            }
+            LanguageBar(Modifier.padding(vertical = 4.dp))
             SwitchRow(stringResource(R.string.translate_title), stringResource(R.string.translate_text), settings.translate)
             val translateOn by settings.translate.flow.collectAsState()
             if (translateOn) {
@@ -152,6 +168,17 @@ fun SettingsScreen() {
             SpeedTestRow()
 
             HorizontalDivider()
+            Section(stringResource(R.string.section_appearance))
+            ChoiceRow(
+                stringResource(R.string.theme_title),
+                settings.theme,
+                listOf("system" to stringResource(R.string.theme_system), "light" to stringResource(R.string.theme_light), "dark" to stringResource(R.string.theme_dark)),
+            )
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                SwitchRow(stringResource(R.string.dynamic_color_title), stringResource(R.string.dynamic_color_text), settings.dynamicColor)
+            }
+
+            HorizontalDivider()
             Section(stringResource(R.string.section_network))
             NetworkModeRows(settings.wifiOnly)
 
@@ -160,6 +187,19 @@ fun SettingsScreen() {
             SwitchRow(stringResource(R.string.auto_new_title), stringResource(R.string.auto_new_text), settings.autoDownloadNew)
             SwitchRow(stringResource(R.string.auto_transcribe_title), stringResource(R.string.auto_transcribe_text), settings.autoTranscribe)
             SwitchRow(stringResource(R.string.charging_only_title), stringResource(R.string.charging_only_text), settings.chargingOnly)
+            IntChoiceRow(
+                stringResource(R.string.refresh_title),
+                settings.refreshHours,
+                listOf(0, 1, 3, 6, 12, 24).map { h -> h to if (h == 0) stringResource(R.string.refresh_manual) else pluralStringResource(R.plurals.every_hours, h, h) },
+                onChanged = { WorkScheduler.schedulePeriodicRefresh(context) },
+            )
+            SwitchRow(stringResource(R.string.notify_fav_title), stringResource(R.string.notify_fav_text), settings.notifyFavourites)
+            IntChoiceRow(
+                stringResource(R.string.delete_after_title),
+                settings.deleteAfterDays,
+                listOf(0, 1, 3, 7, 14, 30).map { d -> d to if (d == 0) stringResource(R.string.delete_never) else pluralStringResource(R.plurals.after_days, d, d) },
+                onChanged = { scope.launch { runCatching { graph.repo.deleteOldDownloads() } } },
+            )
             TextButton(onClick = {
                 WorkScheduler.refreshNow(context)
                 Toast.makeText(context, context.getString(R.string.checking_feeds), Toast.LENGTH_SHORT).show()
@@ -172,8 +212,84 @@ fun SettingsScreen() {
             HorizontalDivider()
             Section(stringResource(R.string.section_about))
             Hint(stringResource(R.string.about_text), Modifier.padding(16.dp))
+            LegalSection()
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/** A setting with a few named choices, shown as a dropdown. */
+@Composable
+private fun ChoiceRow(title: String, pref: Pref<String>, choices: List<Pair<String, String>>) {
+    val value by pref.flow.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ListItem(
+            modifier = Modifier.clickable { open = true },
+            headlineContent = { Text(title) },
+            supportingContent = { Text(choices.firstOrNull { it.first == value }?.second ?: value) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            choices.forEach { (key, label) ->
+                DropdownMenuItem(text = { Text(label) }, onClick = { open = false; pref.set(key) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun IntChoiceRow(title: String, pref: Pref<Int>, choices: List<Pair<Int, String>>, onChanged: () -> Unit = {}) {
+    val value by pref.flow.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ListItem(
+            modifier = Modifier.clickable { open = true },
+            headlineContent = { Text(title) },
+            supportingContent = { Text(choices.firstOrNull { it.first == value }?.second ?: value.toString()) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            choices.forEach { (key, label) ->
+                DropdownMenuItem(text = { Text(label) }, onClick = { open = false; pref.set(key); onChanged() })
+            }
+        }
+    }
+}
+
+/** Privacy policy, terms of use and open-source licenses / credits, from bundled texts. */
+@Composable
+private fun LegalSection() {
+    val context = LocalContext.current
+    var shown by remember { mutableStateOf<Pair<String, String>?>(null) }
+    for ((title, file) in listOf(
+        R.string.legal_privacy to "legal/privacy.txt",
+        R.string.legal_terms to "legal/terms.txt",
+        R.string.legal_licenses to "legal/licenses.txt",
+    )) {
+        val label = stringResource(title)
+        ListItem(
+            modifier = Modifier.clickable {
+                shown = label to runCatching { context.assets.open(file).bufferedReader().readText() }.getOrDefault("")
+            },
+            headlineContent = { Text(label) },
+        )
+    }
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+    }
+    Hint(stringResource(R.string.legal_version, version ?: "?"), Modifier.padding(16.dp))
+    shown?.let { (title, text) ->
+        AlertDialog(
+            onDismissRequest = { shown = null },
+            title = { Text(title) },
+            text = {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.height(420.dp).verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = { TextButton(onClick = { shown = null }) { Text(stringResource(R.string.action_close)) } },
+        )
     }
 }
 
@@ -290,7 +406,6 @@ private fun SpeechModel.descriptionRes() = when (this) {
     SpeechModel.SMALL -> R.string.model_desc_small
     SpeechModel.TURBO -> R.string.model_desc_turbo
     SpeechModel.PARAKEET -> R.string.model_desc_parakeet
-    SpeechModel.PARAKEET_NPU -> R.string.model_desc_parakeet_npu
     SpeechModel.CUSTOM -> R.string.model_desc_custom
 }
 
@@ -313,12 +428,8 @@ private fun ModelRow(
     val progress = info?.progress?.getFloat(WorkScheduler.KEY_PROGRESS, -1f) ?: -1f
     val downloaded = remember(model, refreshKey, info?.state) { graph.models.isDownloaded(model) }
     val supported = model.supports(learning)
-    // The NPU model needs a Qualcomm Snapdragon NPU; elsewhere it is shown but disabled.
-    var npuProblem by remember(refreshKey) {
-        mutableStateOf(if (model.engine == Engine.PARAKEET_NPU) NpuSupport.unavailableReason(context) else null)
-    }
     // Greyed out when it doesn't understand the language being learned (Parakeet: 25 European languages).
-    val enabled = npuProblem == null && supported
+    val enabled = supported
     LaunchedEffect(info?.state) { if (info?.state == WorkInfo.State.SUCCEEDED) onChanged() }
 
     ListItem(
@@ -333,16 +444,6 @@ private fun ModelRow(
         supportingContent = {
             Column {
                 Text(stringResource(model.descriptionRes()))
-                npuProblem?.let { reason ->
-                    Text(stringResource(R.string.npu_unavailable, reason), color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = {
-                        NpuSupport.clearFailure(context)
-                        npuProblem = NpuSupport.unavailableReason(context)
-                    }) { Text(stringResource(R.string.npu_check_again)) }
-                }
-                if (model.engine == Engine.PARAKEET_NPU && enabled) {
-                    Text(stringResource(R.string.npu_chip, NpuSupport.chipName()), color = MaterialTheme.colorScheme.primary)
-                }
                 if (!supported) {
                     Text(stringResource(R.string.model_not_for_language, languageName(learning)), color = MaterialTheme.colorScheme.error)
                 }
@@ -500,7 +601,6 @@ private fun SpeedTestRow() {
 private fun DiagnosticsSection() {
     val context = LocalContext.current
     var showLog by remember { mutableStateOf(false) }
-    var showNpuLog by remember { mutableStateOf(false) }
     val powerManager = remember { context.getSystemService(PowerManager::class.java) }
     var unrestricted by remember { mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) }
     val engine = remember {
@@ -534,53 +634,6 @@ private fun DiagnosticsSection() {
         supportingContent = { Text(stringResource(R.string.view_log_text)) },
     )
     Hint(stringResource(R.string.speech_engine_info, engine))
-    SwitchRow(stringResource(R.string.npu_verbose_title), stringResource(R.string.npu_verbose_text), context.graph.settings.npuVerboseLog)
-    ListItem(
-        modifier = Modifier.clickable {
-            // Records the phone's NPU setup now, without running the model.
-            NpuDebug.section(
-                "NPU check from Settings",
-                NpuDebug.environmentReport(context, null) + "\n-- recent NPU logcat\n" +
-                    NpuDebug.captureLogcat(NpuDebug.mark().let { "${it.substring(0, 5)} 00:00:00.000" }, maxLines = 300),
-            )
-            showNpuLog = true
-        },
-        headlineContent = { Text(stringResource(R.string.npu_log_title)) },
-        supportingContent = { Text(stringResource(R.string.npu_log_text)) },
-    )
-
-    if (showNpuLog) {
-        val log = remember { NpuDebug.read().takeLast(30_000) }
-        AlertDialog(
-            onDismissRequest = { showNpuLog = false },
-            title = { Text(stringResource(R.string.npu_log_title)) },
-            text = {
-                Text(
-                    log,
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.height(400.dp).verticalScroll(rememberScrollState(Int.MAX_VALUE)),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    // The whole NPU log can be large: shared as a file-sized text.
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "Ascolta NPU log")
-                        putExtra(Intent.EXTRA_TEXT, NpuDebug.read().takeLast(400_000))
-                    }
-                    context.startActivity(Intent.createChooser(send, context.getString(R.string.share_log)))
-                }) { Text(stringResource(R.string.action_share)) }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = { NpuDebug.clear(); showNpuLog = false }) { Text(stringResource(R.string.action_clear)) }
-                    TextButton(onClick = { showNpuLog = false }) { Text(stringResource(R.string.action_close)) }
-                }
-            },
-        )
-    }
-
     if (showLog) {
         val log = remember { AppLog.read().takeLast(20_000) }
         AlertDialog(

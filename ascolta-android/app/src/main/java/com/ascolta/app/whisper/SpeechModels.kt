@@ -8,16 +8,13 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 
-enum class Engine { WHISPER, PARAKEET, PARAKEET_NPU }
+enum class Engine { WHISPER, PARAKEET }
 
 /** A file to download; with [extractTo], it is a zip unpacked into that folder (its top folder stripped). */
 data class ModelFile(val url: String, val name: String, val approxBytes: Long, val extractTo: String? = null)
 
 private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 private const val PARAKEET_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main"
-/** Qualcomm AI Hub's export of Parakeet v3 for its NPU (encoder/decoder/joint ONNX, float). */
-private const val PARAKEET_NPU_ZIP =
-    "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/parakeet_tdt/releases/v0.66.0/parakeet_tdt-onnx-float.zip"
 
 /** Languages NVIDIA Parakeet TDT 0.6B v3 understands (25 European languages). */
 val PARAKEET_LANGUAGES = setOf(
@@ -55,19 +52,14 @@ enum class SpeechModel(
         ),
         languages = PARAKEET_LANGUAGES,
     ),
-    PARAKEET_NPU("parakeet-v3-npu", Engine.PARAKEET_NPU, "NVIDIA Parakeet v3 (NPU)", 2270,
-        listOf(
-            ModelFile("$PARAKEET_HF/tokens.txt", "parakeet-v3-npu/tokens.txt", 93_939),
-            ModelFile(PARAKEET_NPU_ZIP, "parakeet-v3-npu.zip", 2_266_000_000, extractTo = "parakeet-v3-npu"),
-        ),
-        languages = PARAKEET_LANGUAGES,
-    ),
     CUSTOM("custom", Engine.WHISPER, "Imported Whisper model", 0, emptyList());
 
     fun supports(language: String) = languages == null || language in languages
 
     companion object {
-        fun byId(id: String): SpeechModel = entries.firstOrNull { it.id == id } ?: BASE
+        /** The NPU model was removed: anyone who had chosen it gets Parakeet on the CPU. */
+        fun byId(id: String): SpeechModel = entries.firstOrNull { it.id == id }
+            ?: if (id.startsWith("parakeet")) PARAKEET else BASE
     }
 }
 
@@ -91,7 +83,10 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
     }
 
     /** Parakeet's word-piece list for the NPU engine. */
-    fun parakeetTokens(): File = file("parakeet-v3-npu/tokens.txt")
+    /** Frees the space of models that are no longer offered (the 2.3 GB NPU model). */
+    fun removeRetiredModels() {
+        listOf("parakeet-v3-npu", "parakeet-v3-npu.zip").map(::file).filter { it.exists() }.forEach { it.deleteRecursively() }
+    }
 
     private fun isPresent(f: ModelFile): Boolean =
         if (f.extractTo != null) File(file(f.extractTo), ".complete").exists()

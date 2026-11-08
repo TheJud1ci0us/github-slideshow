@@ -45,69 +45,8 @@ interface SpeechEngine : Closeable {
             when (model.engine) {
                 Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
                 Engine.PARAKEET -> ParakeetEngine(models.primaryPath(model), options)
-                Engine.PARAKEET_NPU -> loadNpu(context, model, models, options)
             }
 
-        /**
-         * The NPU engine. Tries the whole encoder on the NPU, then the split layout (first
-         * layers on the CPU, the rest on the NPU); remembers what worked. If the NPU refuses
-         * both, falls back to Parakeet on the CPU when downloaded, and disables the NPU option
-         * with the reason (until the next app update).
-         */
-        private fun loadNpu(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine {
-            NpuSupport.unavailableReason(context)?.let { throw IllegalStateException("NPU unavailable: $it") }
-            ParakeetNpuEngine.prepareProcess(context)
-            val dir = models.primaryPath(model)
-            installSplitGraphs(context, dir)
-            val verbose = NpuDebug.verbose(context)
-            NpuDebug.section("NPU attempt", NpuDebug.environmentReport(context, dir))
-            val layouts = listOf("full", "split").let { all ->
-                NpuSupport.preferredLayout(context)?.let { pref -> listOf(pref) + (all - pref) } ?: all
-            }
-            val errors = mutableListOf<String>()
-            for (layout in layouts) {
-                val mark = NpuDebug.mark()
-                val started = System.currentTimeMillis()
-                NpuDebug.note("Trying the $layout encoder (verbose=$verbose)")
-                try {
-                    val engine = ParakeetNpuEngine(
-                        dir, models.parakeetTokens(), options, npu = true, split = layout == "split", cacheDir = dir,
-                        verboseLog = verbose,
-                    )
-                    NpuSupport.rememberLayout(context, layout)
-                    AppLog.i("Npu", "NPU engine ready ($layout encoder) on ${NpuSupport.chipName()}")
-                    NpuDebug.section(
-                        "$layout encoder ready in ${System.currentTimeMillis() - started} ms",
-                        NpuDebug.captureLogcat(mark),
-                    )
-                    return engine
-                } catch (e: Throwable) {
-                    AppLog.w("Npu", "NPU engine ($layout encoder) failed to start", e)
-                    errors += "$layout: ${e.message ?: e.javaClass.simpleName}"
-                    NpuDebug.section(
-                        "$layout encoder FAILED after ${System.currentTimeMillis() - started} ms",
-                        NpuDebug.describe(e) + "\n-- logcat during the attempt\n" + NpuDebug.captureLogcat(mark),
-                    )
-                }
-            }
-            val reason = errors.joinToString(" | ")
-            NpuSupport.markFailed(context, reason)
-            if (models.isDownloaded(SpeechModel.PARAKEET)) {
-                AppLog.i("Npu", "Falling back to Parakeet on the CPU")
-                return ParakeetEngine(models.primaryPath(SpeechModel.PARAKEET), options)
-            }
-            throw IllegalStateException("The NPU couldn't run this model ($reason). Choose NVIDIA Parakeet v3 (CPU) in Settings.")
-        }
-
-        /** Copies the bundled split-encoder graphs next to encoder.data (they reference its weights). */
-        private fun installSplitGraphs(context: Context, dir: File) {
-            val target = File(dir, "encoder_onnx").apply { mkdirs() }
-            for (name in listOf("encoder_pre.onnx", "encoder_post.onnx")) {
-                val out = File(target, name)
-                val bytes = context.assets.open("parakeet_npu/$name").use { it.readBytes() }
-                if (!out.exists() || out.length() != bytes.size.toLong()) out.writeBytes(bytes)
-            }
-        }
     }
 }
 

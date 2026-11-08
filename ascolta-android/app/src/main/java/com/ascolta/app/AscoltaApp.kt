@@ -29,7 +29,6 @@ class AscoltaApp : Application() {
         super.onCreate()
         AppLog.init(this)
         AppVisibility.register(this)
-        com.ascolta.app.whisper.NpuDebug.init(this)
         // Write crashes to the in-app log (Settings → Diagnostics → View log) before the app closes.
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
@@ -41,6 +40,9 @@ class AscoltaApp : Application() {
         WorkScheduler.schedulePeriodicRefresh(this)
         graph.scope.launch {
             runCatching { graph.repo.recoverStuckWork() }.onFailure { AppLog.w("App", "Recovery failed", it) }
+            runCatching { graph.models.removeRetiredModels() }
+            runCatching { graph.repo.assignLibraryLanguages() }.onFailure { AppLog.w("App", "Library languages", it) }
+            runCatching { graph.repo.deleteOldDownloads() }.onFailure { AppLog.w("App", "Old downloads", it) }
         }
     }
 }

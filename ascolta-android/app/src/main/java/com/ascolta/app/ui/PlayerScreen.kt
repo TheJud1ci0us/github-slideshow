@@ -327,7 +327,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             // listener chose the picture: the cover. The transcript is kept and shown again on demand.
             if (segments.isEmpty() || coverMode) {
                 val cover = ep?.imageUrl ?: podcast?.imageUrl
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.Center) {
                     if (cover != null) {
                         coil3.compose.AsyncImage(
                             model = cover,
@@ -339,6 +339,10 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     } else {
                         Icon(Icons.Filled.Headphones, null, Modifier.size(120.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+                // With a transcript: one line of what is being said, under the picture.
+                segments.getOrNull(currentIndex)?.let { seg ->
+                    LiveLine(seg, if (wordHighlight) currentWord else -1)
                 }
             } else LazyColumn(
                 state = listState,
@@ -374,6 +378,35 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             onDismiss = { lookup = null },
         )
     }
+}
+
+/**
+ * One line of the sentence being spoken (shown under the episode picture). It keeps the
+ * current word in view: when the sentence is too long, the words already said scroll off.
+ */
+@Composable
+private fun LiveLine(segment: Segment, activeWord: Int) {
+    val words = segment.words?.map { it.text }?.takeIf { it.isNotEmpty() } ?: segment.text.split(' ')
+    val from = if (activeWord > 3) activeWord - 3 else 0
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        if (from > 0) append("… ")
+        words.drop(from).forEachIndexed { i, w ->
+            if (i > 0) append(' ')
+            if (from + i == activeWord) {
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                append(w)
+                pop()
+            } else append(w)
+        }
+    }
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+    )
 }
 
 @Composable
@@ -661,6 +694,7 @@ private fun WordSheet(
                                     episodeId = episode?.id,
                                     episodeTitle = episode?.title,
                                     createdAt = System.currentTimeMillis(),
+                                    isSentence = true,
                                 ),
                             )
                             Toast.makeText(context, context.getString(if (added) R.string.sentence_saved else R.string.already_saved), Toast.LENGTH_SHORT).show()

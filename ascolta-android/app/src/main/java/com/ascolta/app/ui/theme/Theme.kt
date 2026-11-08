@@ -8,6 +8,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.ascolta.app.graph
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -33,10 +36,17 @@ private val Dark = darkColorScheme(
 
 @Composable
 fun AscoltaTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
     val context = LocalContext.current
+    val settings = context.graph.settings
+    val theme by settings.theme.flow.collectAsState()
+    val dynamic by settings.dynamicColor.flow.collectAsState()
+    val dark = when (theme) {
+        "light" -> false
+        "dark" -> true
+        else -> isSystemInDarkTheme()
+    }
     val colors = when {
-        Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        dynamic && Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         dark -> Dark
         else -> Light
     }

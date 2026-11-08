@@ -48,20 +48,29 @@ the phone.
 - whisper.cpp is built for several CPU generations; the app loads the fastest one the
   phone supports (e.g. dot-product and int8 matrix instructions on recent Snapdragons).
 - Choose how many CPU cores to use (1–8) and toggle Whisper's flash attention.
-- **NVIDIA Parakeet v3 on the NPU** (Snapdragon phones): Qualcomm AI Hub's export runs the
-  encoder on the Hexagon NPU through ONNX Runtime's QNN provider while the small decoder runs
-  on the CPU. Disabled (with the reason) on phones without a usable Qualcomm NPU; falls back
-  to the CPU version if the NPU refuses the model.
 - **Work split across the chip**: the next block of audio is decoded and searched for speech on
   the efficiency cores while the current one is recognised on the fast cores (thread affinity).
-- **Detailed NPU log** (Settings → Diagnostics → *NPU log*): the phone's NPU setup (chip,
-  FastRPC driver access, public vendor libraries, bundled QNN/Hexagon libraries, model files) and,
-  for each NPU attempt, the full error and this app's ONNX Runtime / QNN / FastRPC logcat lines,
-  with optional verbose logging. Shareable as text.
 - **Speed test** in Settings: the same bundled 30 s recording every time; one warm-up run, then
   three timed runs (median and spread), plus word accuracy.
 - **Stop** a running transcription (what's done is kept; *Continue* resumes), or remove
   waiting items from the queue.
+
+**Languages**
+- On first launch, choose the languages you're learning (57 available, each with its flag).
+  Each language has its **own library** of podcasts, words and flashcards; switch with the
+  **flag bar** on the Library, Discover and Words screens. Podcasts go into their own
+  language's library automatically and can be moved (podcast menu → *Move to another language*).
+
+**Favourites, feeds and storage**
+- ★ **Favourite** podcasts are listed first and send a **notification** when a new episode is out.
+- Per-podcast automatic download; feed check every 1/3/6/12/24 hours or only by hand.
+- Downloaded episodes can be **deleted automatically** after 1–30 days (transcripts are kept).
+- Theme: like the phone, light or dark; colours from the wallpaper or Ascolta's own.
+
+**Flashcards**
+- Save a word or the whole sentence from the player, or **add your own cards** (word or
+  sentence; translated automatically if you leave the meaning empty).
+- **Review** in the app with spaced repetition (Again / Hard / Good / Easy, as in Anki).
 
 **Learning**
 - Dual subtitles: the Italian sentence with the English translation under it, synced
@@ -74,7 +83,8 @@ the phone.
   its translation always stay fully on screen.
 - **Transcript only**: switch off *Translate sentences* (Settings or the player menu).
 - Show the **episode picture** instead of the transcript at any time (top-bar button); the
-  transcript is kept and comes back with the same button.
+  transcript is kept and comes back with the same button. Under the picture, one line shows
+  what is being said, following the current word.
 - **57 languages** to learn and translate (all supported by both Whisper and ML Kit); each speech
   model lists its languages in Settings, and Parakeet's 25 European languages are marked.
 - Background playback with lock-screen and notification controls.
@@ -150,6 +160,13 @@ PlayerScreen ◄── Media3 (PlaybackService) + transcript ──► synced du
 | `translate/` | ML Kit on-device translation |
 | `player/` | Media3 playback service and controller |
 | `ui/` | Jetpack Compose screens |
+
+## Legal
+
+- [Privacy policy](PRIVACY.md) and [terms of use](TERMS.md), also in the app (Settings → About).
+- Open-source licenses and model/data credits are in the app (Settings → About →
+  *Open-source licenses and credits*), including the CC BY 4.0 attribution for NVIDIA Parakeet
+  and for the speed-test recording. No Qualcomm or other proprietary runtime is bundled.
 
 ## Known limitations
 

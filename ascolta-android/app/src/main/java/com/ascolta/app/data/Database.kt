@@ -9,6 +9,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -18,10 +20,20 @@ interface PodcastDao {
         SELECT p.*,
           (SELECT COUNT(*) FROM episodes e WHERE e.podcastId = p.id) AS episodeCount,
           (SELECT COUNT(*) FROM episodes e WHERE e.podcastId = p.id AND e.transcriptState = 3) AS transcribedCount
-        FROM podcasts p ORDER BY p.title COLLATE NOCASE
+        FROM podcasts p WHERE p.libraryLanguage = :language
+        ORDER BY p.favourite DESC, p.title COLLATE NOCASE
         """,
     )
-    fun observeWithStats(): Flow<List<PodcastWithStats>>
+    fun observeWithStats(language: String): Flow<List<PodcastWithStats>>
+
+    @Query("UPDATE podcasts SET favourite = :favourite WHERE id = :id")
+    suspend fun setFavourite(id: Long, favourite: Boolean)
+
+    @Query("UPDATE podcasts SET libraryLanguage = :language WHERE id = :id")
+    suspend fun setLibraryLanguage(id: Long, language: String)
+
+    @Query("SELECT COUNT(*) FROM podcasts WHERE libraryLanguage = :language")
+    fun observeCount(language: String): Flow<Int>
 
     @Query("SELECT * FROM podcasts WHERE id = :id")
     fun observe(id: Long): Flow<PodcastEntity?>
@@ -53,11 +65,14 @@ interface EpisodeDao {
     @Query("SELECT * FROM episodes WHERE podcastId = :podcastId ORDER BY pubDate DESC")
     fun observeForPodcast(podcastId: Long): Flow<List<EpisodeEntity>>
 
-    @Query("SELECT * FROM episodes WHERE podcastId IS NULL ORDER BY pubDate DESC")
-    fun observeImported(): Flow<List<EpisodeEntity>>
+    @Query("SELECT * FROM episodes WHERE podcastId IS NULL AND (transcriptLanguage = :language OR transcriptLanguage IS NULL) ORDER BY pubDate DESC")
+    fun observeImported(language: String): Flow<List<EpisodeEntity>>
 
-    @Query("SELECT COUNT(*) FROM episodes WHERE podcastId IS NULL")
-    fun observeImportedCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM episodes WHERE podcastId IS NULL AND (transcriptLanguage = :language OR transcriptLanguage IS NULL)")
+    fun observeImportedCount(language: String): Flow<Int>
+
+    @Query("SELECT * FROM episodes WHERE localPath IS NOT NULL AND podcastId IS NOT NULL")
+    suspend fun withDownloads(): List<EpisodeEntity>
 
     @Query(
         """SELECT * FROM episodes WHERE downloadState IN (1, 2) OR transcriptState IN (1, 2)
@@ -71,8 +86,13 @@ interface EpisodeDao {
     @Query("SELECT * FROM episodes WHERE localPath IS NOT NULL ORDER BY lastPlayedAt DESC, pubDate DESC LIMIT 20")
     suspend fun downloaded(): List<EpisodeEntity>
 
-    @Query("SELECT * FROM episodes WHERE lastPlayedAt > 0 ORDER BY lastPlayedAt DESC LIMIT :limit")
-    fun observeRecentlyPlayed(limit: Int): Flow<List<EpisodeEntity>>
+    @Query(
+        """SELECT e.* FROM episodes e LEFT JOIN podcasts p ON p.id = e.podcastId
+           WHERE e.lastPlayedAt > 0 AND (p.libraryLanguage = :language
+             OR (e.podcastId IS NULL AND (e.transcriptLanguage = :language OR e.transcriptLanguage IS NULL)))
+           ORDER BY e.lastPlayedAt DESC LIMIT :limit""",
+    )
+    fun observeRecentlyPlayed(language: String, limit: Int): Flow<List<EpisodeEntity>>
 
     @Query("SELECT * FROM episodes WHERE id = :id")
     fun observe(id: Long): Flow<EpisodeEntity?>
@@ -95,8 +115,8 @@ interface EpisodeDao {
     @Query("UPDATE episodes SET downloadState = :state, downloadProgress = :progress, error = :error WHERE id = :id")
     suspend fun setDownload(id: Long, state: Int, progress: Float, error: String? = null)
 
-    @Query("UPDATE episodes SET localPath = :path, downloadState = :state, downloadProgress = 1 WHERE id = :id")
-    suspend fun setLocalPath(id: Long, path: String?, state: Int)
+    @Query("UPDATE episodes SET localPath = :path, downloadState = :state, downloadProgress = 1, downloadedAt = :at WHERE id = :id")
+    suspend fun setLocalPath(id: Long, path: String?, state: Int, at: Long = System.currentTimeMillis())
 
     @Query(
         """UPDATE episodes SET transcriptState = :state, transcriptProgress = :progress,
@@ -122,8 +142,17 @@ interface EpisodeDao {
 
 @Dao
 interface VocabDao {
-    @Query("SELECT * FROM vocab ORDER BY createdAt DESC")
-    fun observeAll(): Flow<List<VocabEntity>>
+    @Query("SELECT * FROM vocab WHERE language = :language ORDER BY createdAt DESC")
+    fun observeAll(language: String): Flow<List<VocabEntity>>
+
+    @Query("SELECT * FROM vocab WHERE language = :language AND dueAt <= :now ORDER BY dueAt, createdAt LIMIT :limit")
+    suspend fun due(language: String, now: Long, limit: Int): List<VocabEntity>
+
+    @Query("SELECT COUNT(*) FROM vocab WHERE language = :language AND dueAt <= :now")
+    fun observeDueCount(language: String, now: Long): Flow<Int>
+
+    @Update
+    suspend fun update(entry: VocabEntity)
 
     @Query("SELECT * FROM vocab ORDER BY createdAt DESC")
     suspend fun all(): List<VocabEntity>
@@ -140,7 +169,7 @@ interface VocabDao {
 
 @Database(
     entities = [PodcastEntity::class, EpisodeEntity::class, VocabEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -150,6 +179,20 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2).build()
+
+        /** v0.6: favourites, per-language libraries, download dates, flashcard scheduling. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE podcasts ADD COLUMN libraryLanguage TEXT")
+                db.execSQL("ALTER TABLE podcasts ADD COLUMN favourite INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE episodes ADD COLUMN downloadedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN dueAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN intervalDays REAL NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN ease REAL NOT NULL DEFAULT 2.5")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN reps INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN isSentence INTEGER NOT NULL DEFAULT 0")
+            }
+        }
     }
 }

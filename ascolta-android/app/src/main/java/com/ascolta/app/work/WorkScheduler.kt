@@ -47,8 +47,14 @@ object WorkScheduler {
         return cm.isActiveNetworkMetered
     }
 
+    /** Feed checks every N hours (Settings → refresh policy); none when set to "only by hand". */
     fun schedulePeriodicRefresh(context: Context) {
-        val request = PeriodicWorkRequestBuilder<RefreshWorker>(6, TimeUnit.HOURS)
+        val hours = context.graph.settings.refreshHours.value
+        if (hours <= 0) {
+            WorkManager.getInstance(context).cancelUniqueWork(REFRESH_WORK)
+            return
+        }
+        val request = PeriodicWorkRequestBuilder<RefreshWorker>(hours.toLong(), TimeUnit.HOURS)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(allowedNetwork(context)).build())
             .build()
         WorkManager.getInstance(context)
@@ -132,6 +138,32 @@ object WorkScheduler {
 
 object Notifications {
     const val CHANNEL_WORK = "background-work"
+    const val CHANNEL_EPISODES = "new-episodes"
+
+    /** "New episode of <favourite podcast>", opening the app. Skipped without permission. */
+    fun newEpisodes(context: Context, podcast: com.ascolta.app.data.PodcastEntity, episodes: List<com.ascolta.app.data.EpisodeEntity>) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        val intent = PendingIntent.getActivity(
+            context, podcast.id.toInt(),
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val first = episodes.first()
+        val notification = NotificationCompat.Builder(context, CHANNEL_EPISODES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(
+                if (episodes.size == 1) context.getString(R.string.notif_new_episode, podcast.title)
+                else context.resources.getQuantityString(R.plurals.notif_new_episodes, episodes.size, episodes.size, podcast.title),
+            )
+            .setContentText(first.title)
+            .setStyle(NotificationCompat.InboxStyle().also { style -> episodes.take(5).forEach { style.addLine(it.title) } })
+            .setContentIntent(intent)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java).notify(50_000 + podcast.id.toInt(), notification)
+    }
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -139,6 +171,9 @@ object Notifications {
             NotificationChannel(CHANNEL_WORK, context.getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW).apply {
                 description = context.getString(R.string.notif_channel_desc)
             },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_EPISODES, context.getString(R.string.notif_channel_episodes), NotificationManager.IMPORTANCE_DEFAULT),
         )
     }
 

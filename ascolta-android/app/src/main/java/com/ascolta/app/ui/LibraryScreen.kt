@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.ascolta.app.R
@@ -160,16 +162,19 @@ fun LibraryScreen(
         },
     ) { padding ->
         val list = podcasts
+        Column(Modifier.fillMaxSize().padding(padding)) {
+        // Switch between the languages being learned; each has its own library.
+        LanguageBar(Modifier.padding(bottom = 4.dp))
         if (list != null && list.isEmpty() && importedCount == 0) {
             EmptyLibrary(
-                Modifier.padding(padding),
+                Modifier,
                 onSearch = { openDiscover(null) },
                 onLink = { linkDialog = true },
                 onImport = { pickAudio.launch(arrayOf("audio/*")) },
             )
         } else {
             LazyColumn(
-                Modifier.fillMaxSize().padding(padding),
+                Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 96.dp),
             ) {
                 if (active.isNotEmpty()) {
@@ -195,6 +200,11 @@ fun LibraryScreen(
                         )
                     }
                 }
+                val favourites = list.orEmpty().filter { it.podcast.favourite }
+                if (favourites.isNotEmpty()) {
+                    item { SectionTitle(stringResource(R.string.section_favourites)) }
+                    items(favourites, key = { "fav-${it.podcast.id}" }) { p -> PodcastRow(p, openPodcast) }
+                }
                 item { SectionTitle(stringResource(R.string.section_podcasts)) }
                 if (importedCount > 0) {
                     item {
@@ -206,24 +216,9 @@ fun LibraryScreen(
                         )
                     }
                 }
-                items(list.orEmpty(), key = { it.podcast.id }) { p ->
-                    ListItem(
-                        modifier = Modifier.clickable { openPodcast(p.podcast.id) },
-                        headlineContent = { Text(p.podcast.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = {
-                            Text(
-                                listOfNotNull(
-                                    p.podcast.author,
-                                    pluralStringResource(R.plurals.episodes_count, p.episodeCount, p.episodeCount),
-                                    if (p.transcribedCount > 0) stringResource(R.string.transcribed_count, p.transcribedCount) else null,
-                                ).joinToString(" · "),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        leadingContent = { Artwork(p.podcast.imageUrl, 56.dp) },
-                    )
-                }
+                items(list.orEmpty().filter { !it.podcast.favourite }, key = { it.podcast.id }) { p -> PodcastRow(p, openPodcast) }
             }
+        }
         }
     }
 
@@ -234,6 +229,33 @@ fun LibraryScreen(
             openSearch = { linkDialog = false; openDiscover(it) },
         )
     }
+}
+
+@Composable
+private fun PodcastRow(p: com.ascolta.app.data.PodcastWithStats, openPodcast: (Long?) -> Unit) {
+    val graph = LocalContext.current.graph
+    val scope = rememberCoroutineScope()
+    ListItem(
+        modifier = Modifier.clickable { openPodcast(p.podcast.id) },
+        headlineContent = { Text(p.podcast.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        supportingContent = {
+            Text(
+                listOfNotNull(
+                    p.podcast.author,
+                    pluralStringResource(R.plurals.episodes_count, p.episodeCount, p.episodeCount),
+                    if (p.transcribedCount > 0) stringResource(R.string.transcribed_count, p.transcribedCount) else null,
+                ).joinToString(" · "),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        },
+        leadingContent = { Artwork(p.podcast.imageUrl, 56.dp) },
+        trailingContent = {
+            IconButton(onClick = { scope.launch { graph.repo.setFavourite(p.podcast.id, !p.podcast.favourite) } }) {
+                if (p.podcast.favourite) Icon(Icons.Filled.Star, stringResource(R.string.unfavourite), tint = MaterialTheme.colorScheme.primary)
+                else Icon(Icons.Filled.StarBorder, stringResource(R.string.favourite))
+            }
+        },
+    )
 }
 
 @Composable

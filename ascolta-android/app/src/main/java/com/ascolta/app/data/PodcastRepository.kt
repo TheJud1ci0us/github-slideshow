@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.ascolta.app.data
 
 import android.content.Context
@@ -12,6 +14,7 @@ import com.ascolta.app.net.RssParser
 import com.ascolta.app.translate.TranslationService
 import com.ascolta.app.work.WorkScheduler
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
@@ -31,16 +34,45 @@ class PodcastRepository(
     private val episodeDao = db.episodeDao()
     private val vocabDao = db.vocabDao()
 
-    val podcasts = podcastDao.observeWithStats()
+    // Each learning language has its own library, words and flashcards: these follow the
+    // language currently chosen in the flag bar.
+    private val current = settings.learningLanguage.flow
+    val podcasts = current.flatMapLatest { podcastDao.observeWithStats(it) }
     val subscribedFeedUrls = podcastDao.observeFeedUrls()
-    val importedCount = episodeDao.observeImportedCount()
+    val importedCount = current.flatMapLatest { episodeDao.observeImportedCount(it) }
     val activeEpisodes = episodeDao.observeActive()
-    val recentlyPlayed = episodeDao.observeRecentlyPlayed(5)
-    val vocab = vocabDao.observeAll()
+    val recentlyPlayed = current.flatMapLatest { episodeDao.observeRecentlyPlayed(it, 5) }
+    val vocab = current.flatMapLatest { vocabDao.observeAll(it) }
+    fun dueCards(now: Long) = current.flatMapLatest { vocabDao.observeDueCount(it, now) }
+    fun podcastCount(language: String) = podcastDao.observeCount(language)
 
     fun podcast(id: Long) = podcastDao.observe(id)
     fun episodes(podcastId: Long?) =
-        if (podcastId == null) episodeDao.observeImported() else episodeDao.observeForPodcast(podcastId)
+        if (podcastId == null) current.flatMapLatest { episodeDao.observeImported(it) } else episodeDao.observeForPodcast(podcastId)
+
+    /**
+     * The library a podcast goes into: its own language when that is one being learned,
+     * otherwise the language currently selected.
+     */
+    private fun libraryLanguageFor(feedLanguage: String?): String {
+        val code = feedLanguage?.trim()?.lowercase()?.take(2)
+        return code?.takeIf { it in settings.learningList() } ?: settings.learningLanguage.value
+    }
+
+    /** Podcasts from before per-language libraries get one (once). */
+    suspend fun assignLibraryLanguages() {
+        podcastDao.all().filter { it.libraryLanguage == null }.forEach {
+            podcastDao.setLibraryLanguage(it.id, libraryLanguageFor(it.language))
+        }
+    }
+
+    suspend fun setFavourite(podcastId: Long, favourite: Boolean) = podcastDao.setFavourite(podcastId, favourite)
+
+    /** Moves a podcast to another language's library. */
+    suspend fun moveToLanguage(podcastId: Long, language: String) {
+        if (language !in settings.learningList()) settings.setLearningList(settings.learningList() + language)
+        podcastDao.setLibraryLanguage(podcastId, language)
+    }
     fun episode(id: Long) = episodeDao.observe(id)
     suspend fun getEpisode(id: Long) = episodeDao.get(id)
     suspend fun getPodcast(id: Long) = podcastDao.get(id)
@@ -67,6 +99,7 @@ class PodcastRepository(
                 description = feed.description,
                 imageUrl = feed.imageUrl,
                 language = feed.language,
+                libraryLanguage = libraryLanguageFor(feed.language),
                 autoDownload = settings.autoDownloadNew.value,
                 subscribedAt = now,
                 lastRefreshedAt = now,
@@ -116,6 +149,13 @@ class PodcastRepository(
             ),
         )
         val newIds = ids.filter { it > 0 }
+        // New episodes of a favourite: a notification (only for recent ones, not a back catalogue).
+        if (podcast.favourite && settings.notifyFavourites.value && newIds.isNotEmpty()) {
+            val recent = newIds.mapNotNull { episodeDao.get(it) }
+                .filter { it.pubDate == 0L || it.pubDate >= System.currentTimeMillis() - 7L * 24 * 3600 * 1000 }
+                .sortedByDescending { it.pubDate }
+            if (recent.isNotEmpty()) com.ascolta.app.work.Notifications.newEpisodes(context, podcast, recent)
+        }
         if (podcast.autoDownload) {
             // Only episodes published since subscribing, so an old back catalogue isn't downloaded.
             val cutoff = podcast.subscribedAt - 7L * 24 * 3600 * 1000
@@ -212,8 +252,10 @@ class PodcastRepository(
     suspend fun transcribe(episodeId: Long, manual: Boolean = true) {
         val episode = episodeDao.get(episodeId) ?: return
         if (episode.transcriptState in listOf(TranscriptState.QUEUED, TranscriptState.RUNNING, TranscriptState.DONE)) return
-        val language = podcastDao.get(episode.podcastId ?: -1)?.language
-            ?.takeIf { lang -> LANGUAGES.any { it.code == lang } && lang != settings.nativeLanguage.value }
+        val podcast = podcastDao.get(episode.podcastId ?: -1)
+        val language = podcast?.libraryLanguage
+            ?: podcast?.language?.lowercase()?.take(2)?.takeIf { lang -> LANGUAGES.any { it.code == lang } && lang != settings.nativeLanguage.value }
+            ?: episode.transcriptLanguage
             ?: settings.learningLanguage.value
         episodeDao.setTranscriptLanguage(episodeId, language)
         episodeDao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, context.getString(R.string.status_waiting))
@@ -371,8 +413,63 @@ class PodcastRepository(
 
     suspend fun deleteWord(id: Long) = vocabDao.delete(id)
 
+    /**
+     * Adds a flashcard typed in by the user (a word or a sentence). Without a translation,
+     * it is translated on the phone when possible.
+     */
+    suspend fun addCard(front: String, back: String?, isSentence: Boolean): Boolean {
+        val language = settings.learningLanguage.value
+        val text = front.trim()
+        if (text.isEmpty()) return false
+        val translationText = back?.trim()?.takeIf { it.isNotEmpty() }
+            ?: runCatching { translateWord(text, language) }.getOrDefault("")
+        return saveWord(
+            VocabEntity(
+                word = if (isSentence) text else text.lowercase(),
+                translation = translationText,
+                sentence = if (isSentence) text else null,
+                sentenceTranslation = if (isSentence) translationText else null,
+                language = language,
+                episodeId = null,
+                episodeTitle = null,
+                createdAt = System.currentTimeMillis(),
+                isSentence = isSentence,
+            ),
+        )
+    }
+
+    /** Cards due for review in the current language, oldest first. */
+    suspend fun dueCardsNow(limit: Int = 50): List<VocabEntity> =
+        vocabDao.due(settings.learningLanguage.value, System.currentTimeMillis(), limit)
+
+    /** Records a review answer and schedules the card's next review. */
+    suspend fun review(card: VocabEntity, grade: Flashcards.Grade) =
+        vocabDao.update(Flashcards.schedule(card, grade, System.currentTimeMillis()))
+
+    /**
+     * Deletes downloaded episode audio older than the chosen number of days (transcripts are
+     * kept; the episode can still be streamed or downloaded again). The episode playing and
+     * episodes being transcribed are left alone.
+     */
+    suspend fun deleteOldDownloads() {
+        val days = settings.deleteAfterDays.value
+        if (days <= 0) return
+        val cutoff = System.currentTimeMillis() - days * 24L * 3600 * 1000
+        val playing = (context.applicationContext as com.ascolta.app.AscoltaApp).graph.player.state.value.episodeId
+        for (e in episodeDao.withDownloads()) {
+            val file = e.localPath?.let(::File) ?: continue
+            val downloadedAt = e.downloadedAt.takeIf { it > 0 } ?: file.lastModified()
+            val busy = e.transcriptState == TranscriptState.QUEUED || e.transcriptState == TranscriptState.RUNNING
+            if (downloadedAt < cutoff && e.id != playing && !busy) {
+                file.delete()
+                episodeDao.setLocalPath(e.id, null, DownloadState.NONE, 0)
+                AppLog.i("Repo", "Deleted download of #${e.id} (older than $days days)")
+            }
+        }
+    }
+
     /** Tab-separated export that Anki (and most flashcard apps) can import. */
-    suspend fun exportVocabTsv(): String = vocabDao.all().joinToString("\n") { v ->
+    suspend fun exportVocabTsv(): String = vocabDao.all().filter { it.language == settings.learningLanguage.value }.joinToString("\n") { v ->
         listOf(v.word, v.translation, v.sentence.orEmpty(), v.sentenceTranslation.orEmpty())
             .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') }
     }

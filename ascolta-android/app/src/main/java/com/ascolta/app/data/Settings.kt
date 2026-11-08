@@ -6,7 +6,16 @@ import com.ascolta.app.whisper.SpeechModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-data class Language(val code: String, val name: String, val country: String)
+/** [country] picks the podcast directory's store; [flagCountry] the flag shown for the language. */
+data class Language(val code: String, val name: String, val country: String, val flagCountry: String = country)
+
+/** Flag emoji for a two-letter country code (regional indicator letters). */
+fun flagEmoji(country: String): String =
+    country.uppercase().filter { it in 'A'..'Z' }.take(2).map { Character.toChars(0x1F1E6 + (it - 'A')).concatToString() }.joinToString("")
+
+/** Flag representing a language, e.g. "🇮🇹" for Italian. */
+fun languageFlag(code: String?): String =
+    LANGUAGES.firstOrNull { it.code == code }?.let { flagEmoji(it.flagCountry) } ?: "🏳️"
 
 /**
  * Languages that can be learned and translated: every language both Whisper (99 languages)
@@ -28,7 +37,7 @@ val LANGUAGES = listOf(
     Language("en", "English", "US"),
     Language("es", "Spanish", "ES"),
     Language("et", "Estonian", "EE"),
-    Language("fa", "Persian", "US"),
+    Language("fa", "Persian", "US", "IR"),
     Language("fi", "Finnish", "FI"),
     Language("fr", "French", "FR"),
     Language("gl", "Galician", "ES"),
@@ -36,7 +45,7 @@ val LANGUAGES = listOf(
     Language("he", "Hebrew", "IL"),
     Language("hi", "Hindi", "IN"),
     Language("hr", "Croatian", "HR"),
-    Language("ht", "Haitian Creole", "US"),
+    Language("ht", "Haitian Creole", "US", "HT"),
     Language("hu", "Hungarian", "HU"),
     Language("id", "Indonesian", "ID"),
     Language("is", "Icelandic", "IS"),
@@ -70,7 +79,7 @@ val LANGUAGES = listOf(
     Language("uk", "Ukrainian", "UA"),
     Language("ur", "Urdu", "PK"),
     Language("vi", "Vietnamese", "VN"),
-    Language("zh", "Chinese", "TW"),
+    Language("zh", "Chinese", "TW", "CN"),
 )
 
 /** Language name in the app's current language, e.g. "Italiano" / "Italian" / "Italien". */
@@ -125,8 +134,26 @@ class Settings(context: Context) {
         { k, v -> putFloat(k, v) },
     )
 
-    /** Language of the podcasts (what you are learning). */
+    /** The language being learned right now (the library, search and words shown are this one's). */
     val learningLanguage = string("learning_language", "it")
+    /** Every language being learned, comma-separated: the flags in the quick-switch bar. */
+    val learningLanguages = string("learning_languages", "")
+    /** The first-launch language choice has been made. */
+    val onboarded = bool("onboarded", false)
+
+    fun learningList(): List<String> =
+        learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }
+
+    fun setLearningList(codes: List<String>) {
+        val list = codes.distinct().ifEmpty { listOf(learningLanguage.value) }
+        learningLanguages.set(list.joinToString(","))
+        if (learningLanguage.value !in list) learningLanguage.set(list.first())
+    }
+
+    fun switchLanguage(code: String) {
+        if (code !in learningList()) setLearningList(learningList() + code)
+        learningLanguage.set(code)
+    }
     /** Language translations are shown in. */
     val nativeLanguage = string("native_language", "en")
     val modelId = string("whisper_model", SpeechModel.BASE.id)
@@ -147,8 +174,17 @@ class Settings(context: Context) {
     /** Network mode: true = Wi-Fi only (downloads, streaming, models); false = Wi-Fi and mobile data. */
     val wifiOnly = bool("wifi_only", true)
     val chargingOnly = bool("charging_only", false)
-    /** Verbose ONNX Runtime / QNN messages in the NPU log (see NpuDebug). */
-    val npuVerboseLog = bool("npu_verbose_log", true)
+    /** How often feeds are checked for new episodes, in hours; 0 = only by hand. */
+    val refreshHours = int("refresh_hours", 6)
+    /** Downloaded episodes are deleted this many days after downloading; 0 = keep. */
+    val deleteAfterDays = int("delete_after_days", 0)
+    /** Notification when a favourite podcast has a new episode. */
+    val notifyFavourites = bool("notify_favourites", true)
+
+    /** "system", "light" or "dark". */
+    val theme = string("theme", "system")
+    /** Colours from the wallpaper (Android 12+). */
+    val dynamicColor = bool("dynamic_color", true)
 
     val showOriginal = bool("show_original", true)
     val showTranslation = bool("show_translation", true)

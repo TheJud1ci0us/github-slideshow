@@ -32,6 +32,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     override suspend fun doWork(): Result {
         val added = applicationContext.graph.repo.refreshAll()
         Log.i(TAG, "Feed refresh found $added new episodes")
+        runCatching { applicationContext.graph.repo.deleteOldDownloads() }
         return Result.success()
     }
 }

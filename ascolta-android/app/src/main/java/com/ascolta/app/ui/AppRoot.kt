@@ -54,10 +54,16 @@ object Routes {
 
 @Composable
 fun AscoltaRoot() {
+    // First launch: choose the languages being learned.
+    val onboarded by LocalContext.current.graph.settings.onboarded.flow.collectAsState()
+    if (!onboarded) {
+        OnboardingScreen(onDone = {})
+        return
+    }
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route ?: ""
-    val inPlayer = route.startsWith("player")
+    val inPlayer = route.startsWith("player") || route == "review"
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     LaunchedEffect(Unit) {
@@ -101,7 +107,8 @@ fun AscoltaRoot() {
                     openPodcast = { nav.navigate(Routes.podcast(it)) },
                 )
             }
-            composable("words") { WordsScreen() }
+            composable("words") { WordsScreen(openReview = { nav.navigate("review") }) }
+            composable("review") { ReviewScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { SettingsScreen() }
             composable(
                 "podcast/{id}",

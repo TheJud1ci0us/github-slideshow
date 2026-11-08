@@ -107,6 +107,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_discover)) }) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            // Search the directory of the language being learned (its country's store).
+            LanguageBar(Modifier.padding(bottom = 6.dp))
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },

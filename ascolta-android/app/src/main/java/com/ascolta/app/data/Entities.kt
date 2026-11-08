@@ -1,5 +1,6 @@
 package com.ascolta.app.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -18,6 +19,10 @@ data class PodcastEntity(
     val autoDownload: Boolean = true,
     val subscribedAt: Long,
     val lastRefreshedAt: Long = 0,
+    /** Which language's library this podcast is in (a learning language). */
+    val libraryLanguage: String? = null,
+    /** Favourites are listed first and notify about new episodes. */
+    @ColumnInfo(defaultValue = "0") val favourite: Boolean = false,
 )
 
 object DownloadState {
@@ -73,6 +78,8 @@ data class EpisodeEntity(
     val playbackPositionMs: Long = 0,
     val lastPlayedAt: Long = 0,
     val error: String? = null,
+    /** When the audio was downloaded (for deleting old downloads). */
+    @ColumnInfo(defaultValue = "0") val downloadedAt: Long = 0,
 )
 
 data class PodcastWithStats(
@@ -92,4 +99,11 @@ data class VocabEntity(
     val episodeId: Long?,
     val episodeTitle: String?,
     val createdAt: Long,
+    // Flashcard scheduling (spaced repetition): next review time, interval and ease.
+    @ColumnInfo(defaultValue = "0") val dueAt: Long = 0,
+    @ColumnInfo(defaultValue = "0") val intervalDays: Float = 0f,
+    @ColumnInfo(defaultValue = "2.5") val ease: Float = 2.5f,
+    @ColumnInfo(defaultValue = "0") val reps: Int = 0,
+    /** A whole sentence saved as a card (rather than a single word). */
+    @ColumnInfo(defaultValue = "0") val isSentence: Boolean = false,
 )
