@@ -172,14 +172,13 @@
     <string name="skip_title">Skip music and silence</string>
     <string name="skip_text">Finds the speech first so only the talking is transcribed. Always on for Parakeet.</string>
     <string name="speed_test">Run speed test</string>
-    <string name="speed_test_text">Times one minute of a downloaded episode with the settings above.</string>
+    <string name="speed_test_text">Transcribes the same 30-second Italian recording every time, so you can compare models and settings.</string>
     <string name="speed_test_running">Running speed test…</string>
-    <string name="speed_test_result">%1$s: one minute of audio in %2$s s (%3$s× real time).</string>
+    <string name="speed_test_result">%1$s: 30 s of audio in %2$s s (%3$s× real time).</string>
     <string name="speed_test_details">Model loaded in %1$s s · %2$d cores · flash %3$s · skip music/silence %4$s\nCPU: %5$s</string>
     <string name="speed_test_on">on</string>
     <string name="speed_test_off">off</string>
     <string name="speed_test_need_model">Download %1$s first.</string>
-    <string name="speed_test_need_episode">Download an episode first: the test uses one minute of it.</string>
     <string name="speed_test_no_audio">Couldn\'t read audio from the episode.</string>
     <string name="speed_test_failed">Speed test failed: %1$s</string>
 
@@ -224,4 +223,6 @@
     <string name="status_reading_audio">Reading audio</string>
     <string name="status_transcribing">Transcribing</string>
     <string name="error_model_language">%1$s doesn\'t support %2$s. Choose a Whisper model in Settings.</string>
+    <string name="speed_test_accuracy">Accuracy: %1$d%% of words correct</string>
+    <string name="speed_test_credit" translatable="false">Sample: Luigi Pirandello, “Novelle per un anno”, read by a LibriVox volunteer (Multilingual LibriSpeech, CC BY 4.0).</string>
 </resources>

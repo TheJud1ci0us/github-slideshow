@@ -28,6 +28,12 @@ class AscoltaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.init(this)
+        // Write crashes to the in-app log (Settings → Diagnostics → View log) before the app closes.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { AppLog.w("Crash", "on ${thread.name}: ${error.stackTraceToString().take(4000)}") }
+            previous?.uncaughtException(thread, error)
+        }
         graph = AppGraph(this)
         Notifications.createChannels(this)
         WorkScheduler.schedulePeriodicRefresh(this)

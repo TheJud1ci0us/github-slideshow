@@ -109,11 +109,15 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val isCurrent = player.episodeId == episodeId
     val ep = episode
 
-    // Reload the transcript as transcription progresses (it is saved after every chunk).
+    // Reload the transcript every time new sentences are saved, so text appears in real time.
     var transcript by remember { mutableStateOf<Transcript?>(null) }
-    val progressStep = ((ep?.transcriptProgress ?: 0f) * 50).toInt()
-    LaunchedEffect(episodeId, ep?.transcriptState, progressStep) {
+    LaunchedEffect(episodeId, ep?.transcriptState) {
         transcript = graph.repo.loadTranscript(episodeId)
+    }
+    LaunchedEffect(episodeId) {
+        graph.transcripts.updates.collect { id ->
+            if (id == episodeId) transcript = graph.repo.loadTranscript(episodeId)
+        }
     }
     val segments = transcript?.segments.orEmpty()
 

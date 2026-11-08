@@ -364,6 +364,7 @@ private fun SpeedTestRow() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var running by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<SpeedResult?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -374,7 +375,7 @@ private fun SpeedTestRow() {
                 running = true
                 error = null
                 scope.launch {
-                    runCatching { SpeedTest.run(context) }
+                    runCatching { SpeedTest.run(context) { s -> scope.launch { status = s } } }
                         .onSuccess { result = it }
                         .onFailure { error = context.getString(R.string.speed_test_failed, it.message ?: it.javaClass.simpleName) }
                     running = false
@@ -382,7 +383,10 @@ private fun SpeedTestRow() {
             },
         ) { Text(stringResource(if (running) R.string.speed_test_running else R.string.speed_test)) }
         Hint(stringResource(R.string.speed_test_text), Modifier.padding(top = 4.dp))
-        if (running) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+        if (running) {
+            status?.let { Hint(it, Modifier.padding(top = 8.dp)) }
+            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
+        }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         result?.let { r ->
             val on = stringResource(R.string.speed_test_on)
@@ -398,6 +402,10 @@ private fun SpeedTestRow() {
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Text(
+                        stringResource(R.string.speed_test_accuracy, (r.accuracy * 100).toInt()),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         stringResource(
@@ -411,13 +419,14 @@ private fun SpeedTestRow() {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    r.firstSentence?.let {
+                    if (r.transcript.isNotBlank()) {
                         Spacer(Modifier.height(4.dp))
-                        Text("“$it”", style = MaterialTheme.typography.bodySmall)
+                        Text("“${r.transcript}”", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         }
+        Hint(stringResource(R.string.speed_test_credit), Modifier.padding(top = 8.dp))
     }
 }
 

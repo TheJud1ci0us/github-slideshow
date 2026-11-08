@@ -24,6 +24,8 @@ import com.ascolta.app.whisper.SpeechEngine
 import com.ascolta.app.whisper.SpeechModel
 import com.ascolta.app.whisper.WhisperLib
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -185,78 +187,110 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             vadModelPath = if (useVad) graph.models.vadFile().path else null,
         )
 
-        // Resume only a partial transcript made with the same model and language.
-        var transcript = existing?.takeIf {
+        // Resume only a partial transcript made with the same model and language. Sentences
+        // after the last finished block (from an interrupted run) are dropped: that audio is
+        // transcribed again.
+        val initial = existing?.takeIf {
             it.source == Transcript.SOURCE_WHISPER && it.language == language && (it.model == null || it.model == model.id)
-        } ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
+        }?.let { t -> t.copy(segments = t.segments.filter { it.startMs < t.processedMs }) }
+            ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
 
         val decoder = AudioDecoder(path)
         val totalMs = decoder.durationMs().coerceAtLeast(1)
-        AppLog.i(TAG, "Audio ${totalMs / 1000}s, resuming at ${transcript.processedMs / 1000}s; " +
+        AppLog.i(TAG, "Audio ${totalMs / 1000}s, resuming at ${initial.processedMs / 1000}s; " +
             "model=${model.id} threads=${options.threads} flash=${options.flashAttention} skipNonSpeech=$useVad")
 
         val canTranslate = prepareTranslation(language, target)
 
-        update(applicationContext.getString(R.string.status_loading_model), transcript.processedMs.toFloat() / totalMs)
+        update(applicationContext.getString(R.string.status_loading_model), initial.processedMs.toFloat() / totalMs)
         WhisperLib.ensureBackends(applicationContext.applicationInfo.nativeLibraryDir)
         AppLog.i(TAG, "CPU: ${runCatching { WhisperLib.nativeCpuVariant() }.getOrDefault("?")}")
         var stopped = false
         val started = System.currentTimeMillis()
         val transcribing = applicationContext.getString(R.string.status_transcribing)
+        val latest = MutableStateFlow(initial)
 
         SpeechEngine.load(model, graph.models, options).use { engine ->
             val job = coroutineContext[Job]
             val abortHandle = job?.invokeOnCompletion { engine.abort() }
             try {
-                update(applicationContext.getString(R.string.status_reading_audio), transcript.processedMs.toFloat() / totalMs)
-                decoder.decode(
-                    chunkSamples = CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
-                    skipSamples = transcript.processedMs * 16,
-                    firstChunkSamples = FIRST_CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
-                ) { samples, startSample ->
-                    if (isStopped) {
-                        stopped = true
-                        return@decode false
-                    }
-                    val chunkStartMs = startSample / 16
-                    val chunkMs = samples.size / 16L
-                    val prompt = transcript.segments.takeLast(3).joinToString(" ") { it.text }.takeLast(200)
-                    update(transcribing, chunkStartMs.toFloat() / totalMs)
-
-                    val chunkStarted = System.currentTimeMillis()
-                    val result = engine.transcribe(samples, language, prompt) { percent ->
-                        update(transcribing, (chunkStartMs + chunkMs * percent / 100f) / totalMs)
-                    }
-                    if (result == null) {
-                        stopped = true
-                        return@decode false
-                    }
-                    val took = System.currentTimeMillis() - chunkStarted
-                    AppLog.i(
-                        TAG,
-                        "Chunk at ${chunkStartMs / 1000}s (${chunkMs / 1000}s audio) took ${took / 1000.0}s " +
-                            "(${"%.1f".format(java.util.Locale.US, chunkMs.toFloat() / took.coerceAtLeast(1))}x real time), ${result.size} segments",
-                    )
-
-                    var newSegments = result
-                        .map { Segment(it.startMs + chunkStartMs, it.endMs + chunkStartMs, it.text.trim()) }
-                        .filter { it.text.isNotEmpty() && !isHallucination(it.text) }
-                    if (canTranslate) {
-                        newSegments = newSegments.map { s ->
-                            s.copy(translation = runCatching {
-                                withTimeoutOrNull(15_000) { graph.translation.translate(s.text, language, target) }
-                            }.getOrNull())
+                coroutineScope {
+                    // Sentences arrive here the moment the engine recognises them; this writer
+                    // translates and saves them while recognition carries on, so the text shows
+                    // up in real time instead of once per block.
+                    val events = Channel<WriterEvent>(Channel.UNLIMITED)
+                    val writer = launch(Dispatchers.Default) {
+                        var t = initial
+                        var lastSave = 0L
+                        for (event in events) {
+                            when (event) {
+                                is WriterEvent.Sentence -> {
+                                    val translation = if (canTranslate) runCatching {
+                                        withTimeoutOrNull(15_000) { graph.translation.translate(event.segment.text, language, target) }
+                                    }.getOrNull() else null
+                                    t = t.copy(
+                                        segments = t.segments + event.segment.copy(translation = translation),
+                                        model = model.id,
+                                        translationLanguage = if (canTranslate) target else t.translationLanguage,
+                                    )
+                                }
+                                is WriterEvent.BlockDone -> t = t.copy(processedMs = event.processedMs)
+                            }
+                            latest.value = t
+                            val now = System.currentTimeMillis()
+                            if (event is WriterEvent.BlockDone || now - lastSave >= 700) {
+                                graph.transcripts.save(episodeId, t)
+                                lastSave = now
+                            }
                         }
+                        graph.transcripts.save(episodeId, t)
                     }
-                    transcript = transcript.copy(
-                        segments = transcript.segments + newSegments,
-                        processedMs = chunkStartMs + chunkMs,
-                        model = model.id,
-                        translationLanguage = if (canTranslate) target else transcript.translationLanguage,
-                    )
-                    graph.transcripts.save(episodeId, transcript)
-                    update(transcribing, transcript.processedMs.toFloat() / totalMs)
-                    true
+
+                    update(applicationContext.getString(R.string.status_reading_audio), initial.processedMs.toFloat() / totalMs)
+                    decoder.decode(
+                        chunkSamples = CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
+                        skipSamples = initial.processedMs * 16,
+                        firstChunkSamples = FIRST_CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
+                    ) { samples, startSample ->
+                        if (isStopped) {
+                            stopped = true
+                            return@decode false
+                        }
+                        val chunkStartMs = startSample / 16
+                        val chunkMs = samples.size / 16L
+                        val prompt = latest.value.segments.takeLast(3).joinToString(" ") { it.text }.takeLast(200)
+                        update(transcribing, chunkStartMs.toFloat() / totalMs)
+
+                        val chunkStarted = System.currentTimeMillis()
+                        var count = 0
+                        val finished = engine.transcribe(
+                            samples, language, prompt,
+                            onProgress = { percent -> update(transcribing, (chunkStartMs + chunkMs * percent / 100f) / totalMs) },
+                            onSegment = { seg ->
+                                val text = seg.text.trim()
+                                if (text.isNotEmpty() && !isHallucination(text)) {
+                                    count++
+                                    events.trySend(WriterEvent.Sentence(Segment(seg.startMs + chunkStartMs, seg.endMs + chunkStartMs, text)))
+                                    update(transcribing, maxOf(status.value.progress, (chunkStartMs + seg.endMs).toFloat() / totalMs))
+                                }
+                            },
+                        )
+                        if (!finished) {
+                            stopped = true
+                            return@decode false
+                        }
+                        val took = System.currentTimeMillis() - chunkStarted
+                        AppLog.i(
+                            TAG,
+                            "Block at ${chunkStartMs / 1000}s (${chunkMs / 1000}s audio) took ${took / 1000.0}s " +
+                                "(${"%.1f".format(java.util.Locale.US, chunkMs.toFloat() / took.coerceAtLeast(1))}x real time), $count sentences",
+                        )
+                        events.trySend(WriterEvent.BlockDone(chunkStartMs + chunkMs))
+                        update(transcribing, (chunkStartMs + chunkMs).toFloat() / totalMs)
+                        true
+                    }
+                    events.close()
+                    writer.join()
                 }
             } finally {
                 abortHandle?.dispose()
@@ -265,7 +299,13 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         if (stopped) return null
         val seconds = (System.currentTimeMillis() - started) / 1000
         AppLog.i(TAG, "Transcription finished in ${seconds}s for ${totalMs / 1000}s of audio")
+        val transcript = latest.value
         return transcript.copy(complete = true, processedMs = maxOf(transcript.processedMs, totalMs))
+    }
+
+    private sealed interface WriterEvent {
+        data class Sentence(val segment: Segment) : WriterEvent
+        data class BlockDone(val processedMs: Long) : WriterEvent
     }
 
     private suspend fun ensureModel(model: SpeechModel) {
@@ -337,8 +377,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     companion object {
         private const val TAG = "Transcribe"
         private const val NOTIFICATION_ID = 901
-        private const val FIRST_CHUNK_SECONDS = 45
-        private const val CHUNK_SECONDS = 5 * 60
+        private const val FIRST_CHUNK_SECONDS = 30
+        private const val CHUNK_SECONDS = 2 * 60
         private const val TRANSLATION_DOWNLOAD_TIMEOUT_MS = 3 * 60_000L
 
 

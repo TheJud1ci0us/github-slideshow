@@ -135,14 +135,13 @@
     <string name="skip_title">Musik und Stille überspringen</string>
     <string name="skip_text">Erkennt zuerst die Sprache, damit nur Gesprochenes transkribiert wird. Bei Parakeet immer aktiv.</string>
     <string name="speed_test">Geschwindigkeitstest starten</string>
-    <string name="speed_test_text">Misst eine Minute einer heruntergeladenen Folge mit den obigen Einstellungen.</string>
+    <string name="speed_test_text">Transkribiert jedes Mal dieselbe 30-sekündige italienische Aufnahme, damit du Modelle und Einstellungen vergleichen kannst.</string>
     <string name="speed_test_running">Geschwindigkeitstest läuft…</string>
-    <string name="speed_test_result">%1$s: eine Minute Audio in %2$s s (%3$s× Echtzeit).</string>
+    <string name="speed_test_result">%1$s: 30 s Audio in %2$s s (%3$s× Echtzeit).</string>
     <string name="speed_test_details">Modell geladen in %1$s s · %2$d Kerne · Flash %3$s · Musik/Stille überspringen %4$s\nCPU: %5$s</string>
     <string name="speed_test_on">an</string>
     <string name="speed_test_off">aus</string>
     <string name="speed_test_need_model">Lade zuerst %1$s herunter.</string>
-    <string name="speed_test_need_episode">Lade zuerst eine Folge herunter: Der Test verwendet eine Minute davon.</string>
     <string name="speed_test_no_audio">Audio der Folge konnte nicht gelesen werden.</string>
     <string name="speed_test_failed">Geschwindigkeitstest fehlgeschlagen: %1$s</string>
     <string name="section_auto">Automatische Downloads</string>
@@ -198,4 +197,5 @@
         <item quantity="one">%d Folge</item>
         <item quantity="other">%d Folgen</item>
     </plurals>
+    <string name="speed_test_accuracy">Genauigkeit: %1$d %% der Wörter richtig</string>
 </resources>

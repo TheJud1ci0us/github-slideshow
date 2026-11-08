@@ -139,7 +139,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 }
             }
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(results, key = { it.feedUrl }) { r ->
+                items(results.distinctBy { it.feedUrl }, key = { it.feedUrl }) { r ->
                     val isSubscribed = r.feedUrl in subscribed
                     ListItem(
                         headlineContent = { Text(r.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },

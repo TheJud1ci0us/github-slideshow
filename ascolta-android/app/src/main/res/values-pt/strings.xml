@@ -135,14 +135,13 @@
     <string name="skip_title">Pular música e silêncio</string>
     <string name="skip_text">Detecta a fala primeiro para transcrever só o que é falado. Sempre ativo no Parakeet.</string>
     <string name="speed_test">Fazer teste de velocidade</string>
-    <string name="speed_test_text">Cronometra um minuto de um episódio baixado com as configurações acima.</string>
+    <string name="speed_test_text">Transcreve sempre a mesma gravação em italiano de 30 segundos, para comparar modelos e configurações.</string>
     <string name="speed_test_running">Teste de velocidade em andamento…</string>
-    <string name="speed_test_result">%1$s: um minuto de áudio em %2$s s (%3$s× o tempo real).</string>
+    <string name="speed_test_result">%1$s: 30 s de áudio em %2$s s (%3$s× o tempo real).</string>
     <string name="speed_test_details">Modelo carregado em %1$s s · %2$d núcleos · flash %3$s · pular música/silêncio %4$s\nCPU: %5$s</string>
     <string name="speed_test_on">sim</string>
     <string name="speed_test_off">não</string>
     <string name="speed_test_need_model">Baixe %1$s primeiro.</string>
-    <string name="speed_test_need_episode">Baixe um episódio primeiro: o teste usa um minuto dele.</string>
     <string name="speed_test_no_audio">Não foi possível ler o áudio do episódio.</string>
     <string name="speed_test_failed">Falha no teste de velocidade: %1$s</string>
     <string name="section_auto">Downloads automáticos</string>
@@ -202,4 +201,5 @@
         <item quantity="many">%d episódios</item>
         <item quantity="other">%d episódios</item>
     </plurals>
+    <string name="speed_test_accuracy">Precisão: %1$d%% das palavras corretas</string>
 </resources>

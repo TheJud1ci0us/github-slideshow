@@ -19,10 +19,16 @@ data class EngineOptions(
 /** A loaded speech recognition model. Not thread-safe: one transcription at a time. */
 interface SpeechEngine : Closeable {
     /**
-     * Transcribes 16 kHz mono audio. Times in the result are relative to [samples].
-     * Returns null if [abort] was called.
+     * Transcribes 16 kHz mono audio. Each sentence is passed to [onSegment] as soon as it
+     * is recognised (times relative to [samples]). Returns false if [abort] was called.
      */
-    fun transcribe(samples: FloatArray, language: String, prompt: String?, onProgress: (Int) -> Unit): List<WhisperSegment>?
+    fun transcribe(
+        samples: FloatArray,
+        language: String,
+        prompt: String?,
+        onProgress: (Int) -> Unit,
+        onSegment: (WhisperSegment) -> Unit,
+    ): Boolean
 
     /** Can be called from any thread to stop the running transcription early. */
     fun abort()
@@ -48,18 +54,24 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
         language: String,
         prompt: String?,
         onProgress: (Int) -> Unit,
-    ): List<WhisperSegment>? {
+        onSegment: (WhisperSegment) -> Unit,
+    ): Boolean {
         check(handle != 0L) { "Model already released" }
-        val segments = WhisperLib.nativeTranscribe(
-            handle, samples, language, options.threads, prompt,
-            ProgressListener { onProgress(it) }, options.vadModelPath,
-        )?.toList() ?: return null
-        val vad = options.vadModelPath ?: return segments
         // whisper.cpp maps times back from the speech-only audio only approximately; a
         // sentence after a music break can appear to start during the music. Snap each
         // sentence to the stretch of speech it belongs to.
-        val speech = WhisperLib.nativeDetectSpeech(vad, samples, options.threads) ?: return segments
-        return SpeechAlignment.alignToSpeech(segments, SpeechAlignment.pairs(speech))
+        val blocks = options.vadModelPath
+            ?.let { WhisperLib.nativeDetectSpeech(it, samples, options.threads) }
+            ?.let { SpeechAlignment.speechBlocks(SpeechAlignment.pairs(it)) }
+            .orEmpty()
+        val listener = object : TranscribeListener {
+            override fun onProgress(percent: Int) = onProgress(percent)
+            override fun onSegment(startMs: Long, endMs: Long, text: String) =
+                onSegment(SpeechAlignment.alignSegment(WhisperSegment(startMs, endMs, text), blocks))
+        }
+        return WhisperLib.nativeTranscribe(
+            handle, samples, language, options.threads, prompt, listener, options.vadModelPath,
+        ) != null
     }
 
     override fun abort() {
@@ -106,7 +118,8 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
         language: String,
         prompt: String?,
         onProgress: (Int) -> Unit,
-    ): List<WhisperSegment>? {
+        onSegment: (WhisperSegment) -> Unit,
+    ): Boolean {
         aborted = false
         val vad = options.vadModelPath
             ?: error("Parakeet needs the voice-activity model")
@@ -114,9 +127,8 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
             ?.let { SpeechAlignment.pairs(it) }
             ?: listOf(0L to samples.size / 16L)
         val pieces = SpeechAlignment.splitLong(speech, MAX_PIECE_MS)
-        val out = mutableListOf<WhisperSegment>()
         pieces.forEachIndexed { i, (startMs, endMs) ->
-            if (aborted) return null
+            if (aborted) return false
             onProgress(i * 100 / pieces.size.coerceAtLeast(1))
             val from = (startMs * 16).toInt().coerceIn(0, samples.size)
             val to = (endMs * 16).toInt().coerceIn(from, samples.size)
@@ -126,15 +138,15 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
                 stream.acceptWaveform(samples.copyOfRange(from, to), 16_000)
                 recognizer.decode(stream)
                 val result = recognizer.getResult(stream)
-                out += SpeechAlignment.sentencesFromTokens(
+                SpeechAlignment.sentencesFromTokens(
                     result.tokens.toList(), result.timestamps.toList(), startMs, endMs, result.text,
-                )
+                ).forEach(onSegment)
             } finally {
                 stream.release()
             }
         }
         onProgress(100)
-        return if (aborted) null else out
+        return !aborted
     }
 
     override fun abort() {
@@ -164,19 +176,27 @@ object SpeechAlignment {
         speech: List<Pair<Long, Long>>,
         maxGapMs: Long = 1_500,
     ): List<WhisperSegment> {
-        if (speech.isEmpty()) return segments
+        val blocks = speechBlocks(speech, maxGapMs)
+        return segments.map { alignSegment(it, blocks) }
+    }
+
+    /** Merges speech regions separated by pauses shorter than [maxGapMs]. */
+    fun speechBlocks(speech: List<Pair<Long, Long>>, maxGapMs: Long = 1_500): List<Pair<Long, Long>> {
         val blocks = mutableListOf<Pair<Long, Long>>()
         for ((s, e) in speech.sortedBy { it.first }) {
             val last = blocks.lastOrNull()
             if (last != null && s - last.second <= maxGapMs) blocks[blocks.lastIndex] = last.first to maxOf(last.second, e)
             else blocks += s to e
         }
-        return segments.map { seg ->
-            val best = blocks.maxByOrNull { (s, e) -> minOf(e, seg.endMs) - maxOf(s, seg.startMs) } ?: return@map seg
-            val overlap = minOf(best.second, seg.endMs) - maxOf(best.first, seg.startMs)
-            if (overlap <= 0) seg
-            else seg.copy(startMs = maxOf(seg.startMs, best.first), endMs = minOf(seg.endMs, best.second))
-        }
+        return blocks
+    }
+
+    /** Moves a segment into the speech block it overlaps most. */
+    fun alignSegment(seg: WhisperSegment, blocks: List<Pair<Long, Long>>): WhisperSegment {
+        val best = blocks.maxByOrNull { (s, e) -> minOf(e, seg.endMs) - maxOf(s, seg.startMs) } ?: return seg
+        val overlap = minOf(best.second, seg.endMs) - maxOf(best.first, seg.startMs)
+        return if (overlap <= 0) seg
+        else seg.copy(startMs = maxOf(seg.startMs, best.first), endMs = minOf(seg.endMs, best.second))
     }
 
     /** Splits regions longer than [maxMs] into roughly equal parts. */

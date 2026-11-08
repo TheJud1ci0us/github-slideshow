@@ -54,7 +54,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
                 artworkUrl = o.optString("artworkUrl600").ifBlank { o.optString("artworkUrl100") }.ifBlank { null },
                 genre = o.optString("primaryGenreName").takeIf { it.isNotBlank() },
             )
-        }
+        }.distinctBy { it.feedUrl } // Apple sometimes lists the same show twice
     }
 
     /**

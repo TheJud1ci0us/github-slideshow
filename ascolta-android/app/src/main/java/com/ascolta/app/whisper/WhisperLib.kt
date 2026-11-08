@@ -3,8 +3,10 @@ package com.ascolta.app.whisper
 /** One recognised stretch of speech; times are relative to the audio passed in. */
 data class WhisperSegment(val startMs: Long, val endMs: Long, val text: String)
 
-fun interface ProgressListener {
+/** Receives progress and each sentence as soon as whisper.cpp has decoded it. */
+interface TranscribeListener {
     fun onProgress(percent: Int)
+    fun onSegment(startMs: Long, endMs: Long, text: String)
 }
 
 /** Raw JNI bindings to whisper.cpp (see app/src/main/cpp/whisper_jni.cpp). */
@@ -26,7 +28,7 @@ object WhisperLib {
         language: String,
         threads: Int,
         prompt: String?,
-        listener: ProgressListener?,
+        listener: TranscribeListener?,
         vadModelPath: String?,
     ): Array<WhisperSegment>?
     /** Returns [start0, end0, start1, end1, …] in ms of the parts that contain speech. */

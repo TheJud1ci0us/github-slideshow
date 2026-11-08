@@ -21,19 +21,39 @@ struct Session {
     std::atomic<bool> abort{false};
 };
 
-struct ProgressData {
+struct ListenerData {
     JNIEnv *env;
     jobject listener;
     jmethodID onProgress;
+    jmethodID onSegment;
 };
 
 std::once_flag backendsLoaded;
 
+jstring utf8String(JNIEnv *env, const char *text);
+
 void progressCallback(whisper_context *, whisper_state *, int progress, void *userData) {
-    auto *data = static_cast<ProgressData *>(userData);
+    auto *data = static_cast<ListenerData *>(userData);
     if (data == nullptr || data->listener == nullptr) return;
     data->env->CallVoidMethod(data->listener, data->onProgress, (jint) progress);
     if (data->env->ExceptionCheck()) data->env->ExceptionClear();
+}
+
+/** Called by whisper.cpp as soon as new sentences are decoded, so they can be shown right away. */
+void newSegmentCallback(whisper_context *, whisper_state *state, int nNew, void *userData) {
+    auto *data = static_cast<ListenerData *>(userData);
+    if (data == nullptr || data->listener == nullptr || data->onSegment == nullptr) return;
+    JNIEnv *env = data->env;
+    const int n = whisper_full_n_segments_from_state(state);
+    for (int i = n - nNew; i < n; i++) {
+        if (i < 0) continue;
+        jlong t0 = (jlong) whisper_full_get_segment_t0_from_state(state, i) * 10; // centiseconds -> ms
+        jlong t1 = (jlong) whisper_full_get_segment_t1_from_state(state, i) * 10;
+        jstring text = utf8String(env, whisper_full_get_segment_text_from_state(state, i));
+        env->CallVoidMethod(data->listener, data->onSegment, t0, t1, text);
+        env->DeleteLocalRef(text);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
 }
 
 bool abortCallback(void *userData) {
@@ -187,13 +207,16 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
         params.vad_params = vadParams();
     }
 
-    ProgressData progress{env, listener, nullptr};
+    ListenerData callbacks{env, listener, nullptr, nullptr};
     if (listener != nullptr) {
         jclass cls = env->GetObjectClass(listener);
-        progress.onProgress = env->GetMethodID(cls, "onProgress", "(I)V");
+        callbacks.onProgress = env->GetMethodID(cls, "onProgress", "(I)V");
+        callbacks.onSegment = env->GetMethodID(cls, "onSegment", "(JJLjava/lang/String;)V");
         env->DeleteLocalRef(cls);
         params.progress_callback = progressCallback;
-        params.progress_callback_user_data = &progress;
+        params.progress_callback_user_data = &callbacks;
+        params.new_segment_callback = newSegmentCallback;
+        params.new_segment_callback_user_data = &callbacks;
     }
     params.abort_callback = abortCallback;
     params.abort_callback_user_data = session;

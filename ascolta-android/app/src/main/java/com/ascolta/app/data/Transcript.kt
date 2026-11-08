@@ -1,6 +1,8 @@
 package com.ascolta.app.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -53,6 +55,9 @@ fun List<Segment>.indexAt(positionMs: Long): Int {
 class TranscriptStore(private val dir: File) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Emits an episode id every time its transcript is saved, so screens can refresh at once. */
+    val updates = MutableSharedFlow<Long>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
     private fun file(episodeId: Long) = File(dir, "$episodeId.json")
 
     suspend fun load(episodeId: Long): Transcript? = withContext(Dispatchers.IO) {
@@ -66,6 +71,7 @@ class TranscriptStore(private val dir: File) {
         val tmp = File(dir, "$episodeId.json.tmp")
         tmp.writeText(json.encodeToString(Transcript.serializer(), transcript))
         tmp.renameTo(file(episodeId))
+        updates.tryEmit(episodeId)
     }
 
     fun delete(episodeId: Long) {

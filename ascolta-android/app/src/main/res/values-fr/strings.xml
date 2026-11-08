@@ -135,14 +135,13 @@
     <string name="skip_title">Ignorer la musique et les silences</string>
     <string name="skip_text">Détecte d\'abord la parole pour ne transcrire que les passages parlés. Toujours actif pour Parakeet.</string>
     <string name="speed_test">Lancer le test de vitesse</string>
-    <string name="speed_test_text">Chronomètre une minute d\'un épisode téléchargé avec les réglages ci-dessus.</string>
+    <string name="speed_test_text">Transcrit à chaque fois le même enregistrement italien de 30 secondes, pour comparer modèles et réglages.</string>
     <string name="speed_test_running">Test de vitesse en cours…</string>
-    <string name="speed_test_result">%1$s : une minute d\'audio en %2$s s (%3$s× le temps réel).</string>
+    <string name="speed_test_result">%1$s : 30 s d\'audio en %2$s s (%3$s× le temps réel).</string>
     <string name="speed_test_details">Modèle chargé en %1$s s · %2$d cœurs · flash %3$s · ignorer musique/silence %4$s\nProcesseur : %5$s</string>
     <string name="speed_test_on">oui</string>
     <string name="speed_test_off">non</string>
     <string name="speed_test_need_model">Téléchargez d\'abord %1$s.</string>
-    <string name="speed_test_need_episode">Téléchargez d\'abord un épisode : le test en utilise une minute.</string>
     <string name="speed_test_no_audio">Impossible de lire l\'audio de l\'épisode.</string>
     <string name="speed_test_failed">Échec du test de vitesse : %1$s</string>
     <string name="section_auto">Téléchargements automatiques</string>
@@ -202,4 +201,5 @@
         <item quantity="many">%d épisodes</item>
         <item quantity="other">%d épisodes</item>
     </plurals>
+    <string name="speed_test_accuracy">Précision : %1$d %% de mots corrects</string>
 </resources>
