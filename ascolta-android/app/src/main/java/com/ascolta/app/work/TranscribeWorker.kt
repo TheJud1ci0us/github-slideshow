@@ -88,7 +88,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             leaveQueue()
             val language = episode.transcriptLanguage ?: graph.settings.learningLanguage.value
             val target = graph.settings.nativeLanguage.value
-            AppLog.i(TAG, "Start #$episodeId \"$title\" lang=$language→$target model=${graph.settings.model.id} attempt=$runAttemptCount")
+            AppLog.i(TAG, "Start #$episodeId \"$title\" lang=$language→$target model=${graph.settings.modelFor(language).id} attempt=$runAttemptCount")
             try {
                 coroutineScope {
                     val reporter = launch { reportProgress() }
@@ -192,12 +192,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     ): Transcript? {
         val settings = graph.settings
         // Parakeet only knows 25 European languages: other podcasts use Whisper instead.
-        val model = settings.model.takeIf { it.supports(language) } ?: run {
-            val whisper = listOf(SpeechModel.TURBO, SpeechModel.SMALL, SpeechModel.BASE, SpeechModel.TINY, SpeechModel.CUSTOM)
-                .firstOrNull { it.supports(language) && graph.models.isDownloaded(it) } ?: SpeechModel.BASE
-            AppLog.i(TAG, "${settings.model.label} doesn't support ${languageName(language)}; using ${whisper.label}")
-            whisper
-        }
+        // Each language has its own model (e.g. Parakeet for Italian, SenseVoice for Japanese).
+        val model = settings.modelFor(language)
         ensureModel(model)
 
         // Parakeet always works on detected speech; for Whisper it's the "skip music and silence" option.
@@ -208,7 +204,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
         val vadPath = if (useVad) graph.models.vadFile().path else null
         val threads = settings.effectiveThreads()
-        val options = EngineOptions(threads = threads, flashAttention = settings.flashAttention.value)
+        val options = EngineOptions(
+            threads = threads, flashAttention = settings.flashAttention.value, language = language,
+            gpu = settings.useGpu.value && model.gpu,
+        )
 
         // Resume only a partial transcript made with the same model and language, keeping only
         // sentences inside the stretches already marked as done (an interrupted block is redone).

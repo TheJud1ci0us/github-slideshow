@@ -8,12 +8,15 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 
-enum class Engine { WHISPER, PARAKEET }
+enum class Engine { WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH }
 
 /** A file to download; with [extractTo], it is a zip unpacked into that folder (its top folder stripped). */
 data class ModelFile(val url: String, val name: String, val approxBytes: Long, val extractTo: String? = null)
 
 private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+private const val SENSEVOICE_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main"
+private const val REAZON_HF = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/main"
+private const val KOTOBA_HF = "https://huggingface.co/kotoba-tech/kotoba-whisper-v2.0-ggml/resolve/main"
 private const val PARAKEET_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main"
 
 /** Languages NVIDIA Parakeet TDT 0.6B v3 understands (25 European languages). */
@@ -34,6 +37,8 @@ enum class SpeechModel(
     val files: List<ModelFile>,
     /** null = all languages. */
     val languages: Set<String>? = null,
+    /** Made for the graphics chip (f16 weights the GPU backend supports). */
+    val gpu: Boolean = false,
 ) {
     TINY("tiny", Engine.WHISPER, "Whisper Tiny", 32,
         listOf(ModelFile("$WHISPER_HF/ggml-tiny-q5_1.bin", "ggml-tiny-q5_1.bin", 32_000_000))),
@@ -52,11 +57,46 @@ enum class SpeechModel(
         ),
         languages = PARAKEET_LANGUAGES,
     ),
+    /** Alibaba SenseVoice Small: one pass, very light; best for Japanese, Chinese, Korean. */
+    SENSEVOICE("sensevoice", Engine.SENSEVOICE, "SenseVoice Small", 240,
+        listOf(
+            ModelFile("$SENSEVOICE_HF/tokens.txt", "sensevoice/tokens.txt", 315_894),
+            ModelFile("$SENSEVOICE_HF/model.int8.onnx", "sensevoice/model.int8.onnx", 239_233_841),
+        ),
+        languages = setOf("ja", "zh", "ko", "en"),
+    ),
+    /** ReazonSpeech v2 (Zipformer, 35,000 h of Japanese TV): small, very good on natural speech. */
+    REAZONSPEECH("reazonspeech", Engine.REAZONSPEECH, "ReazonSpeech v2 (Japanese)", 160,
+        listOf(
+            ModelFile("$REAZON_HF/tokens.txt", "reazonspeech/tokens.txt", 45_754),
+            ModelFile("$REAZON_HF/decoder-epoch-99-avg-1.int8.onnx", "reazonspeech/decoder-epoch-99-avg-1.int8.onnx", 2_959_337),
+            ModelFile("$REAZON_HF/joiner-epoch-99-avg-1.int8.onnx", "reazonspeech/joiner-epoch-99-avg-1.int8.onnx", 2_696_970),
+            ModelFile("$REAZON_HF/encoder-epoch-99-avg-1.int8.onnx", "reazonspeech/encoder-epoch-99-avg-1.int8.onnx", 154_670_139),
+        ),
+        languages = setOf("ja"),
+    ),
+    /** Kotoba-Whisper v2: Whisper large-v3 distilled for Japanese (accuracy close to large-v3). */
+    KOTOBA("kotoba-v2", Engine.WHISPER, "Kotoba-Whisper v2 (Japanese)", 538,
+        listOf(ModelFile("$KOTOBA_HF/ggml-kotoba-whisper-v2.0-q5_0.bin", "ggml-kotoba-whisper-v2.0-q5_0.bin", 537_819_875)),
+        languages = setOf("ja"),
+    ),
+    /** Whisper in half precision: the format the graphics chip (GPU) can run. */
+    BASE_GPU("base-f16", Engine.WHISPER, "Whisper Base · GPU", 148,
+        listOf(ModelFile("$WHISPER_HF/ggml-base.bin", "ggml-base.bin", 147_951_465)), gpu = true),
+    SMALL_GPU("small-f16", Engine.WHISPER, "Whisper Small · GPU", 488,
+        listOf(ModelFile("$WHISPER_HF/ggml-small.bin", "ggml-small.bin", 487_601_967)), gpu = true),
     CUSTOM("custom", Engine.WHISPER, "Imported Whisper model", 0, emptyList());
 
     fun supports(language: String) = languages == null || language in languages
 
     companion object {
+        /** A good default for a language: Parakeet for its 25 European languages, SenseVoice for Japanese, Chinese, Korean. */
+        fun recommended(language: String): SpeechModel = when {
+            language in PARAKEET_LANGUAGES -> PARAKEET
+            language in setOf("ja", "zh", "ko") -> SENSEVOICE
+            else -> BASE
+        }
+
         /** The NPU model was removed: anyone who had chosen it gets Parakeet on the CPU. */
         fun byId(id: String): SpeechModel = entries.firstOrNull { it.id == id }
             ?: if (id.startsWith("parakeet")) PARAKEET else BASE

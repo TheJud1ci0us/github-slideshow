@@ -43,6 +43,31 @@ set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 
+# Graphics chip (GPU): ggml's OpenCL backend, with kernels tuned for Qualcomm Adreno. It is
+# built as one more plug-in (libggml-opencl.so) that links against the phone's own OpenCL
+# driver (/vendor/lib64/libOpenCL.so). Khronos' headers and ICD loader are only used to
+# compile and link it; the loader isn't packaged. On a phone without a usable OpenCL driver
+# the plug-in simply doesn't load and everything runs on the CPU.
+include(FetchContent)
+FetchContent_Declare(opencl_headers
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-Headers.git
+    GIT_TAG v2024.10.24
+    GIT_SHALLOW TRUE)
+FetchContent_Declare(opencl_icd_loader
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-ICD-Loader.git
+    GIT_TAG v2024.10.24
+    GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(opencl_headers)
+set(OPENCL_ICD_LOADER_HEADERS_DIR ${opencl_headers_SOURCE_DIR} CACHE PATH "" FORCE)
+set(ENABLE_OPENCL_LAYERINFO OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(opencl_icd_loader)
+set(OpenCL_INCLUDE_DIR ${opencl_headers_SOURCE_DIR} CACHE PATH "" FORCE)
+set(OpenCL_LIBRARY OpenCL CACHE STRING "" FORCE)
+set(GGML_OPENCL ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_USE_ADRENO_KERNELS ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_EMBED_KERNELS ON CACHE BOOL "" FORCE)
+
 add_subdirectory(${WHISPER_SOURCE_DIR} whisper_build)
 
 # whisper.cpp writes the CPU plug-ins to a bin/ folder; move them to where

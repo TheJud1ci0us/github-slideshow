@@ -52,7 +52,11 @@ object SpeedTest {
     suspend fun run(context: Context, onStatus: (String) -> Unit = {}): SpeedResult = withContext(Dispatchers.Default) {
         val graph = context.graph
         val settings = graph.settings
-        val model = settings.model
+        // The model of the language being learned; the bundled recording is Italian.
+        val model = settings.modelFor(settings.learningLanguage.value)
+        if (!model.supports(SAMPLE_LANGUAGE)) {
+            throw IllegalStateException(context.getString(R.string.speed_test_language, model.label))
+        }
         if (!graph.models.isDownloaded(model)) {
             throw IllegalStateException(context.getString(R.string.speed_test_need_model, model.label))
         }
@@ -63,7 +67,10 @@ object SpeedTest {
             graph.models.downloadVad()
         }
         val threads = settings.effectiveThreads()
-        val options = EngineOptions(threads = threads, flashAttention = settings.flashAttention.value)
+        val options = EngineOptions(
+            threads = threads, flashAttention = settings.flashAttention.value, language = SAMPLE_LANGUAGE,
+            gpu = settings.useGpu.value && model.gpu,
+        )
 
         // The decoder reads files, so copy the bundled sample out of the APK once.
         val sampleFile = File(context.cacheDir, SAMPLE_ASSET)

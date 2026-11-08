@@ -21,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.8.0"
+        versionCode = 15
+        versionName = "0.9.0"
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
@@ -78,6 +78,8 @@ android {
             pickFirsts += listOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
         }
         jniLibs {
+            // Only linked against at build time; the phone's own OpenCL driver is used.
+            excludes += listOf("**/libOpenCL.so")
             // Extract native libraries to disk: ggml looks for its CPU-variant
             // plug-ins (libggml-cpu-*.so) in the app's native library folder.
             useLegacyPackaging = true

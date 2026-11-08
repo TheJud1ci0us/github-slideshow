@@ -214,4 +214,27 @@ class Settings(context: Context) {
     val transcriptTextScale = float("transcript_text_scale", 1f)
 
     val model: SpeechModel get() = SpeechModel.byId(modelId.value)
+
+    /** Speech model chosen per language, e.g. "it:parakeet-v3,ja:sensevoice". */
+    val languageModels = string("language_models", "")
+    /** Whisper on the graphics chip (experimental; needs a "· GPU" model). */
+    val useGpu = bool("use_gpu", false)
+
+    /**
+     * The speech model for a language: the one chosen for it, else the general choice if it
+     * understands the language, else the recommended one (Parakeet / SenseVoice / Whisper).
+     */
+    fun modelFor(language: String): SpeechModel {
+        val chosen = languageModels.value.split(',').mapNotNull { it.split(':').takeIf { p -> p.size == 2 } }
+            .firstOrNull { it[0] == language }?.let { SpeechModel.byId(it[1]) }
+        return chosen?.takeIf { it.supports(language) }
+            ?: model.takeIf { it.supports(language) && modelId.value != SpeechModel.BASE.id }
+            ?: SpeechModel.recommended(language)
+    }
+
+    fun setModelFor(language: String, model: SpeechModel) {
+        val map = languageModels.value.split(',').mapNotNull { it.split(':').takeIf { p -> p.size == 2 }?.let { p -> p[0] to p[1] } }
+            .toMap() + (language to model.id)
+        languageModels.set(map.entries.joinToString(",") { "${it.key}:${it.value}" })
+    }
 }

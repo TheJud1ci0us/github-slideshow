@@ -24,6 +24,9 @@
         android:theme="@style/Theme.Ascolta"
         android:usesCleartextTraffic="true">
 
+        <!-- The phone's OpenCL driver, for Whisper on the graphics chip (optional). -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

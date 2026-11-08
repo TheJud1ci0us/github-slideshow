@@ -98,6 +98,7 @@ fun SettingsScreen() {
             runCatching { graph.models.import(uri) }
                 .onSuccess {
                     settings.modelId.set(SpeechModel.CUSTOM.id)
+                    settings.setModelFor(settings.learningLanguage.value, SpeechModel.CUSTOM)
                     refreshKey++
                     Toast.makeText(context, context.getString(R.string.model_imported), Toast.LENGTH_SHORT).show()
                 }
@@ -151,23 +152,18 @@ fun SettingsScreen() {
                 LanguagePicker(stringResource(R.string.translate_into), native) { settings.nativeLanguage.set(it) }
                 TranslationModelRow(learning, native)
             }
-            // A model that can't transcribe the new language is replaced by a Whisper model.
-            LaunchedEffect(learning) {
-                if (!settings.model.supports(learning)) {
-                    val whisper = listOf(SpeechModel.TURBO, SpeechModel.SMALL, SpeechModel.BASE, SpeechModel.TINY)
-                        .firstOrNull { graph.models.isDownloaded(it) } ?: SpeechModel.BASE
-                    settings.modelId.set(whisper.id)
-                }
-            }
-
             HorizontalDivider()
-            Section(stringResource(R.string.section_speech))
+            // Each language has its own speech model; the list is for the language selected above.
+            Section(stringResource(R.string.section_speech_for, flagAndName(learning)))
             Hint(stringResource(R.string.speech_intro))
-            SpeechModel.entries.forEach { model ->
+            val languageModels by settings.languageModels.flow.collectAsState()
+            val current = remember(languageModels, modelId, learning) { settings.modelFor(learning) }
+            // Models for this language first, the others (greyed out) after.
+            SpeechModel.entries.sortedBy { if (it.supports(learning)) 0 else 1 }.forEach { model ->
                 if (model != SpeechModel.CUSTOM || graph.models.isDownloaded(model)) {
                     ModelRow(
-                        model, selected = model.id == modelId, learning = learning, refreshKey = refreshKey,
-                        onSelect = { settings.modelId.set(model.id) }, onChanged = { refreshKey++ },
+                        model, selected = model == current, learning = learning, refreshKey = refreshKey,
+                        onSelect = { settings.setModelFor(learning, model) }, onChanged = { refreshKey++ },
                     )
                 }
             }
@@ -180,6 +176,7 @@ fun SettingsScreen() {
             ThreadsRow(settings.threads)
             SwitchRow(stringResource(R.string.flash_title), stringResource(R.string.flash_text), settings.flashAttention)
             SwitchRow(stringResource(R.string.skip_title), stringResource(R.string.skip_text), settings.skipNonSpeech)
+            SwitchRow(stringResource(R.string.gpu_title), stringResource(R.string.gpu_text), settings.useGpu)
             SpeedTestRow()
 
             HorizontalDivider()
@@ -428,6 +425,10 @@ private fun SpeechModel.descriptionRes() = when (this) {
     SpeechModel.SMALL -> R.string.model_desc_small
     SpeechModel.TURBO -> R.string.model_desc_turbo
     SpeechModel.PARAKEET -> R.string.model_desc_parakeet
+    SpeechModel.SENSEVOICE -> R.string.model_desc_sensevoice
+    SpeechModel.REAZONSPEECH -> R.string.model_desc_reazonspeech
+    SpeechModel.KOTOBA -> R.string.model_desc_kotoba
+    SpeechModel.BASE_GPU, SpeechModel.SMALL_GPU -> R.string.model_desc_gpu
     SpeechModel.CUSTOM -> R.string.model_desc_custom
 }
 
@@ -628,7 +629,7 @@ private fun DiagnosticsSection() {
     val engine = remember {
         runCatching {
             WhisperLib.ensureBackends(context.applicationInfo.nativeLibraryDir)
-            WhisperLib.nativeCpuVariant()
+            WhisperLib.nativeCpuVariant() + " · GPU: " + WhisperLib.nativeGpuInfo().ifEmpty { "—" }
         }.getOrElse { "not loaded: ${it.message}" }
     }
 

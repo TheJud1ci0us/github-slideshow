@@ -365,4 +365,12 @@
     <string name="ja_script_kanji">Kanji (como se escribe)</string>
     <string name="ja_script_furigana">Kanji con furigana</string>
     <string name="ja_script_romaji">Romaji</string>
+    <string name="section_speech_for">Modelo de voz para %1$s</string>
+    <string name="model_desc_sensevoice">Alibaba SenseVoice: muy ligero y rápido (una pasada, poca batería), excelente para japonés, chino y coreano.</string>
+    <string name="model_desc_reazonspeech">Solo japonés, entrenado con 35.000 horas de TV japonesa: pequeño, eficiente y muy bueno con el habla natural. Sin puntuación.</string>
+    <string name="model_desc_kotoba">Whisper large-v3 destilado para japonés: precisión cercana a large-v3 a la velocidad de Turbo.</string>
+    <string name="model_desc_gpu">Whisper sin comprimir, que puede ir en el chip gráfico (activa «Usar el chip gráfico» abajo). Compara con la prueba de velocidad.</string>
+    <string name="gpu_title">Usar el chip gráfico (experimental)</string>
+    <string name="gpu_text">Para los modelos Whisper «· GPU», en Snapdragon (Adreno). Si el teléfono no lo permite, usa la CPU.</string>
+    <string name="speed_test_language">La prueba usa una grabación en italiano, que %1$s no entiende. Cambia a un idioma compatible (p. ej. italiano).</string>
 </resources>

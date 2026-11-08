@@ -3,6 +3,9 @@ ASCOLTA — OPEN-SOURCE LICENSES AND CREDITS
 SPEECH MODELS AND DATA
 - NVIDIA Parakeet TDT 0.6B v3 — © NVIDIA Corporation. Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/ . Source: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3 . Modified: converted to ONNX and quantized to 8-bit by the sherpa-onnx project (https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8).
 - OpenAI Whisper models — © 2022 OpenAI, MIT License (below). Converted to the ggml format and quantized by the whisper.cpp project.
+- SenseVoice Small — © Alibaba Group (FunAudioLLM / FunASR), used under the FunASR Model Open Source License v1.1, https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE . Model name and source retained as required. sherpa-onnx int8 conversion: https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17 .
+- ReazonSpeech v2 (k2 Zipformer) — © Reazon Holdings, Inc., Apache License 2.0, https://huggingface.co/reazon-research/reazonspeech-k2-v2 .
+- Kotoba-Whisper v2.0 — © Kotoba Technologies, Apache License 2.0 (derived from OpenAI Whisper large-v3), https://huggingface.co/kotoba-tech/kotoba-whisper-v2.0-ggml .
 - Silero VAD (voice activity detection) — © 2020-present Silero Team, MIT License (below). ggml conversion by the whisper.cpp project.
 - Speed-test recording: excerpt of a LibriVox public-domain reading of a work by Luigi Pirandello, taken from Multilingual LibriSpeech (Pratap et al., 2020), licensed CC BY 4.0, https://www.openslr.org/94/ . Resampled to 16 kHz mono and trimmed to 30 seconds.
 
@@ -42,6 +45,7 @@ SOFTWARE (Apache License 2.0)
 - Kotlin, kotlinx.coroutines, kotlinx.serialization — Copyright JetBrains s.r.o. and contributors
 - OkHttp — Copyright Square, Inc.
 - Coil — Copyright Coil Contributors
+- Khronos OpenCL headers (used to build the graphics-chip support) — Copyright The Khronos Group Inc.
 - Kuromoji Japanese morphological analyzer (furigana, romaji, Japanese words) — Copyright 2010-2018 Atilika Inc. and contributors
 
 JAPANESE DICTIONARY (IPADIC, used by Kuromoji)

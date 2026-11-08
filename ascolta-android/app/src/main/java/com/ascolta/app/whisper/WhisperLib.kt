@@ -25,7 +25,10 @@ object WhisperLib {
     /** Loads the CPU code variant best suited to this phone. Call once before anything else. */
     @JvmStatic external fun nativeLoadBackends(libDir: String)
     @JvmStatic external fun nativeCpuVariant(): String
-    @JvmStatic external fun nativeInit(modelPath: String, flashAttention: Boolean): Long
+    @JvmStatic external fun nativeInit(modelPath: String, flashAttention: Boolean, useGpu: Boolean): Long
+
+    /** GPUs available to whisper.cpp (OpenCL), or "" if none could be loaded. */
+    @JvmStatic external fun nativeGpuInfo(): String
     @JvmStatic external fun nativeFree(handle: Long)
     @JvmStatic external fun nativeAbort(handle: Long)
     @JvmStatic external fun nativeSystemInfo(): String

@@ -41,6 +41,13 @@ the phone.
   Wi-Fi; streaming on mobile data asks first) or *Wi-Fi and mobile data*.
 
 **Fast, controllable transcription**
+- **A speech model per language** (Settings shows the list for the language selected in the flag
+  bar). Defaults: Parakeet v3 for its 25 European languages, **SenseVoice Small** for Japanese,
+  Chinese and Korean (one pass, very light), Whisper otherwise. Japanese can also use
+  **ReazonSpeech v2** (small, trained on 35,000 h of Japanese) or **Kotoba-Whisper v2**.
+- **Graphics chip (experimental)**: whisper.cpp's OpenCL backend (Adreno-tuned kernels) is
+  built as a plug-in using the phone's own OpenCL driver; with the switch on, the uncompressed
+  "Whisper Base/Small · GPU" models run on the GPU (CPU fallback for anything it can't run).
 - Choose the engine in Settings: Whisper (Tiny/Base/Small/Large v3 Turbo) or
   **NVIDIA Parakeet TDT 0.6B v3** (fast and very accurate for 25 European languages; greyed out
   for other languages, and podcasts in other languages use Whisper).

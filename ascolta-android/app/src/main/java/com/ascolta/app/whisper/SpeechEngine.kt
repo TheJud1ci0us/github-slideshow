@@ -7,6 +7,7 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import java.io.Closeable
 import java.io.File
@@ -15,6 +16,10 @@ import java.io.File
 data class EngineOptions(
     val threads: Int,
     val flashAttention: Boolean,
+    /** Language of the audio, when the engine is set up for one language (SenseVoice). */
+    val language: String? = null,
+    /** Run Whisper on the graphics chip when possible (experimental). */
+    val gpu: Boolean = false,
 )
 
 /** A loaded speech recognition model. Not thread-safe: one transcription at a time. */
@@ -44,7 +49,7 @@ interface SpeechEngine : Closeable {
         fun load(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine =
             when (model.engine) {
                 Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
-                Engine.PARAKEET -> ParakeetEngine(models.primaryPath(model), options)
+                Engine.PARAKEET, Engine.SENSEVOICE, Engine.REAZONSPEECH -> SherpaEngine(model, models.primaryPath(model), options)
             }
 
     }
@@ -55,7 +60,10 @@ interface SpeechEngine : Closeable {
  * between them) and every timestamp is mapped back to the original audio exactly.
  */
 class WhisperEngine(modelPath: String, private val options: EngineOptions) : SpeechEngine {
-    private var handle = WhisperLib.nativeInit(modelPath, options.flashAttention)
+    // On the GPU, flash attention isn't supported by the OpenCL backend (it would run on the CPU).
+    private var handle = WhisperLib.nativeInit(modelPath, options.flashAttention && !options.gpu, options.gpu).also {
+        if (options.gpu) com.ascolta.app.data.AppLog.i("Whisper", "GPU requested; available: ${runCatching { WhisperLib.nativeGpuInfo() }.getOrDefault("?").ifEmpty { "none (CPU only)" }}")
+    }
 
     init {
         require(handle != 0L) { "Could not load speech model (file may be corrupt): $modelPath" }
@@ -107,16 +115,42 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
  * NVIDIA Parakeet TDT 0.6B v3 through sherpa-onnx (on the CPU). It works on short
  * utterances, so each stretch of speech is recognised separately and split into sentences.
  */
-class ParakeetEngine(modelDir: File, private val options: EngineOptions) : SpeechEngine {
+/**
+ * Speech models run by sherpa-onnx: NVIDIA Parakeet (transducer), SenseVoice (Japanese,
+ * Chinese, Korean, English; non-autoregressive, very light) and ReazonSpeech (Japanese
+ * Zipformer transducer). They recognise each speech region in one pass and give a time for
+ * every token, from which sentences and words are built.
+ */
+class SherpaEngine(model: SpeechModel, modelDir: File, private val options: EngineOptions) : SpeechEngine {
     @Volatile private var aborted = false
     private val recognizer: OfflineRecognizer
+    private val language = options.language
 
     override val needsSpeechRegions: Boolean get() = true
 
     init {
-        val config = OfflineRecognizerConfig(
-            featConfig = FeatureConfig(sampleRate = 16_000, featureDim = 80),
-            modelConfig = OfflineModelConfig(
+        val modelConfig = when (model.engine) {
+            Engine.SENSEVOICE -> OfflineModelConfig(
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = File(modelDir, "model.int8.onnx").path,
+                    // A fixed language is more accurate than detecting it for every sentence.
+                    language = options.language?.takeIf { it in setOf("zh", "en", "ja", "ko") } ?: "auto",
+                    useInverseTextNormalization = true, // punctuation and numbers as written
+                ),
+                tokens = File(modelDir, "tokens.txt").path,
+                numThreads = options.threads,
+            )
+            Engine.REAZONSPEECH -> OfflineModelConfig(
+                transducer = OfflineTransducerModelConfig(
+                    encoder = File(modelDir, "encoder-epoch-99-avg-1.int8.onnx").path,
+                    decoder = File(modelDir, "decoder-epoch-99-avg-1.int8.onnx").path,
+                    joiner = File(modelDir, "joiner-epoch-99-avg-1.int8.onnx").path,
+                ),
+                tokens = File(modelDir, "tokens.txt").path,
+                numThreads = options.threads,
+                modelType = "transducer",
+            )
+            else -> OfflineModelConfig(
                 transducer = OfflineTransducerModelConfig(
                     encoder = File(modelDir, "encoder.int8.onnx").path,
                     decoder = File(modelDir, "decoder.int8.onnx").path,
@@ -125,10 +159,16 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
                 tokens = File(modelDir, "tokens.txt").path,
                 numThreads = options.threads,
                 modelType = "nemo_transducer",
+            )
+        }
+        recognizer = OfflineRecognizer(
+            null,
+            OfflineRecognizerConfig(
+                featConfig = FeatureConfig(sampleRate = 16_000, featureDim = 80),
+                modelConfig = modelConfig,
+                decodingMethod = "greedy_search",
             ),
-            decodingMethod = "greedy_search",
         )
-        recognizer = OfflineRecognizer(null, config)
     }
 
     override fun transcribe(
@@ -153,9 +193,15 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
                 stream.acceptWaveform(samples.copyOfRange(from, to), 16_000)
                 recognizer.decode(stream)
                 val result = recognizer.getResult(stream)
-                SpeechAlignment.sentencesFromTokens(
-                    result.tokens.toList(), result.timestamps.toList(), startMs, endMs, result.text,
-                ).forEach(onSegment)
+                // SenseVoice may report tags such as <|ja|><|NEUTRAL|>; they aren't words.
+                val keep = result.tokens.indices.filter { !TAG.matches(result.tokens[it]) }
+                val tokens = keep.map { result.tokens[it] }
+                val times = if (result.timestamps.size == result.tokens.size) keep.map { result.timestamps[it] } else emptyList()
+                SpeechAlignment.sentencesFromTokens(tokens, times, startMs, endMs, TAG.replace(result.text, "")).forEach { seg ->
+                    // Real words (also in Japanese / Chinese), timed from the tokens.
+                    val words = com.ascolta.app.data.WordSplitter.timedWords(seg.text, seg.words, seg.startMs, seg.endMs, this.language ?: language)
+                    onSegment(seg.copy(words = words))
+                }
             } finally {
                 stream.release()
             }
@@ -174,6 +220,7 @@ class ParakeetEngine(modelDir: File, private val options: EngineOptions) : Speec
 
     private companion object {
         const val MAX_PIECE_MS = 25_000L
+        val TAG = Regex("""<\|[^|]*\|>""")
     }
 }
 
@@ -310,7 +357,15 @@ object SpeechAlignment {
             }
         }
 
-    private val SENTENCE_END = Regex("""[.!?…]["»”’)]*$""")
+    private fun isUnspacedScript(c: Char): Boolean = when (Character.UnicodeScript.of(c.code)) {
+        Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA,
+        Character.UnicodeScript.THAI, Character.UnicodeScript.LAO, Character.UnicodeScript.KHMER, Character.UnicodeScript.MYANMAR -> true
+        else -> false
+    }
+
+    private val SENTENCE_END = Regex("""[.!?…。！？]["»”’)」』]*$""")
+    /** Engines without punctuation (e.g. ReazonSpeech): a pause this long ends a sentence. */
+    private const val PAUSE_SPLIT_MS = 700L
 
     /**
      * Builds sentence segments (with word timings) from recogniser tokens (text pieces; a
@@ -335,11 +390,15 @@ object SpeechAlignment {
             val t = pieceStartMs + (timestamps[i] * 1000).toLong()
             if (start < 0) start = t
             val piece = tokens[i].replace('▁', ' ')
-            if (words.isEmpty() || piece.startsWith(" ")) words += Word(t, piece.trim())
+            // A new timed piece at a space, or at every token of a script written without
+            // spaces (Japanese, Chinese, Thai), so each keeps its own time.
+            if (words.isEmpty() || piece.startsWith(" ") || piece.firstOrNull()?.let(::isUnspacedScript) == true) words += Word(t, piece.trim())
             else words[words.lastIndex] = words.last().copy(text = words.last().text + piece)
             sb.append(piece)
             val text = sb.toString().trim()
-            if (SENTENCE_END.containsMatchIn(text) && text.length > 1) {
+            val nextGapMs = if (i + 1 < tokens.size) ((timestamps[i + 1] - timestamps[i]) * 1000).toLong() else 0L
+            val pauseEnd = nextGapMs >= PAUSE_SPLIT_MS && text.length >= 8
+            if ((SENTENCE_END.containsMatchIn(text) || pauseEnd) && text.length > 1) {
                 val end = if (i + 1 < tokens.size) pieceStartMs + (timestamps[i + 1] * 1000).toLong() else pieceEndMs
                 out += WhisperSegment(start, end, text, words.filter { it.text.isNotEmpty() }.toList())
                 sb.clear()

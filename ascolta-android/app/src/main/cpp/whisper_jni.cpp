@@ -195,11 +195,25 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeCpuVariant(JNIEnv *env, jclass) {
     return utf8String(env, out.empty() ? "no backend loaded" : out.c_str());
 }
 
+/** The GPUs ggml can use, e.g. "GPUOpenCL: QUALCOMM Adreno(TM) 732", or "" if none. */
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_ascolta_app_whisper_WhisperLib_nativeGpuInfo(JNIEnv *env, jclass) {
+    std::string out;
+    for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_GPU) continue;
+        if (!out.empty()) out += "; ";
+        out += std::string(ggml_backend_dev_name(dev)) + ": " + ggml_backend_dev_description(dev);
+    }
+    return utf8String(env, out.c_str());
+}
+
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_ascolta_app_whisper_WhisperLib_nativeInit(JNIEnv *env, jclass, jstring modelPath, jboolean flashAttention) {
+Java_com_ascolta_app_whisper_WhisperLib_nativeInit(JNIEnv *env, jclass, jstring modelPath, jboolean flashAttention, jboolean useGpu) {
     std::string path = toStdString(env, modelPath);
     whisper_context_params cparams = whisper_context_default_params();
-    cparams.use_gpu = false;
+    // On the GPU (OpenCL), operations it can't run fall back to the CPU automatically.
+    cparams.use_gpu = useGpu;
     cparams.flash_attn = flashAttention;
     whisper_context *ctx = whisper_init_from_file_with_params(path.c_str(), cparams);
     if (ctx == nullptr) {
