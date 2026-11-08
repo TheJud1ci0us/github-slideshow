@@ -8,15 +8,68 @@ import kotlinx.coroutines.flow.StateFlow
 
 data class Language(val code: String, val name: String, val country: String)
 
-/** Languages supported by both whisper and ML Kit on-device translation. */
+/**
+ * Languages that can be learned and translated: every language both Whisper (99 languages)
+ * and ML Kit's on-device translation (59) support. NVIDIA Parakeet v3 knows 25 of them
+ * (see PARAKEET_LANGUAGES). The country picks the podcast directory's store.
+ */
 val LANGUAGES = listOf(
-    Language("it", "Italian", "IT"),
+    Language("af", "Afrikaans", "ZA"),
+    Language("ar", "Arabic", "SA"),
+    Language("be", "Belarusian", "BY"),
+    Language("bg", "Bulgarian", "BG"),
+    Language("bn", "Bengali", "IN"),
+    Language("ca", "Catalan", "ES"),
+    Language("cs", "Czech", "CZ"),
+    Language("cy", "Welsh", "GB"),
+    Language("da", "Danish", "DK"),
+    Language("de", "German", "DE"),
+    Language("el", "Greek", "GR"),
     Language("en", "English", "US"),
     Language("es", "Spanish", "ES"),
+    Language("et", "Estonian", "EE"),
+    Language("fa", "Persian", "US"),
+    Language("fi", "Finnish", "FI"),
     Language("fr", "French", "FR"),
-    Language("de", "German", "DE"),
-    Language("pt", "Portuguese", "BR"),
+    Language("gl", "Galician", "ES"),
+    Language("gu", "Gujarati", "IN"),
+    Language("he", "Hebrew", "IL"),
+    Language("hi", "Hindi", "IN"),
+    Language("hr", "Croatian", "HR"),
+    Language("ht", "Haitian Creole", "US"),
+    Language("hu", "Hungarian", "HU"),
+    Language("id", "Indonesian", "ID"),
+    Language("is", "Icelandic", "IS"),
+    Language("it", "Italian", "IT"),
     Language("ja", "Japanese", "JP"),
+    Language("ka", "Georgian", "GE"),
+    Language("kn", "Kannada", "IN"),
+    Language("ko", "Korean", "KR"),
+    Language("lt", "Lithuanian", "LT"),
+    Language("lv", "Latvian", "LV"),
+    Language("mk", "Macedonian", "MK"),
+    Language("mr", "Marathi", "IN"),
+    Language("ms", "Malay", "MY"),
+    Language("mt", "Maltese", "MT"),
+    Language("nl", "Dutch", "NL"),
+    Language("no", "Norwegian", "NO"),
+    Language("pl", "Polish", "PL"),
+    Language("pt", "Portuguese", "BR"),
+    Language("ro", "Romanian", "RO"),
+    Language("ru", "Russian", "RU"),
+    Language("sk", "Slovak", "SK"),
+    Language("sl", "Slovenian", "SI"),
+    Language("sq", "Albanian", "AL"),
+    Language("sv", "Swedish", "SE"),
+    Language("sw", "Swahili", "KE"),
+    Language("ta", "Tamil", "IN"),
+    Language("te", "Telugu", "IN"),
+    Language("th", "Thai", "TH"),
+    Language("tl", "Tagalog", "PH"),
+    Language("tr", "Turkish", "TR"),
+    Language("uk", "Ukrainian", "UA"),
+    Language("ur", "Urdu", "PK"),
+    Language("vi", "Vietnamese", "VN"),
     Language("zh", "Chinese", "TW"),
 )
 
@@ -99,6 +152,10 @@ class Settings(context: Context) {
 
     val showOriginal = bool("show_original", true)
     val showTranslation = bool("show_translation", true)
+    /** Translate sentences at all. Off: only the transcript (tapped words are still translated). */
+    val translate = bool("translate_sentences", true)
+    /** Player shows the episode's picture instead of the transcript (which is kept). */
+    val showCover = bool("show_cover", false)
     val autoPause = bool("auto_pause", false)
     /** Highlights the word being spoken inside the current sentence. */
     val wordHighlight = bool("word_highlight", true)

@@ -3,6 +3,7 @@ package com.ascolta.app.ui
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,6 +93,9 @@ import com.ascolta.app.R
 import com.ascolta.app.graph
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Subtitles
 import kotlinx.coroutines.launch
 
 private val SPEEDS = listOf(0.5f, 0.65f, 0.75f, 0.85f, 1f, 1.15f, 1.25f, 1.5f)
@@ -112,7 +116,10 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     }
     val player by graph.player.state.collectAsState()
     val showOriginal by settings.showOriginal.flow.collectAsState()
-    val showTranslation by settings.showTranslation.flow.collectAsState()
+    val showTranslationPref by settings.showTranslation.flow.collectAsState()
+    val translateOn by settings.translate.flow.collectAsState()
+    val coverMode by settings.showCover.flow.collectAsState()
+    val showTranslation = showTranslationPref && translateOn
     val autoPause by settings.autoPause.flow.collectAsState()
     val wordHighlight by settings.wordHighlight.flow.collectAsState()
     val textScale by settings.transcriptTextScale.flow.collectAsState()
@@ -136,9 +143,9 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
 
     // Fill in missing translations (e.g. translation model wasn't available during transcription).
     var translating by remember { mutableStateOf(false) }
-    LaunchedEffect(transcript?.complete, nativeLanguage) {
+    LaunchedEffect(transcript?.complete, nativeLanguage, translateOn) {
         val t = transcript ?: return@LaunchedEffect
-        val needs = t.complete && (t.segments.any { it.translation == null } ||
+        val needs = translateOn && t.complete && (t.segments.any { it.translation == null } ||
             (t.translationLanguage != null && t.translationLanguage != nativeLanguage))
         if (needs) {
             translating = true
@@ -209,8 +216,21 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             follow = true
         }
     }
-    LaunchedEffect(navIndex, follow) {
-        if (follow && navIndex >= 0) listState.animateScrollToItem((navIndex - 1).coerceAtLeast(0))
+    val contextPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.roundToPx() }
+    LaunchedEffect(navIndex, follow, showTranslation, showOriginal, textScale, segments.size) {
+        if (!follow || navIndex < 0) return@LaunchedEffect
+        // Only scroll when the highlighted sentence isn't entirely visible; then put it near the
+        // top with a little of the previous sentence above it for context.
+        val info = listState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.index == navIndex }
+        val top = info.viewportStartOffset
+        val bottom = info.viewportEndOffset
+        val fullyVisible = item != null && item.offset >= top && item.offset + item.size <= bottom
+        if (fullyVisible) return@LaunchedEffect
+        listState.animateScrollToItem(navIndex)
+        val height = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == navIndex }?.size ?: 0
+        val room = (bottom - top) - height
+        if (navIndex > 0 && room > 0) listState.animateScrollBy(-minOf(contextPx, room).toFloat())
     }
 
     var menu by remember { mutableStateOf(false) }
@@ -230,12 +250,20 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 actions = {
+                    // Switch between the episode's picture and the transcript (kept either way).
+                    if (segments.isNotEmpty()) {
+                        IconButton(onClick = { settings.showCover.set(!coverMode) }) {
+                            if (coverMode) Icon(Icons.Filled.Subtitles, stringResource(R.string.show_transcript))
+                            else Icon(Icons.Filled.Image, stringResource(R.string.show_cover))
+                        }
+                    }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
                     val source = languageName(transcript?.language ?: settings.learningLanguage.value)
                     val target = languageName(nativeLanguage)
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         CheckItem(stringResource(R.string.show_language, source), showOriginal) { settings.showOriginal.set(it) }
-                        CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
+                        CheckItem(stringResource(R.string.translate_title), translateOn) { settings.translate.set(it) }
+                        if (translateOn) CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
                         CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
                         CheckItem(stringResource(R.string.highlight_words), wordHighlight) { settings.wordHighlight.set(it) }
                         HorizontalDivider()
@@ -288,15 +316,16 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             )
         },
         floatingActionButton = {
-            if (!follow && segments.isNotEmpty()) {
+            if (!follow && segments.isNotEmpty() && !coverMode) {
                 SmallFloatingActionButton(onClick = { follow = true }) { Icon(Icons.Filled.MyLocation, stringResource(R.string.follow_playback)) }
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ep != null) StatusBanner(ep, transcript, translating)
-            // No transcript (not chosen for this episode, or nothing recognised yet): the cover.
-            if (segments.isEmpty()) {
+            // No transcript (not chosen for this episode, or nothing recognised yet), or the
+            // listener chose the picture: the cover. The transcript is kept and shown again on demand.
+            if (segments.isEmpty() || coverMode) {
                 val cover = ep?.imageUrl ?: podcast?.imageUrl
                 Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     if (cover != null) {
@@ -362,31 +391,30 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
     val scope = rememberCoroutineScope()
     val partial = transcript?.segments?.isNotEmpty() == true
     when (ep.transcriptState) {
-        TranscriptState.RUNNING, TranscriptState.QUEUED -> Banner {
-            Text(
-                "${ep.transcriptStatus ?: stringResource(R.string.banner_preparing)} · ${(ep.transcriptProgress * 100).toInt()}%",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(6.dp))
-            if (ep.transcriptState == TranscriptState.RUNNING) {
-                LinearProgressIndicator(progress = { ep.transcriptProgress }, modifier = Modifier.fillMaxWidth())
-            } else {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                stringResource(if (partial) R.string.banner_partial else R.string.banner_background),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row {
-                OutlinedButton(onClick = { scope.launch { graph.repo.stopTranscription(ep.id) } }) {
-                    Icon(Icons.Filled.Stop, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.action_stop))
+        // One compact line, so the transcript keeps most of the screen.
+        TranscriptState.RUNNING, TranscriptState.QUEUED -> Card(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        ) {
+            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "${ep.transcriptStatus ?: stringResource(R.string.banner_preparing)} · ${(ep.transcriptProgress * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    if (ep.transcriptState == TranscriptState.RUNNING) {
+                        LinearProgressIndicator(progress = { ep.transcriptProgress }, modifier = Modifier.fillMaxWidth().height(3.dp))
+                    } else {
+                        LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp))
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
-                    Text(stringResource(R.string.stuck_restart))
+                IconButton(onClick = { scope.launch { graph.repo.stopTranscription(ep.id) } }) {
+                    Icon(Icons.Filled.Stop, stringResource(R.string.action_stop), Modifier.size(20.dp))
+                }
+                IconButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
+                    Icon(Icons.Filled.Refresh, stringResource(R.string.stuck_restart), Modifier.size(20.dp))
                 }
             }
         }
@@ -439,8 +467,8 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
 
 @Composable
 private fun Banner(content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Column(Modifier.padding(12.dp)) { content() }
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) { content() }
     }
 }
 

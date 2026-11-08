@@ -70,7 +70,13 @@ the phone.
 - Tap a word to translate it and save it to **Words**, or **save the whole sentence** for context.
 - Word-by-word highlighting can be turned off (player menu → *Highlight each word*). Export to Anki as tab-separated text.
 - Previous / next / repeat sentence, **pause after each sentence**, 0.5×–1.5× speed.
-- Hide either language to test yourself; adjustable text size.
+- Hide either language to test yourself; adjustable text size. The highlighted sentence and
+  its translation always stay fully on screen.
+- **Transcript only**: switch off *Translate sentences* (Settings or the player menu).
+- Show the **episode picture** instead of the transcript at any time (top-bar button); the
+  transcript is kept and comes back with the same button.
+- **57 languages** to learn and translate (all supported by both Whisper and ML Kit); each speech
+  model lists its languages in Settings, and Parakeet's 25 European languages are marked.
 - Background playback with lock-screen and notification controls.
 - App interface in English, Italian, French, Spanish, German or Portuguese
   (Settings → App language, or Android's per-app language setting).

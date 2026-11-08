@@ -114,8 +114,12 @@ fun SettingsScreen() {
             Section(stringResource(R.string.section_languages))
             AppLanguagePicker()
             LanguagePicker(stringResource(R.string.learning_language), learning) { settings.learningLanguage.set(it) }
-            LanguagePicker(stringResource(R.string.translate_into), native) { settings.nativeLanguage.set(it) }
-            TranslationModelRow(learning, native)
+            SwitchRow(stringResource(R.string.translate_title), stringResource(R.string.translate_text), settings.translate)
+            val translateOn by settings.translate.flow.collectAsState()
+            if (translateOn) {
+                LanguagePicker(stringResource(R.string.translate_into), native) { settings.nativeLanguage.set(it) }
+                TranslationModelRow(learning, native)
+            }
             // A model that can't transcribe the new language is replaced by a Whisper model.
             LaunchedEffect(learning) {
                 if (!settings.model.supports(learning)) {
@@ -230,7 +234,7 @@ private fun LanguagePicker(label: String, value: String, onChange: (String) -> U
             supportingContent = { Text(languageName(value)) },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            LANGUAGES.forEach { lang ->
+            LANGUAGES.sortedBy { languageName(it.code) }.forEach { lang ->
                 DropdownMenuItem(text = { Text(languageName(lang.code)) }, onClick = { open = false; onChange(lang.code) })
             }
         }
@@ -342,6 +346,14 @@ private fun ModelRow(
                 if (!supported) {
                     Text(stringResource(R.string.model_not_for_language, languageName(learning)), color = MaterialTheme.colorScheme.error)
                 }
+                // Which languages this model understands.
+                Text(
+                    model.languages?.let { codes ->
+                        stringResource(R.string.model_languages, codes.size, codes.map { languageName(it) }.sorted().joinToString(", "))
+                    } ?: stringResource(R.string.model_languages_whisper, LANGUAGES.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 when {
                     running -> {
                         Text(

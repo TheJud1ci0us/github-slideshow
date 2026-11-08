@@ -230,4 +230,10 @@
     <string name="npu_log_text">Vérifie maintenant la configuration NPU du téléphone et affiche chaque essai</string>
     <string name="action_clear">Effacer</string>
     <string name="status_paused_listening">En pause pendant l’écoute app fermée — ouvrez Ascolta pour continuer</string>
+    <string name="translate_title">Traduire les phrases</string>
+    <string name="translate_text">Désactivé : uniquement la transcription, sans traduction (les mots touchés sont toujours traduits)</string>
+    <string name="model_languages">Langues (%1$d) : %2$s</string>
+    <string name="model_languages_whisper">Langues : 99, dont les %1$d de l’app</string>
+    <string name="show_cover">Afficher l’image de l’épisode</string>
+    <string name="show_transcript">Afficher la transcription</string>
 </resources>

@@ -230,4 +230,10 @@
     <string name="npu_log_text">Comprueba ahora la configuración NPU del teléfono y muestra cada intento</string>
     <string name="action_clear">Borrar</string>
     <string name="status_paused_listening">En pausa mientras escuchas con la app cerrada — abre Ascolta para continuar</string>
+    <string name="translate_title">Traducir frases</string>
+    <string name="translate_text">Desactivado: solo la transcripción, sin traducción (las palabras tocadas se siguen traduciendo)</string>
+    <string name="model_languages">Idiomas (%1$d): %2$s</string>
+    <string name="model_languages_whisper">Idiomas: 99, incluidos los %1$d de la app</string>
+    <string name="show_cover">Mostrar la imagen del episodio</string>
+    <string name="show_transcript">Mostrar la transcripción</string>
 </resources>

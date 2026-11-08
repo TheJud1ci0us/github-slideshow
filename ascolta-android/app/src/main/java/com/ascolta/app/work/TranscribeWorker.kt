@@ -218,7 +218,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             t.copy(covered = spans, segments = t.segments.filter { seg -> spans.any { seg.startMs >= it.startMs - 500 && seg.startMs < it.endMs } })
         } ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
 
-        val canTranslate = prepareTranslation(language, target)
+        val canTranslate = graph.settings.translate.value && prepareTranslation(language, target)
 
         update(applicationContext.getString(R.string.status_loading_model), status.value.progress)
         WhisperLib.ensureBackends(applicationContext.applicationInfo.nativeLibraryDir)
@@ -557,6 +557,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     }
 
     private suspend fun translateRemaining(transcript: Transcript, target: String): Transcript {
+        if (!graph.settings.translate.value) return transcript // transcript only
         if (!graph.translation.isSupported(transcript.language, target)) return transcript
         val stale = transcript.translationLanguage != null && transcript.translationLanguage != target
         val missing = transcript.segments.count { it.translation == null || stale }
