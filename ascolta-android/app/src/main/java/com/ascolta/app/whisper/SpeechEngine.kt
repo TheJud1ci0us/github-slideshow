@@ -81,10 +81,11 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
             override fun onSegment(startMs: Long, endMs: Long, text: String, words: Array<String>, wordStartsMs: LongArray) {
                 val start = map?.toOriginal(startMs) ?: startMs
                 val end = map?.toOriginal(endMs, isEnd = true) ?: endMs
-                val timed = words.indices.map { i ->
-                    Word(map?.toOriginal(wordStartsMs[i]) ?: wordStartsMs[i], words[i].trim())
-                }.filter { it.text.isNotEmpty() }
-                onSegment(WhisperSegment(start, maxOf(start, end), text, timed.ifEmpty { null }))
+                // Timed tokens → real words (dictionary-based for Japanese, Chinese, Thai…).
+                val pieces = words.indices.map { i -> Word(map?.toOriginal(wordStartsMs[i]) ?: wordStartsMs[i], words[i]) }
+                val sentence = text.trim()
+                val timed = com.ascolta.app.data.WordSplitter.timedWords(sentence, pieces, start, maxOf(start, end), language)
+                onSegment(WhisperSegment(start, maxOf(start, end), sentence, timed))
             }
         }
         return WhisperLib.nativeTranscribe(handle, audio, language, options.threads, prompt, listener, null) != null

@@ -5,7 +5,7 @@ import com.ascolta.app.data.indexAt
 import com.ascolta.app.net.FeedTranscriptParser
 import com.ascolta.app.net.OpmlParser
 import com.ascolta.app.net.RssParser
-import com.ascolta.app.ui.wordAt
+import com.ascolta.app.data.WordSplitter
 import com.ascolta.app.whisper.ChunkAccumulator
 import com.ascolta.app.whisper.LinearResampler
 import org.junit.Assert.assertEquals
@@ -136,11 +136,11 @@ class ParsersTest {
     @Test
     fun picksTappedWord() {
         val text = "Dell'acqua fresca, per favore."
-        assertEquals("Dell'acqua", wordAt(text, 3))
-        assertEquals("fresca", wordAt(text, 11))
-        assertEquals("fresca", wordAt(text, 17)) // on the comma right after the word
-        assertEquals("favore", wordAt(text, text.length - 1))
-        assertNull(wordAt("  ", 1))
+        assertEquals("Dell'acqua", WordSplitter.wordAt(text, 3, "it"))
+        assertEquals("fresca", WordSplitter.wordAt(text, 11, "it"))
+        assertEquals("fresca", WordSplitter.wordAt(text, 17, "it")) // on the comma right after the word
+        assertEquals("favore", WordSplitter.wordAt(text, text.length - 1, "it"))
+        assertNull(WordSplitter.wordAt("  ", 1, "it"))
     }
 
     @Test

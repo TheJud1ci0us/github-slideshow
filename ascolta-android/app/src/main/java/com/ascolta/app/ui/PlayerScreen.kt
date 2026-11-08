@@ -77,6 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ascolta.app.data.EpisodeEntity
+import com.ascolta.app.data.WordSplitter
 import com.ascolta.app.work.WorkScheduler
 import com.ascolta.app.data.Segment
 import com.ascolta.app.data.Transcript
@@ -168,8 +169,13 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     // Highlighted sentence: none during music or long silences after a sentence has ended.
     val currentIndex = navIndex.takeIf { it >= 0 && position <= segments[it].endMs + HIGHLIGHT_LINGER_MS } ?: -1
     // Word being spoken inside the highlighted sentence (when the engine gave word timings).
+    // Real words in every language (Japanese and Chinese have no spaces), each with its start time.
+    val textLanguage = transcript?.language ?: settings.learningLanguage.value
+    val timedWords = remember(segments, textLanguage) {
+        segments.map { WordSplitter.timedWords(it.text, it.words, it.startMs, it.endMs, textLanguage) }
+    }
     val currentWord = if (!wordHighlight) -1
-        else segments.getOrNull(currentIndex)?.words?.indexOfLast { it.startMs <= position } ?: -1
+        else timedWords.getOrNull(currentIndex)?.indexOfLast { it.startMs <= position } ?: -1
 
     // Streaming over mobile data in Wi-Fi only mode needs the listener's OK first.
     var confirmStream by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -362,7 +368,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
                 // With a transcript: one line of what is being said, under the picture.
                 segments.getOrNull(currentIndex)?.let { seg ->
-                    LiveLine(seg, if (wordHighlight) currentWord else -1)
+                    LiveLine(seg, timedWords.getOrNull(currentIndex), if (wordHighlight) currentWord else -1)
                 }
             } else LazyColumn(
                 state = listState,
@@ -373,6 +379,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 itemsIndexed(segments, key = { i, s -> "$i-${s.startMs}" }) { i, segment ->
                     SegmentItem(
                         segment = segment,
+                        words = timedWords.getOrNull(i),
+                        language = textLanguage,
                         active = i == currentIndex,
                         activeWord = if (i == currentIndex) currentWord else -1,
                         showOriginal = showOriginal,
@@ -429,18 +437,21 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
  * current word in view: when the sentence is too long, the words already said scroll off.
  */
 @Composable
-private fun LiveLine(segment: Segment, activeWord: Int) {
-    val words = segment.words?.map { it.text }?.takeIf { it.isNotEmpty() } ?: segment.text.split(' ')
-    val from = if (activeWord > 3) activeWord - 3 else 0
+private fun LiveLine(segment: Segment, words: List<Word>?, activeWord: Int) {
+    val ranges = remember(segment, words) { wordRanges(segment.text, words) }
+    // Start a few words before the current one, so it stays visible on one line.
+    val from = ranges.getOrNull(activeWord - 3)?.first?.takeIf { activeWord > 3 } ?: 0
+    val active = ranges.getOrNull(activeWord)
+    val primary = MaterialTheme.colorScheme.primary
     val text = androidx.compose.ui.text.buildAnnotatedString {
         if (from > 0) append("… ")
-        words.drop(from).forEachIndexed { i, w ->
-            if (i > 0) append(' ')
-            if (from + i == activeWord) {
-                pushStyle(androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-                append(w)
-                pop()
-            } else append(w)
+        val shift = length - from
+        append(segment.text.substring(from))
+        if (active != null && !active.isEmpty() && active.first >= from) {
+            addStyle(
+                androidx.compose.ui.text.SpanStyle(color = primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                active.first + shift, active.last + 1 + shift,
+            )
         }
     }
     Text(
@@ -552,6 +563,8 @@ private fun Banner(content: @Composable () -> Unit) {
 @Composable
 private fun SegmentItem(
     segment: Segment,
+    words: List<Word>?,
+    language: String?,
     active: Boolean,
     activeWord: Int,
     showOriginal: Boolean,
@@ -574,7 +587,7 @@ private fun SegmentItem(
             modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures { onSeek() } }.padding(bottom = 2.dp),
         )
         if (showOriginal) {
-            val wordRanges = remember(segment) { wordRanges(segment.text, segment.words) }
+            val wordRanges = remember(segment, words) { wordRanges(segment.text, words) }
             val highlight = MaterialTheme.colorScheme.primary
             val text = remember(segment.text, activeWord, wordRanges, highlight) {
                 buildAnnotatedString {
@@ -594,6 +607,7 @@ private fun SegmentItem(
                     lineHeight = (26 * textScale).sp,
                     color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 ),
+                language,
                 onWord,
             )
         }
@@ -614,7 +628,7 @@ private fun SegmentItem(
 
 /** Text where tapping a word reports that word. */
 @Composable
-private fun TappableText(text: AnnotatedString, style: TextStyle, onWord: (String) -> Unit) {
+private fun TappableText(text: AnnotatedString, style: TextStyle, language: String?, onWord: (String) -> Unit) {
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     Text(
         text,
@@ -623,7 +637,9 @@ private fun TappableText(text: AnnotatedString, style: TextStyle, onWord: (Strin
         modifier = Modifier.pointerInput(text.text) {
             detectTapGestures { pos ->
                 val l = layout ?: return@detectTapGestures
-                wordAt(text.text, l.getOffsetForPosition(pos))?.let(onWord)
+                // The dictionary word under the finger (not the whole run of letters, which in
+                // Japanese or Chinese would be the whole sentence).
+                WordSplitter.wordAt(text.text, l.getOffsetForPosition(pos), language)?.let(onWord)
             }
         },
     )
@@ -650,21 +666,6 @@ fun wordRanges(text: String, words: List<Word>?): List<IntRange> {
             at until cursor
         }
     }
-}
-
-private fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '\'' || c == '’' || c == '-'
-
-fun wordAt(text: String, offset: Int): String? {
-    if (text.isEmpty()) return null
-    var i = offset.coerceIn(0, text.length - 1)
-    if (!isWordChar(text[i])) {
-        if (i > 0 && isWordChar(text[i - 1])) i-- else return null
-    }
-    var start = i
-    while (start > 0 && isWordChar(text[start - 1])) start--
-    var end = i
-    while (end < text.length && isWordChar(text[end])) end++
-    return text.substring(start, end).trim('\'', '’', '-').takeIf { it.isNotEmpty() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

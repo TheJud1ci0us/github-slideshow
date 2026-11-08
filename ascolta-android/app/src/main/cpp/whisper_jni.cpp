@@ -48,6 +48,18 @@ void progressCallback(whisper_context *, whisper_state *, int progress, void *us
  * Words are assembled from tokens at byte level, because one UTF-8 character can be split
  * across two tokens.
  */
+/** True if [s] doesn't end in the middle of a multi-byte UTF-8 character. */
+static bool utf8Complete(const std::string &s) {
+    int n = (int) s.size();
+    for (int back = 1; back <= 4 && back <= n; back++) {
+        auto c = (unsigned char) s[n - back];
+        if ((c & 0xC0) == 0x80) continue; // continuation byte
+        int len = (c < 0x80) ? 1 : ((c & 0xE0) == 0xC0) ? 2 : ((c & 0xF0) == 0xE0) ? 3 : ((c & 0xF8) == 0xF0) ? 4 : 1;
+        return back >= len;
+    }
+    return true;
+}
+
 void newSegmentCallback(whisper_context *ctx, whisper_state *state, int nNew, void *userData) {
     auto *data = static_cast<ListenerData *>(userData);
     if (data == nullptr || data->listener == nullptr || data->onSegment == nullptr) return;
@@ -61,18 +73,27 @@ void newSegmentCallback(whisper_context *ctx, whisper_state *state, int nNew, vo
 
         std::vector<std::string> words;
         std::vector<jlong> starts;
+        std::string pending;
+        jlong pendingStart = 0;
         const int nTokens = whisper_full_n_tokens_from_state(state, i);
         for (int j = 0; j < nTokens; j++) {
             whisper_token_data td = whisper_full_get_token_data_from_state(state, i, j);
             if (td.id >= data->eot) continue; // special / timestamp tokens
             const char *piece = whisper_full_get_token_text_from_state(ctx, state, i, j);
             if (piece == nullptr || piece[0] == '\0') continue;
-            if (words.empty() || piece[0] == ' ') {
-                words.emplace_back(piece);
-                starts.push_back((jlong) td.t0 * 10);
-            } else {
-                words.back() += piece;
+            // One piece per token (the app splits them into real words, also in languages
+            // without spaces). A UTF-8 character split across tokens is kept together.
+            if (pending.empty()) pendingStart = (jlong) td.t0 * 10;
+            pending += piece;
+            if (utf8Complete(pending)) {
+                words.push_back(pending);
+                starts.push_back(pendingStart);
+                pending.clear();
             }
+        }
+        if (!pending.empty()) {
+            words.push_back(pending);
+            starts.push_back(pendingStart);
         }
         jobjectArray wordArray = env->NewObjectArray((jsize) words.size(), strClass, nullptr);
         jlongArray startArray = env->NewLongArray((jsize) starts.size());

@@ -21,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.7.0"
+        versionCode = 13
+        versionName = "0.7.1"
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
