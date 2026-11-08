@@ -81,7 +81,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         if (EngineLock.mutex.isLocked) {
             dao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, applicationContext.getString(R.string.status_waiting_other))
         }
-        return EngineLock.mutex.withLock {
+        EngineLock.waiting.incrementAndGet()
+        var counted = true
+        fun leaveQueue() { if (counted) { counted = false; EngineLock.waiting.decrementAndGet() } }
+        return try { EngineLock.mutex.withLock {
+            leaveQueue()
             val language = episode.transcriptLanguage ?: graph.settings.learningLanguage.value
             val target = graph.settings.nativeLanguage.value
             AppLog.i(TAG, "Start #$episodeId \"$title\" lang=$language→$target model=${graph.settings.model.id} attempt=$runAttemptCount")
@@ -102,6 +106,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 dao.setTranscript(episodeId, TranscriptState.FAILED, 0f, null, e.message ?: e.javaClass.simpleName)
                 Result.success()
             }
+        } } finally {
+            leaveQueue()
         }
     }
 
@@ -230,10 +236,23 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         fun progressOf(t: Transcript) = Coverage.totalMs(t.covered).toFloat() / totalMs
 
         // The engine is created on the recognition thread so its worker threads stay on the fast cores.
-        val engine = withContext(CoreDispatchers.recognition) { SpeechEngine.load(applicationContext, model, graph.models, options) }
+        // Loaded on demand and released while the buffer zone is full, so a waiting job
+        // doesn't hold hundreds of MB of model in memory.
+        var engine: SpeechEngine? = null
+        suspend fun engine(): SpeechEngine = engine ?: withContext(CoreDispatchers.recognition) {
+            update(applicationContext.getString(R.string.status_loading_model), status.value.progress)
+            SpeechEngine.load(applicationContext, model, graph.models, options)
+        }.also { engine = it }
+        suspend fun releaseEngine() {
+            val e = engine ?: return
+            engine = null
+            withContext(NonCancellable + CoreDispatchers.recognition) { e.close() }
+            AppLog.i(TAG, "Model released while waiting")
+        }
+        engine()
         try {
             val job = coroutineContext[Job]
-            val abortHandle = job?.invokeOnCompletion { engine.abort() }
+            val abortHandle = job?.invokeOnCompletion { engine?.abort() }
             try {
                 coroutineScope {
                     // Sentences arrive here the moment the engine recognises them; this writer
@@ -317,14 +336,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         covered = Coverage.add(covered, span)
                         events.send(WriterEvent.Done(span))
                     }
-                    fun speechAhead(positionMs: Long): Long =
-                        BufferPolicy.speechAhead(latest.value.segments, positionMs, Coverage.runEnd(covered, positionMs))
 
                     var prefetch: Pair<Span, Deferred<PreparedBlock>>? = null
-                    var anchorMs = 0L          // where the work is heading
                     var lastListenPos = -1L
                     var speedFactor: Float? = null
-                    var buffered = false        // paused because far enough ahead of playback
+                    var buffered = false        // waiting: the zone ahead of the listener is transcribed
+                    var waitingSince = 0L
                     var hidden = false          // paused because the app isn't on screen while listening
                     var jumpedToMs = -1L
 
@@ -357,42 +374,46 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             AppLog.i(TAG, "App back on screen: resuming at ${player.positionMs / 1000}s")
                         }
 
-                        if (following) {
-                            if (lastListenPos < 0 || kotlin.math.abs(player.positionMs - lastListenPos) > 10_000) jumpedToMs = player.positionMs
-                            lastListenPos = player.positionMs
-                            anchorMs = player.positionMs
-                        }
+                        // Where the listener is in the timeline: the player's position when this
+                        // episode is loaded, otherwise where they last stopped listening.
+                        val positionMs = if (following) player.positionMs
+                        else dao.get(episodeId)?.playbackPositionMs ?: 0L
+                        if (lastListenPos < 0 || kotlin.math.abs(positionMs - lastListenPos) > 10_000) jumpedToMs = positionMs
+                        lastListenPos = positionMs
 
-                        // Like a video buffer: while listening, stop once about 20% of the
-                        // episode's speech is transcribed ahead of the listener.
-                        if (listening) {
-                            val totalSpeech = BufferPolicy.estimatedSpeechMs(latest.value.segments, Coverage.totalMs(spans), totalMs)
-                            val limits = BufferPolicy.limits(speedFactor, player.speed, BLOCK_MS, totalSpeech)
-                            val ahead = speechAhead(player.positionMs)
-                            if (limits != null) {
-                                if (buffered && ahead < limits.resumeBelowMs) buffered = false
-                                if (!buffered && ahead >= limits.pauseAboveMs) {
-                                    buffered = true
-                                    AppLog.i(
-                                        TAG,
-                                        "Buffered ${ahead / 1000}s of speech ahead (episode ≈ ${totalSpeech / 1000}s of speech); " +
-                                            "pausing until below ${limits.resumeBelowMs / 1000}s",
-                                    )
-                                }
-                                if (buffered) {
-                                    update(applicationContext.getString(R.string.status_buffered_ahead, (ahead / 1000).toInt()), progressOf(latest.value))
-                                    delay(1_000)
-                                    continue
-                                }
+                        // Buffer zone: only 20% of the episode's duration ahead of the listener.
+                        val ahead = BufferPolicy.aheadMs(spans, positionMs, totalMs)
+                        if (buffered && ahead < BufferPolicy.resumeBelowMs(totalMs, BLOCK_MS)) buffered = false
+                        val block = if (buffered) null else {
+                            // Short first block right after starting or jumping, so text appears within seconds.
+                            val nearJump = jumpedToMs >= 0 && Coverage.runEnd(spans, jumpedToMs) - jumpedToMs < FIRST_BLOCK_MS
+                            BufferPolicy.nextBlock(spans, positionMs, totalMs, if (nearJump) FIRST_BLOCK_MS else BLOCK_MS)
+                        }
+                        if (block == null) {
+                            buffered = true
+                            if (waitingSince == 0L) {
+                                waitingSince = System.currentTimeMillis()
+                                prefetch?.second?.cancel()
+                                prefetch = null
+                                AppLog.i(
+                                    TAG,
+                                    "Zone full: ${ahead / 1000}s transcribed ahead of ${positionMs / 1000}s " +
+                                        "(zone ${BufferPolicy.zoneMs(totalMs) / 1000}s); waiting",
+                                )
                             }
-                        } else {
-                            buffered = false
+                            update(applicationContext.getString(R.string.status_buffered_ahead, (ahead / 1000).toInt()), progressOf(latest.value))
+                            // Free the model while waiting; step aside if another episode waits for it.
+                            if (engine != null && System.currentTimeMillis() - waitingSince > 30_000) releaseEngine()
+                            if (EngineLock.waiting.get() > 0) {
+                                AppLog.i(TAG, "Zone full and another episode is waiting: stepping aside")
+                                yielded = true
+                                stopped = true
+                                break
+                            }
+                            delay(1_000)
+                            continue
                         }
-
-                        // Short first block right after starting or jumping, so text appears within seconds.
-                        val nearJump = following && jumpedToMs >= 0 && Coverage.runEnd(spans, jumpedToMs) - jumpedToMs < FIRST_BLOCK_MS
-                        val blockMs = if (nearJump) FIRST_BLOCK_MS else BLOCK_MS
-                        val block = TranscriptionPlan.nextBlock(spans, anchorMs, totalMs, blockMs) ?: break
+                        waitingSince = 0L
                         val blockStarted = System.currentTimeMillis()
                         val ready = prefetch?.takeIf { it.first.startMs == block.startMs }?.second
                         if (ready == null) prefetch?.second?.cancel()
@@ -403,7 +424,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             continue
                         }
                         // Prepare the following block while this one is recognised.
-                        val nextSpan = TranscriptionPlan.nextBlock(Coverage.add(spans, prepared.span), prepared.span.endMs, totalMs, BLOCK_MS)
+                        val nextSpan = BufferPolicy.nextBlock(Coverage.add(spans, prepared.span), positionMs, totalMs, BLOCK_MS)
                         if (nextSpan != null && nextSpan.startMs >= prepared.span.endMs) prefetch = nextSpan to async { prepare(nextSpan) }
 
                         val prompt = latest.value.segments.filter { it.endMs <= prepared.span.startMs + 500 }.takeLast(3)
@@ -421,7 +442,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 val away = mine && (p.isPlaying || p.isBuffering) && !AppVisibility.visible.value
                                 if (mine && (away || TranscriptionPlan.shouldAbandon(covered, p.positionMs, prepared.span))) {
                                     abandoned = true
-                                    engine.abort()
+                                    engine?.abort()
                                     break
                                 }
                             }
@@ -431,8 +452,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         var lastEnd = blockStartMs
                         var count = 0
                         val recognitionStarted = System.currentTimeMillis()
+                        val recognizer = engine()
                         val finished = withContext(CoreDispatchers.recognition) {
-                            engine.transcribe(
+                            recognizer.transcribe(
                                 prepared.samples, prepared.speech, language, prompt,
                                 onProgress = { percent ->
                                     update(transcribing, progressOf(latest.value) + blockLenMs * percent / 100f / totalMs)
@@ -483,7 +505,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 "${if (following) ", following playback at ${player.positionMs / 1000}s" else ""}, $count sentences",
                         )
                         done(Span(blockStartMs, blockStartMs + blockLenMs))
-                        if (!following) anchorMs = blockStartMs + blockLenMs
                     }
                     prefetch?.second?.cancel()
                     events.close()
@@ -493,7 +514,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 abortHandle?.dispose()
             }
         } finally {
-            withContext(NonCancellable + CoreDispatchers.recognition) { engine.close() }
+            releaseEngine()
             withContext(NonCancellable + CoreDispatchers.light) { reader.close() }
         }
         if (stopped) return null

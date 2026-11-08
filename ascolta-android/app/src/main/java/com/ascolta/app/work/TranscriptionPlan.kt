@@ -73,42 +73,41 @@ object TranscriptionPlan {
 }
 
 /**
- * How far ahead of playback the transcription stays while someone listens: about 20% of the
- * episode's speech (estimated from the part already transcribed). It pauses once that much
- * transcribed speech lies ahead of the listener and resumes when it drops to 15%.
- * It never goes below what is needed for playback not to catch up while one block is
- * transcribed. Returns null when transcription isn't clearly faster than playback (then it
- * never pauses).
+ * The buffer zone: transcription only covers the stretch from where the listener is in the
+ * timeline (playing or not) up to 20% of the episode's duration ahead of it. Once that is
+ * transcribed it waits; it continues when the listener has used up part of it (at least one
+ * block, or a quarter of the zone for short episodes), or jumps somewhere not yet done.
  */
 object BufferPolicy {
     const val SHARE = 0.20f
-    const val RESUME_SHARE = 0.15f
+    private const val MIN_ZONE_MS = 30_000L
 
-    /** Limits in milliseconds of speech ahead of the listener. */
-    data class Limits(val resumeBelowMs: Long, val pauseAboveMs: Long)
+    /** Length of the zone ahead of the listener: 20% of the episode (at least 30 s). */
+    fun zoneMs(totalMs: Long): Long = maxOf(MIN_ZONE_MS, (totalMs * SHARE).toLong()).coerceAtMost(totalMs)
 
-    fun limits(speedFactor: Float?, playbackSpeed: Float, blockMs: Long, totalSpeechMs: Long): Limits? {
-        if (speedFactor == null || speedFactor < playbackSpeed * 1.2f) return null
-        // Audio played while the next block is transcribed, plus a margin.
-        val safety = (playbackSpeed * blockMs / speedFactor).toLong() + 10_000L
-        val high = maxOf((totalSpeechMs * SHARE).toLong(), safety + 15_000L, 30_000L)
-        val low = maxOf(safety, (totalSpeechMs * RESUME_SHARE).toLong()).coerceAtMost(high - 10_000L)
-        return Limits(low, high)
+    /** End of the zone for a listener at [positionMs]. */
+    fun zoneEnd(positionMs: Long, totalMs: Long): Long = minOf(totalMs, positionMs + zoneMs(totalMs))
+
+    /** After a full zone, work starts again once less than this is transcribed ahead. */
+    fun resumeBelowMs(totalMs: Long, blockMs: Long): Long {
+        val zone = zoneMs(totalMs)
+        return zone - minOf(blockMs, zone / 4)
     }
-
-    /** Transcribed speech between [positionMs] and [untilMs] (sentence durations). */
-    fun speechAhead(segments: List<Segment>, positionMs: Long, untilMs: Long): Long =
-        segments.sumOf { s -> (minOf(s.endMs, untilMs) - maxOf(s.startMs, positionMs)).coerceAtLeast(0) }
 
     /**
-     * Estimated speech in the whole episode: the share of speech in what is transcribed so
-     * far, applied to its duration. Until a minute is done, assumes 85% speech.
+     * The next stretch to transcribe for a listener at [positionMs], or null when the zone
+     * ahead of them is fully transcribed (nothing beyond the zone, nothing behind them).
      */
-    fun estimatedSpeechMs(segments: List<Segment>, coveredMs: Long, totalMs: Long): Long {
-        if (coveredMs < 60_000) return (totalMs * 0.85).toLong()
-        val speech = segments.sumOf { (it.endMs - it.startMs).coerceAtLeast(0) }
-        return (speech.toDouble() / coveredMs * totalMs).toLong().coerceIn(totalMs / 10, totalMs)
+    fun nextBlock(spans: List<Span>, positionMs: Long, totalMs: Long, blockMs: Long): Span? {
+        val end = zoneEnd(positionMs, totalMs)
+        val gap = Coverage.firstGap(spans, positionMs, totalMs) ?: return null
+        if (gap.startMs >= end - 500) return null
+        return Span(gap.startMs, minOf(gap.endMs, gap.startMs + blockMs, end))
     }
+
+    /** Transcribed time right ahead of a listener at [positionMs]. */
+    fun aheadMs(spans: List<Span>, positionMs: Long, totalMs: Long): Long =
+        (Coverage.firstGap(spans, positionMs, totalMs)?.startMs ?: totalMs) - positionMs
 }
 
 /** Where to end a block so it doesn't cut a word in two (which made words appear twice). */

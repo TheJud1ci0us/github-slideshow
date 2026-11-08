@@ -62,22 +62,24 @@ class TranscriptionPlanTest {
     }
 
     @Test
-    fun bufferIsAbout20PercentOfTheSpeech() {
-        // Unknown speed, or not faster than playback: never pause.
-        assertNull(BufferPolicy.limits(null, 1f, min, 50 * min))
-        assertNull(BufferPolicy.limits(1.1f, 1f, min, 50 * min))
-        // 50 minutes of speech: pause at 10 minutes ahead, resume below 7.5.
-        val l = BufferPolicy.limits(10f, 1f, min, 50 * min)!!
-        assertEquals(10 * min, l.pauseAboveMs)
-        assertEquals(450_000L, l.resumeBelowMs)
-        // Short episode: never less than what playback eats while one block is transcribed.
-        val short = BufferPolicy.limits(2f, 1.5f, min, 2 * min)!!
-        assertTrue(short.pauseAboveMs >= 45_000 + 10_000)
-        assertTrue(short.resumeBelowMs < short.pauseAboveMs)
-        // Speech ahead counts sentence time only, up to the end of the transcribed stretch.
-        val segs = listOf(Segment(0, 4_000, "a"), Segment(10_000, 14_000, "b"), Segment(20_000, 30_000, "c"))
-        assertEquals(2_000L + 4_000 + 5_000, BufferPolicy.speechAhead(segs, 2_000, 25_000))
-        assertEquals(15 * min, BufferPolicy.estimatedSpeechMs(segs, 60_000, 50 * min)) // 18 s of speech in 60 s → 30%
+    fun onlyTwentyPercentAheadOfTheListener() {
+        // 60-minute episode: the zone is 12 minutes.
+        val total = 60 * min
+        assertEquals(12 * min, BufferPolicy.zoneMs(total))
+        // Listener at minute 10, nothing done: work starts at minute 10.
+        assertEquals(Span(10 * min, 11 * min), BufferPolicy.nextBlock(emptyList(), 10 * min, total, min))
+        // Minutes 10–21.5 done: the last block stops at the zone's end (minute 22).
+        val done = listOf(Span(10 * min, 21 * min + 30_000))
+        assertEquals(Span(21 * min + 30_000, 22 * min), BufferPolicy.nextBlock(done, 10 * min, total, min))
+        // Zone full: nothing more, even though the rest of the episode isn't transcribed.
+        assertNull(BufferPolicy.nextBlock(listOf(Span(10 * min, 22 * min)), 10 * min, total, min))
+        assertEquals(12 * min, BufferPolicy.aheadMs(listOf(Span(10 * min, 22 * min)), 10 * min, total))
+        // It resumes after the listener has used up one block of it.
+        assertEquals(11 * min, BufferPolicy.resumeBelowMs(total, min))
+        // Never behind the listener: minute 0–10 stays untouched.
+        assertNull(BufferPolicy.nextBlock(listOf(Span(10 * min, total)), 10 * min, total, min))
+        // Short episode: at least 30 s ahead.
+        assertEquals(30_000L, BufferPolicy.zoneMs(2 * min))
     }
 
     @Test

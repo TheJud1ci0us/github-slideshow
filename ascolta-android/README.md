@@ -31,9 +31,10 @@ the phone.
 - **Transcription follows what you listen to**, like a video buffer: jump from minute 1 to
   minute 20 and it drops the current block within a second and starts at minute 20 (a short
   first block so text appears quickly). Finished parts are kept; go back to minute 1 and it
-  continues there. While you listen it keeps about **20% of the episode's speech** transcribed ahead of
-  you (pausing there and resuming at 15%, never less than playback needs at the measured speed);
-  when you aren't listening it runs as fast as possible. Listening with the phone locked or the
+  continues there. It only ever transcribes a **buffer zone of 20% of the episode's duration** ahead of
+  where you are in the timeline (playing or paused; e.g. 12 minutes of a 60-minute episode), then
+  waits and frees the model's memory; it continues as you listen past one block of it. Nothing
+  behind you or beyond the zone is transcribed. Listening with the phone locked or the
   app in the background pauses it; opening the app restarts it right where you are.
 - Blocks end in a pause (never mid-word) and repeated speech is kept once. An interrupted job continues where it stopped.
 - **Network mode**: *Wi-Fi only* (episodes, models, feeds and translation models download on
