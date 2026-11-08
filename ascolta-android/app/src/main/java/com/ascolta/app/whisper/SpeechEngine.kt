@@ -297,6 +297,27 @@ object SpeechAlignment {
         else seg.copy(startMs = maxOf(seg.startMs, best.first), endMs = minOf(seg.endMs, best.second))
     }
 
+    /**
+     * Groups consecutive speech regions into windows whose joined length (regions plus
+     * [gapMs] between them) stays within [maxMs]; regions longer than that are split first.
+     */
+    fun packWindows(regions: List<Pair<Long, Long>>, maxMs: Long, gapMs: Long): List<List<Pair<Long, Long>>> {
+        val windows = mutableListOf<MutableList<Pair<Long, Long>>>()
+        var used = 0L
+        for ((s, e) in splitLong(regions.sortedBy { it.first }, maxMs)) {
+            val len = e - s
+            val current = windows.lastOrNull()
+            if (current != null && used + gapMs + len <= maxMs) {
+                current += s to e
+                used += gapMs + len
+            } else {
+                windows += mutableListOf(s to e)
+                used = len
+            }
+        }
+        return windows
+    }
+
     /** Splits regions longer than [maxMs] into roughly equal parts. */
     fun splitLong(regions: List<Pair<Long, Long>>, maxMs: Long): List<Pair<Long, Long>> =
         regions.flatMap { (s, e) ->

@@ -38,13 +38,21 @@ the phone.
 - whisper.cpp is built for several CPU generations; the app loads the fastest one the
   phone supports (e.g. dot-product and int8 matrix instructions on recent Snapdragons).
 - Choose how many CPU cores to use (1–8) and toggle Whisper's flash attention.
-- **Speed test** in Settings times one minute of a downloaded episode with the current settings.
+- **NVIDIA Parakeet v3 on the NPU** (Snapdragon phones): Qualcomm AI Hub's export runs the
+  encoder on the Hexagon NPU through ONNX Runtime's QNN provider while the small decoder runs
+  on the CPU. Disabled (with the reason) on phones without a usable Qualcomm NPU; falls back
+  to the CPU version if the NPU refuses the model.
+- **Work split across the chip**: the next block of audio is decoded and searched for speech on
+  the efficiency cores while the current one is recognised on the fast cores (thread affinity).
+- **Speed test** in Settings: the same bundled 30 s recording every time; one warm-up run, then
+  three timed runs (median and spread), plus word accuracy.
 - **Stop** a running transcription (what's done is kept; *Continue* resumes), or remove
   waiting items from the queue.
 
 **Learning**
 - Dual subtitles: the Italian sentence with the English translation under it, synced
-  to the audio, with the current sentence highlighted and auto-scrolled.
+  to the audio, with the current sentence and the current **word** highlighted and auto-scrolled
+  (exact seeking in variable-bit-rate MP3s keeps the highlight in sync).
 - Tap a word to translate it and save it to **Words**. Export to Anki as tab-separated text.
 - Previous / next / repeat sentence, **pause after each sentence**, 0.5×–1.5× speed.
 - Hide either language to test yourself; adjustable text size.
@@ -93,6 +101,7 @@ Run on a **real phone**. The emulator works but whisper is very slow there.
 | Whisper Small | 190 MB | ~3× slower than Base | noticeably better | all |
 | Whisper Large v3 Turbo | 574 MB | slow | best Whisper; needs ~8 GB RAM | all |
 | **NVIDIA Parakeet v3** | 670 MB | fast | very good, with punctuation | 25 European (not ja/zh) |
+| NVIDIA Parakeet v3 (NPU) | 2.3 GB | NPU; first use compiles it | same as above | 25 European; Snapdragon only |
 
 In a test on Italian speech, Parakeet transcribed perfectly where Whisper Base made
 mistakes, and was about 3× faster. Run the speed test in Settings to compare models,

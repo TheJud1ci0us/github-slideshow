@@ -216,11 +216,13 @@ class ParakeetNpuEngine(
         val clipped = if (audio.size > maxSamples) audio.copyOf(maxSamples) else audio
         val feats = ParakeetFeatures.compute(clipped)
         val input = FloatArray(WINDOW_FRAMES * ParakeetFeatures.N_MELS)
-        val mask = IntArray(WINDOW_FRAMES)
         for (t in 0 until minOf(feats.features.size, WINDOW_FRAMES)) {
             System.arraycopy(feats.features[t], 0, input, t * ParakeetFeatures.N_MELS, ParakeetFeatures.N_MELS)
-            if (t < feats.validFrames) mask[t] = 1
         }
+        // All frames marked valid: this export's attention turns into NaN when part of the
+        // window is masked out (checked against the model). The padding is zero (silence after
+        // normalisation) and only the real frames are decoded below.
+        val mask = IntArray(WINDOW_FRAMES) { 1 }
         val enc: Array<FloatArray>
         OnnxTensor.createTensor(env, FloatBuffer.wrap(input), longArrayOf(1, WINDOW_FRAMES.toLong(), ParakeetFeatures.N_MELS.toLong())).use { f ->
             OnnxTensor.createTensor(env, IntBuffer.wrap(mask), longArrayOf(1, WINDOW_FRAMES.toLong())).use { m ->
@@ -246,20 +248,24 @@ class ParakeetNpuEngine(
         onSegment: (WhisperSegment) -> Unit,
     ): Boolean {
         aborted = false
-        val regions = speech ?: listOf(0L to samples.size / 16L)
-        val pieces = SpeechAlignment.splitLong(regions, MAX_PIECE_MS)
-        pieces.forEachIndexed { i, (startMs, endMs) ->
+        val audioMs = samples.size / 16L
+        val regions = speech ?: listOf(0L to audioMs)
+        // The encoder always processes a full 13-second window, so consecutive stretches of
+        // speech are packed together (with short pauses between them) to fill each window;
+        // times are mapped back exactly afterwards.
+        val windows = SpeechAlignment.packWindows(regions, MAX_WINDOW_MS, GAP_MS)
+        windows.forEachIndexed { i, window ->
             if (aborted) return false
-            onProgress(i * 100 / pieces.size.coerceAtLeast(1))
-            val from = (startMs * 16).toInt().coerceIn(0, samples.size)
-            val to = (endMs * 16).toInt().coerceIn(from, samples.size)
-            if (to - from < 1_600) return@forEachIndexed
-            recognizePiece(samples.copyOfRange(from, to)).forEach { seg ->
+            onProgress(i * 100 / windows.size.coerceAtLeast(1))
+            val map = SpeechMap.build(window, audioMs, GAP_MS)
+            if (map.isEmpty || map.joinedLengthMs < 100) return@forEachIndexed
+            recognizePiece(SpeechMap.joinSpeech(samples, map)).forEach { seg ->
+                val start = map.toOriginal(seg.startMs)
                 onSegment(
                     seg.copy(
-                        startMs = seg.startMs + startMs,
-                        endMs = seg.endMs + startMs,
-                        words = seg.words?.map { it.copy(startMs = it.startMs + startMs) },
+                        startMs = start,
+                        endMs = maxOf(start, map.toOriginal(seg.endMs, isEnd = true)),
+                        words = seg.words?.map { it.copy(startMs = map.toOriginal(it.startMs)) },
                     ),
                 )
             }
@@ -284,7 +290,9 @@ class ParakeetNpuEngine(
         private const val SUBSAMPLING = 8
         /** One encoder frame = 8 feature frames × 10 ms. */
         private const val FRAME_SECONDS = 0.08f
-        private const val MAX_PIECE_MS = 13_000L
+        /** Speech packed per window (≤ 13.19 s fits the encoder's 1320 frames). */
+        private const val MAX_WINDOW_MS = 13_000L
+        private const val GAP_MS = 300L
 
         /**
          * Prepares the process for the NPU: ONNX Runtime must use its own (QNN-enabled)

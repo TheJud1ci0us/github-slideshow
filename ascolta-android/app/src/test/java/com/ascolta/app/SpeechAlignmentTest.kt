@@ -100,4 +100,14 @@ class SpeechAlignmentTest {
         assertEquals((0..7).toList(), topo.recognitionCores(8))
         assertEquals(listOf(0, 1, 2), topo.lightCores())
     }
+
+    @Test
+    fun packsSpeechIntoFullWindows() {
+        val regions = listOf(0L to 3_000L, 4_000L to 8_000L, 9_000L to 12_000L, 20_000L to 35_000L)
+        val windows = SpeechAlignment.packWindows(regions, 13_000, 300)
+        // 3 s + 0.3 + 4 s + 0.3 + 3 s = 10.6 s fit in one window; the 15 s region is split in two.
+        assertEquals(listOf(0L to 3_000L, 4_000L to 8_000L, 9_000L to 12_000L), windows[0])
+        assertEquals(listOf(20_000L to 27_500L), windows[1])
+        assertEquals(listOf(27_500L to 35_000L), windows[2])
+    }
 }

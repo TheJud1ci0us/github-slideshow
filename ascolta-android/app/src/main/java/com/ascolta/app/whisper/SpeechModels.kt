@@ -128,22 +128,9 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
         }
     }
 
-    /** Unpacks [zip] into [target], dropping the archive's top-level folder. */
+    /** Unpacks [zip] into [target], dropping the archive's top-level folder (ZIP64-safe). */
     private suspend fun unzip(zip: File, target: File) = withContext(Dispatchers.IO) {
-        target.mkdirs()
-        java.util.zip.ZipInputStream(zip.inputStream().buffered()).use { zin ->
-            while (true) {
-                val entry = zin.nextEntry ?: break
-                val relative = entry.name.substringAfter('/', entry.name)
-                if (relative.isEmpty() || relative.contains("..")) continue
-                val out = File(target, relative)
-                if (entry.isDirectory) out.mkdirs()
-                else {
-                    out.parentFile?.mkdirs()
-                    out.outputStream().use { zin.copyTo(it, 1 shl 20) }
-                }
-            }
-        }
+        ZipExtractor.extract(zip, target, stripTopFolder = true)
         File(target, ".complete").writeText("ok")
     }
 
