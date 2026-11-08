@@ -75,6 +75,16 @@ object CoreDispatchers {
     /** Audio decoding, speech detection and saving. */
     val light: CoroutineDispatcher = lightExecutor.asCoroutineDispatcher()
 
+    /** One thread per efficiency core, for running speech detection on parts of a block in parallel. */
+    val speechDetectionThreads: Int = CpuTopology.current.lightCores().size.coerceIn(1, 4)
+    private val vadExecutor = Executors.newFixedThreadPool(speechDetectionThreads) { r ->
+        Thread({
+            pin(CpuTopology.current.lightCores(), "speech-detection")
+            r.run()
+        }, "ascolta-vad")
+    }
+    val speechDetection: CoroutineDispatcher = vadExecutor.asCoroutineDispatcher()
+
     /** Pins the recognition thread to the cores suited to [threads] threads (no-op if unchanged). */
     fun prepareRecognition(threads: Int) {
         val cores = CpuTopology.current.recognitionCores(threads)

@@ -9,18 +9,19 @@ import com.ascolta.app.data.AppLog
 import com.ascolta.app.data.DownloadState
 import com.ascolta.app.data.EpisodeEntity
 import com.ascolta.app.data.Segment
+import com.ascolta.app.data.Span
 import com.ascolta.app.data.Transcript
 import com.ascolta.app.data.TranscriptState
 import com.ascolta.app.graph
 import com.ascolta.app.net.FeedTranscriptParser
 import com.ascolta.app.net.fetchString
-import com.ascolta.app.whisper.AudioDecoder
+import com.ascolta.app.whisper.BlockReader
+import com.ascolta.app.whisper.SpeechDetection
 import com.ascolta.app.R
 import com.ascolta.app.data.languageName
 import com.ascolta.app.whisper.CoreDispatchers
 import com.ascolta.app.whisper.CpuTopology
 import com.ascolta.app.whisper.Engine
-import com.ascolta.app.whisper.SpeechAlignment
 import com.ascolta.app.whisper.EngineLock
 import com.ascolta.app.whisper.EngineOptions
 import com.ascolta.app.whisper.SpeechEngine
@@ -29,7 +30,9 @@ import com.ascolta.app.whisper.WhisperLib
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
@@ -58,6 +61,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     private val dao = graph.db.episodeDao()
     private var episodeId = -1L
     private var title = ""
+
+    /** Set when this job stepped aside for the episode being played; it is rescheduled. */
+    private var yielded = false
 
     private data class Status(val text: String, val progress: Float)
     private val status = MutableStateFlow(Status("…", 0f))
@@ -124,7 +130,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 WorkScheduler.download(applicationContext, episodeId, transcribeAfter = true, manual = true)
                 return Result.success()
             }
-            transcript = transcribeAudio(path, language, target, transcript) ?: return Result.retry()
+            transcript = transcribeAudio(path, language, target, transcript) ?: run {
+                if (yielded) dao.setTranscript(episodeId, TranscriptState.QUEUED, status.value.progress, applicationContext.getString(R.string.status_waiting))
+                return Result.retry()
+            }
         }
 
         transcript = translateRemaining(transcript, target)
@@ -191,22 +200,18 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val threads = settings.effectiveThreads()
         val options = EngineOptions(threads = threads, flashAttention = settings.flashAttention.value)
 
-        // Resume only a partial transcript made with the same model and language. Sentences
-        // after the last finished block (from an interrupted run) are dropped: that audio is
-        // transcribed again.
+        // Resume only a partial transcript made with the same model and language, keeping only
+        // sentences inside the stretches already marked as done (an interrupted block is redone).
         val initial = existing?.takeIf {
             it.source == Transcript.SOURCE_WHISPER && it.language == language && (it.model == null || it.model == model.id)
-        }?.let { t -> t.copy(segments = t.segments.filter { it.startMs < t.processedMs }) }
-            ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
-
-        val decoder = AudioDecoder(path)
-        val totalMs = decoder.durationMs().coerceAtLeast(1)
-        AppLog.i(TAG, "Audio ${totalMs / 1000}s, resuming at ${initial.processedMs / 1000}s; " +
-            "model=${model.id} threads=$threads flash=${options.flashAttention} skipNonSpeech=$useVad")
+        }?.let { t ->
+            val spans = t.coveredSpans()
+            t.copy(covered = spans, segments = t.segments.filter { seg -> spans.any { seg.startMs >= it.startMs - 500 && seg.startMs < it.endMs } })
+        } ?: Transcript(language, Transcript.SOURCE_WHISPER, emptyList(), model = model.id)
 
         val canTranslate = prepareTranslation(language, target)
 
-        update(applicationContext.getString(R.string.status_loading_model), initial.processedMs.toFloat() / totalMs)
+        update(applicationContext.getString(R.string.status_loading_model), status.value.progress)
         WhisperLib.ensureBackends(applicationContext.applicationInfo.nativeLibraryDir)
         CoreDispatchers.prepareRecognition(threads)
         AppLog.i(TAG, "CPU: ${runCatching { WhisperLib.nativeCpuVariant() }.getOrDefault("?")}; ${CpuTopology.current}")
@@ -214,6 +219,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val started = System.currentTimeMillis()
         val transcribing = applicationContext.getString(R.string.status_transcribing)
         val latest = MutableStateFlow(initial)
+
+        val reader = withContext(CoreDispatchers.light) { BlockReader(path) }
+        val totalMs = reader.durationMs.coerceAtLeast(1)
+        AppLog.i(TAG, "Audio ${totalMs / 1000}s, already done ${Coverage.totalMs(initial.covered) / 1000}s; " +
+            "model=${model.id} threads=$threads flash=${options.flashAttention} skipNonSpeech=$useVad")
+        fun progressOf(t: Transcript) = Coverage.totalMs(t.covered).toFloat() / totalMs
 
         // The engine is created on the recognition thread so its worker threads stay on the fast cores.
         val engine = withContext(CoreDispatchers.recognition) { SpeechEngine.load(applicationContext, model, graph.models, options) }
@@ -235,16 +246,19 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                         withTimeoutOrNull(15_000) { graph.translation.translate(event.segment.text, language, target) }
                                     }.getOrNull() else null
                                     t = t.copy(
-                                        segments = t.segments + event.segment.copy(translation = translation),
+                                        segments = (t.segments + event.segment.copy(translation = translation)).sortedBy { it.startMs },
                                         model = model.id,
                                         translationLanguage = if (canTranslate) target else t.translationLanguage,
                                     )
                                 }
-                                is WriterEvent.BlockDone -> t = t.copy(processedMs = event.processedMs)
+                                is WriterEvent.Done -> {
+                                    val covered = Coverage.add(t.covered, event.span)
+                                    t = t.copy(covered = covered, processedMs = Coverage.runEnd(covered, 0))
+                                }
                             }
                             latest.value = t
                             val now = System.currentTimeMillis()
-                            if (event is WriterEvent.BlockDone || now - lastSave >= 700) {
+                            if (event is WriterEvent.Done || now - lastSave >= 700) {
                                 graph.transcripts.save(episodeId, t)
                                 lastSave = now
                             }
@@ -252,81 +266,161 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         graph.transcripts.save(episodeId, t)
                     }
 
-                    // Producer on the efficiency cores: decodes the audio and finds the speech of
-                    // the NEXT block while the current one is being recognised, so recognition
-                    // never waits for it.
-                    val blocks = Channel<PreparedBlock>(capacity = 1)
-                    val producer = launch(CoreDispatchers.light) {
-                        try {
-                            decoder.decode(
-                                chunkSamples = CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
-                                skipSamples = initial.processedMs * 16,
-                                firstChunkSamples = FIRST_CHUNK_SECONDS * AudioDecoder.SAMPLE_RATE,
-                            ) { samples, startSample ->
-                                val speech = vadPath?.let { p ->
-                                    WhisperLib.nativeDetectSpeech(p, samples, 2)?.let { SpeechAlignment.pairs(it) }
-                                }
-                                blocks.send(PreparedBlock(samples, startSample, speech))
-                                true
-                            }
-                        } finally {
-                            blocks.close()
+                    // Audio for a block, prepared on the efficiency cores: decoding, then speech
+                    // detection split across all efficiency cores.
+                    suspend fun prepare(span: Span): PreparedBlock {
+                        val (samples, firstSample) = withContext(CoreDispatchers.light) {
+                            val ctx = coroutineContext
+                            reader.read(span.startMs, span.endMs - span.startMs) { !ctx.isActive }
                         }
+                        val speech = vadPath?.let { SpeechDetection.detect(it, samples) }
+                        return PreparedBlock(Span(firstSample / 16, firstSample / 16 + samples.size / 16L), samples, speech)
                     }
 
-                    update(applicationContext.getString(R.string.status_reading_audio), initial.processedMs.toFloat() / totalMs)
-                    for (block in blocks) {
-                        if (isStopped) {
+                    var prefetch: Pair<Span, Deferred<PreparedBlock>>? = null
+                    var anchorMs = 0L          // where the work is heading
+                    var lastListenPos = -1L
+                    var speedFactor: Float? = null
+                    var buffered = false        // paused because far enough ahead of playback
+                    var jumpedToMs = -1L
+
+                    while (true) {
+                        if (isStopped) { stopped = true; break }
+                        val spans = latest.value.covered
+                        if (Coverage.isComplete(spans, totalMs)) break
+
+                        // Follow the listener when this episode is loaded in the player.
+                        val player = graph.player.state.value
+                        val following = player.episodeId == episodeId
+                        // Another episode is playing and waiting to be transcribed: let it go first.
+                        val playingOther = player.episodeId?.takeIf { it != episodeId }
+                        if (playingOther != null && dao.get(playingOther)?.transcriptState == TranscriptState.QUEUED) {
+                            AppLog.i(TAG, "Episode #$playingOther is playing and queued: pausing #$episodeId for it")
+                            yielded = true
                             stopped = true
                             break
                         }
-                        val chunkStartMs = block.startSample / 16
-                        val chunkMs = block.samples.size / 16L
-                        val prompt = latest.value.segments.takeLast(3).joinToString(" ") { it.text }.takeLast(200)
-                        update(transcribing, maxOf(status.value.progress, chunkStartMs.toFloat() / totalMs))
+                        val listening = following && (player.isPlaying || player.isBuffering)
+                        if (following) {
+                            if (lastListenPos < 0 || kotlin.math.abs(player.positionMs - lastListenPos) > 10_000) jumpedToMs = player.positionMs
+                            lastListenPos = player.positionMs
+                            anchorMs = player.positionMs
+                        }
 
-                        val chunkStarted = System.currentTimeMillis()
+                        // Like a video buffer: while listening, stop once far enough ahead.
+                        if (listening) {
+                            val limits = BufferPolicy.limits(speedFactor, player.speed, BLOCK_MS)
+                            val ahead = Coverage.runEnd(spans, player.positionMs) - player.positionMs
+                            if (limits != null) {
+                                if (buffered && ahead < limits.resumeBelowMs) buffered = false
+                                if (!buffered && ahead >= limits.pauseAboveMs) {
+                                    buffered = true
+                                    AppLog.i(TAG, "Buffered ${ahead / 1000}s ahead of playback; pausing until below ${limits.resumeBelowMs / 1000}s")
+                                }
+                                if (buffered) {
+                                    update(applicationContext.getString(R.string.status_buffered_ahead, (ahead / 1000).toInt()), progressOf(latest.value))
+                                    delay(1_000)
+                                    continue
+                                }
+                            }
+                        } else {
+                            buffered = false
+                        }
+
+                        // Short first block right after starting or jumping, so text appears within seconds.
+                        val nearJump = following && jumpedToMs >= 0 && Coverage.runEnd(spans, jumpedToMs) - jumpedToMs < FIRST_BLOCK_MS
+                        val blockMs = if (nearJump) FIRST_BLOCK_MS else BLOCK_MS
+                        val block = TranscriptionPlan.nextBlock(spans, anchorMs, totalMs, blockMs) ?: break
+                        val blockStarted = System.currentTimeMillis()
+                        val ready = prefetch?.takeIf { it.first == block }?.second
+                        if (ready == null) prefetch?.second?.cancel()
+                        prefetch = null
+                        val prepared = ready?.await() ?: prepare(block)
+                        if (prepared.samples.isEmpty()) {
+                            events.send(WriterEvent.Done(block)) // past the decodable end of the file
+                            continue
+                        }
+                        // Prepare the following block while this one is recognised.
+                        val nextSpan = TranscriptionPlan.nextBlock(Coverage.add(spans, block), block.endMs, totalMs, BLOCK_MS)
+                        if (nextSpan != null && nextSpan.startMs >= block.endMs) prefetch = nextSpan to async { prepare(nextSpan) }
+
+                        val prompt = latest.value.segments.filter { it.endMs <= block.startMs + 500 }.takeLast(3)
+                            .joinToString(" ") { it.text }.takeLast(200)
+                        update(transcribing, progressOf(latest.value))
+
+                        // While recognising, watch the player: if the listener jumps somewhere this
+                        // block doesn't help, abandon it and go there.
+                        var abandoned = false
+                        val watcher = launch {
+                            while (isActive) {
+                                delay(300)
+                                val p = graph.player.state.value
+                                if (p.episodeId == episodeId && TranscriptionPlan.shouldAbandon(latest.value.covered, p.positionMs, block)) {
+                                    abandoned = true
+                                    engine.abort()
+                                    break
+                                }
+                            }
+                        }
+                        val blockStartMs = prepared.span.startMs
+                        val blockLenMs = prepared.span.endMs - prepared.span.startMs
+                        var lastEnd = blockStartMs
                         var count = 0
+                        val recognitionStarted = System.currentTimeMillis()
                         val finished = withContext(CoreDispatchers.recognition) {
                             engine.transcribe(
-                                block.samples, block.speech, language, prompt,
+                                prepared.samples, prepared.speech, language, prompt,
                                 onProgress = { percent ->
-                                    update(transcribing, maxOf(status.value.progress, (chunkStartMs + chunkMs * percent / 100f) / totalMs))
+                                    update(transcribing, progressOf(latest.value) + blockLenMs * percent / 100f / totalMs)
                                 },
                                 onSegment = { seg ->
                                     val text = seg.text.trim()
                                     if (text.isNotEmpty() && !isHallucination(text)) {
                                         count++
+                                        lastEnd = maxOf(lastEnd, seg.endMs + blockStartMs)
                                         events.trySend(
                                             WriterEvent.Sentence(
                                                 Segment(
-                                                    seg.startMs + chunkStartMs,
-                                                    seg.endMs + chunkStartMs,
+                                                    seg.startMs + blockStartMs,
+                                                    seg.endMs + blockStartMs,
                                                     text,
-                                                    words = seg.words?.map { it.copy(startMs = it.startMs + chunkStartMs) },
+                                                    words = seg.words?.map { it.copy(startMs = it.startMs + blockStartMs) },
                                                 ),
                                             ),
                                         )
-                                        update(transcribing, maxOf(status.value.progress, (chunkStartMs + seg.endMs).toFloat() / totalMs))
                                     }
                                 },
                             )
                         }
+                        watcher.cancel()
                         if (!finished) {
+                            if (abandoned && !isStopped) {
+                                // Keep what was recognised; the rest of this block is done later.
+                                if (lastEnd > blockStartMs) events.send(WriterEvent.Done(Span(blockStartMs, lastEnd)))
+                                prefetch?.second?.cancel()
+                                prefetch = null
+                                AppLog.i(TAG, "Listener moved to ${graph.player.state.value.positionMs / 1000}s: left block at ${blockStartMs / 1000}s")
+                                continue
+                            }
                             stopped = true
                             break
                         }
-                        val took = System.currentTimeMillis() - chunkStarted
+                        val now = System.currentTimeMillis()
+                        val wall = (now - blockStarted).coerceAtLeast(1)
+                        val factor = blockLenMs.toFloat() / wall
+                        speedFactor = speedFactor?.let { it * 0.5f + factor * 0.5f } ?: factor
                         AppLog.i(
                             TAG,
-                            "Block at ${chunkStartMs / 1000}s (${chunkMs / 1000}s audio, " +
-                                "${block.speech?.sumOf { it.second - it.first }?.div(1000) ?: (chunkMs / 1000)}s speech) took " +
-                                "${took / 1000.0}s (${"%.1f".format(java.util.Locale.US, chunkMs.toFloat() / took.coerceAtLeast(1))}x real time), $count sentences",
+                            "Block ${blockStartMs / 1000}-${(blockStartMs + blockLenMs) / 1000}s " +
+                                "(${prepared.speech?.sumOf { it.second - it.first }?.div(1000) ?: (blockLenMs / 1000)}s speech): " +
+                                "recognition ${(now - recognitionStarted) / 1000.0}s, total ${wall / 1000.0}s " +
+                                "(${"%.1f".format(java.util.Locale.US, factor)}x real time)" +
+                                "${if (following) ", following playback at ${player.positionMs / 1000}s" else ""}, $count sentences",
                         )
-                        events.trySend(WriterEvent.BlockDone(chunkStartMs + chunkMs))
-                        update(transcribing, (chunkStartMs + chunkMs).toFloat() / totalMs)
+                        events.send(WriterEvent.Done(Span(blockStartMs, blockStartMs + blockLenMs)))
+                        if (!following) anchorMs = blockStartMs + blockLenMs
                     }
-                    producer.cancel()
+                    prefetch?.second?.cancel()
                     events.close()
                     writer.join()
                 }
@@ -335,19 +429,20 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
         } finally {
             withContext(NonCancellable + CoreDispatchers.recognition) { engine.close() }
+            withContext(NonCancellable + CoreDispatchers.light) { reader.close() }
         }
         if (stopped) return null
         val seconds = (System.currentTimeMillis() - started) / 1000
         AppLog.i(TAG, "Transcription finished in ${seconds}s for ${totalMs / 1000}s of audio")
-        val transcript = latest.value
-        return transcript.copy(complete = true, processedMs = maxOf(transcript.processedMs, totalMs))
+        return latest.value.copy(complete = true, processedMs = totalMs, covered = listOf(Span(0, totalMs)))
     }
 
-    private class PreparedBlock(val samples: FloatArray, val startSample: Long, val speech: List<Pair<Long, Long>>?)
+    private class PreparedBlock(val span: Span, val samples: FloatArray, val speech: List<Pair<Long, Long>>?)
 
     private sealed interface WriterEvent {
         data class Sentence(val segment: Segment) : WriterEvent
-        data class BlockDone(val processedMs: Long) : WriterEvent
+        /** This stretch is fully transcribed. */
+        data class Done(val span: Span) : WriterEvent
     }
 
     private suspend fun ensureModel(model: SpeechModel) {
@@ -419,8 +514,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     companion object {
         private const val TAG = "Transcribe"
         private const val NOTIFICATION_ID = 901
-        private const val FIRST_CHUNK_SECONDS = 30
-        private const val CHUNK_SECONDS = 2 * 60
+        /** First block after starting or jumping: short, so text appears within seconds. */
+        private const val FIRST_BLOCK_MS = 20_000L
+        /** Later blocks: long enough to keep the engine busy, short enough to react to jumps. */
+        private const val BLOCK_MS = 60_000L
         private const val TRANSLATION_DOWNLOAD_TIMEOUT_MS = 3 * 60_000L
 
 

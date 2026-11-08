@@ -221,6 +221,8 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
         jint threads, jstring prompt, jobject listener, jstring vadModelPath) {
     auto *session = reinterpret_cast<Session *>(handle);
     if (session == nullptr) return nullptr;
+    // Each call starts fresh: a previous block may have been abandoned (listener jumped).
+    session->abort.store(false);
 
     std::string lang = toStdString(env, language);
     std::string promptText = toStdString(env, prompt);

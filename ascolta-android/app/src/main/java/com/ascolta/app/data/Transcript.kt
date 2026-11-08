@@ -8,6 +8,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
 
+/** A stretch of the episode, in milliseconds. */
+@Serializable
+data class Span(val startMs: Long, val endMs: Long)
+
 /** A word of a sentence and when it starts, for word-by-word highlighting. */
 @Serializable
 data class Word(val startMs: Long, val text: String)
@@ -28,12 +32,18 @@ data class Transcript(
     /** "whisper" (generated on the phone) or "feed" (published by the podcast). */
     val source: String,
     val segments: List<Segment>,
-    /** How much of the audio has been transcribed so far (for resuming). */
+    /** Older versions: transcribed from the start up to here. Kept in sync with [covered]. */
     val processedMs: Long = 0,
+    /** Stretches of the episode already transcribed (they need not be contiguous). */
+    val covered: List<Span> = emptyList(),
     val complete: Boolean = false,
     val model: String? = null,
     val translationLanguage: String? = null,
 ) {
+    /** [covered], or for transcripts from older versions, 0..processedMs. */
+    fun coveredSpans(): List<Span> =
+        covered.ifEmpty { if (processedMs > 0) listOf(Span(0, processedMs)) else emptyList() }
+
     companion object {
         const val SOURCE_WHISPER = "whisper"
         const val SOURCE_FEED = "feed"
