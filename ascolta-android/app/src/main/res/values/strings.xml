@@ -252,4 +252,5 @@
     <string name="npu_log_title">NPU log</string>
     <string name="npu_log_text">Checks the phone\'s NPU setup now and shows every NPU attempt</string>
     <string name="action_clear">Clear</string>
+    <string name="status_paused_listening">Paused while you listen with the app closed — open Ascolta to continue</string>
 </resources>

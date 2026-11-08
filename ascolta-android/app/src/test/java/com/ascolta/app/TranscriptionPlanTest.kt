@@ -1,8 +1,11 @@
 package com.ascolta.app
 
+import com.ascolta.app.data.Segment
 import com.ascolta.app.data.Span
 import com.ascolta.app.whisper.SpeechDetection
+import com.ascolta.app.work.BlockCut
 import com.ascolta.app.work.BufferPolicy
+import com.ascolta.app.work.SentenceMerge
 import com.ascolta.app.work.Coverage
 import com.ascolta.app.work.TranscriptionPlan
 import org.junit.Assert.assertEquals
@@ -59,18 +62,54 @@ class TranscriptionPlanTest {
     }
 
     @Test
-    fun bufferLimitsDependOnMeasuredSpeed() {
+    fun bufferIsAbout20PercentOfTheSpeech() {
         // Unknown speed, or not faster than playback: never pause.
-        assertNull(BufferPolicy.limits(null, 1f, min))
-        assertNull(BufferPolicy.limits(1.1f, 1f, min))
-        // Parakeet on the CPU (~10x): small buffer is enough.
-        val fast = BufferPolicy.limits(10f, 1f, min)!!
-        assertEquals(45_000L, fast.resumeBelowMs)
-        assertEquals(165_000L, fast.pauseAboveMs)
-        // Slower engine, or faster playback: keeps more in reserve.
-        val slow = BufferPolicy.limits(2.4f, 1.5f, min)!!
-        assertTrue(slow.resumeBelowMs > fast.resumeBelowMs)
-        assertTrue(slow.pauseAboveMs > slow.resumeBelowMs)
+        assertNull(BufferPolicy.limits(null, 1f, min, 50 * min))
+        assertNull(BufferPolicy.limits(1.1f, 1f, min, 50 * min))
+        // 50 minutes of speech: pause at 10 minutes ahead, resume below 7.5.
+        val l = BufferPolicy.limits(10f, 1f, min, 50 * min)!!
+        assertEquals(10 * min, l.pauseAboveMs)
+        assertEquals(450_000L, l.resumeBelowMs)
+        // Short episode: never less than what playback eats while one block is transcribed.
+        val short = BufferPolicy.limits(2f, 1.5f, min, 2 * min)!!
+        assertTrue(short.pauseAboveMs >= 45_000 + 10_000)
+        assertTrue(short.resumeBelowMs < short.pauseAboveMs)
+        // Speech ahead counts sentence time only, up to the end of the transcribed stretch.
+        val segs = listOf(Segment(0, 4_000, "a"), Segment(10_000, 14_000, "b"), Segment(20_000, 30_000, "c"))
+        assertEquals(2_000L + 4_000 + 5_000, BufferPolicy.speechAhead(segs, 2_000, 25_000))
+        assertEquals(15 * min, BufferPolicy.estimatedSpeechMs(segs, 60_000, 50 * min)) // 18 s of speech in 60 s → 30%
+    }
+
+    @Test
+    fun blocksEndInAPause() {
+        // Speech runs into the end of a 60 s block; the last pause is at 55.0–55.4 s.
+        val speech = listOf(0L to 30_000L, 30_500L to 55_000L, 55_400L to 60_000L)
+        assertEquals(55_200L, BlockCut.atPause(speech, 60_000))
+        // Already ends in silence: no cut.
+        assertNull(BlockCut.atPause(listOf(0L to 50_000L), 60_000))
+        // Quietest point of the signal when there are no speech regions.
+        val samples = FloatArray(16_000 * 30) { if (it in 16_000 * 25 until 16_000 * 25 + 1_600) 0f else 0.5f }
+        val cut = BlockCut.quietest(samples)!!
+        assertTrue("cut at $cut", cut in 25_000L..25_100L)
+    }
+
+    @Test
+    fun repeatedSpeechIsKeptOnce() {
+        val first = Segment(0, 5_000, "Oggi parliamo di cucina italiana.")
+        // The same sentence recognised again (overlapping): dropped.
+        assertEquals(SentenceMerge.Result.Drop, SentenceMerge.resolve(listOf(first), Segment(200, 5_100, "oggi parliamo di cucina italiana")))
+        // A word cut in two at a block boundary: the repeated words are removed.
+        val prev = Segment(5_000, 10_000, "La pasta si cuoce in acqua salata")
+        val r = SentenceMerge.resolve(listOf(first, prev), Segment(10_000, 14_000, "acqua salata per dieci minuti."))
+        assertEquals("per dieci minuti.", (r as SentenceMerge.Result.Add).segment.text)
+        // A sentence repeated right after itself (recogniser loop): dropped.
+        assertEquals(
+            SentenceMerge.Result.Drop,
+            SentenceMerge.resolve(listOf(first), Segment(6_000, 11_000, "Oggi parliamo di cucina italiana.")),
+        )
+        // Different speech is kept; short repeated words are fine.
+        assertTrue(SentenceMerge.resolve(listOf(prev), Segment(10_000, 12_000, "E poi?")) is SentenceMerge.Result.Add)
+        assertEquals(0, SentenceMerge.overlapWords(listOf("vado", "e"), listOf("e", "torno")))
     }
 
     @Test

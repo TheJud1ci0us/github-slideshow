@@ -229,4 +229,5 @@
     <string name="npu_log_title">Registro NPU</string>
     <string name="npu_log_text">Comprueba ahora la configuración NPU del teléfono y muestra cada intento</string>
     <string name="action_clear">Borrar</string>
+    <string name="status_paused_listening">En pausa mientras escuchas con la app cerrada — abre Ascolta para continuar</string>
 </resources>

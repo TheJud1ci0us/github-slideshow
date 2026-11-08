@@ -70,10 +70,12 @@ class BlockReader(private val path: String) : Closeable {
         val to = minOf(pendingSize, from + wanted)
         val out = pending.copyOfRange(from, to)
         val firstSample = pendingStart + from
-        // Keep only what comes after this block.
-        System.arraycopy(pending, to, pending, 0, pendingSize - to)
-        pendingSize -= to
-        pendingStart += to
+        // Keep what comes after this block plus the last few seconds of it, so the next block
+        // can start a little earlier (blocks are trimmed to end at a pause) without re-seeking.
+        val drop = (to - HISTORY_SAMPLES).coerceAtLeast(0)
+        System.arraycopy(pending, drop, pending, 0, pendingSize - drop)
+        pendingSize -= drop
+        pendingStart += drop
         return out to firstSample
     }
 
@@ -171,5 +173,7 @@ class BlockReader(private val path: String) : Closeable {
 
     private companion object {
         const val TIMEOUT_US = 10_000L
+        /** Seconds of already-returned audio kept for the next read (16 kHz samples). */
+        const val HISTORY_SAMPLES = 16_000 * 20
     }
 }

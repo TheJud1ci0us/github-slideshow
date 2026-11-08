@@ -24,21 +24,25 @@ the phone.
 
 **Automatic, like Spotify**
 - Feeds are checked every 6 hours. New episodes of followed shows are downloaded
-  (Wi-Fi only by default) and then transcribed in the background.
+  (Wi-Fi only by default). Transcription is chosen per episode with **Transcribe** (or switched
+  on for every download in Settings); without a transcript the player shows the episode cover.
 - If a podcast publishes its own transcript (`<podcast:transcript>`, VTT/SRT/JSON),
   that is used instead of running speech recognition.
 - **Transcription follows what you listen to**, like a video buffer: jump from minute 1 to
   minute 20 and it drops the current block within a second and starts at minute 20 (a short
   first block so text appears quickly). Finished parts are kept; go back to minute 1 and it
-  continues there. While you listen it stops once it is far enough ahead (the margin depends on
-  the measured speed of the engine and your playback speed) and resumes as you catch up; when
-  you aren't listening it runs as fast as possible. An interrupted job continues where it stopped.
+  continues there. While you listen it keeps about **20% of the episode's speech** transcribed ahead of
+  you (pausing there and resuming at 15%, never less than playback needs at the measured speed);
+  when you aren't listening it runs as fast as possible. Listening with the phone locked or the
+  app in the background pauses it; opening the app restarts it right where you are.
+- Blocks end in a pause (never mid-word) and repeated speech is kept once. An interrupted job continues where it stopped.
 - **Network mode**: *Wi-Fi only* (episodes, models, feeds and translation models download on
   Wi-Fi; streaming on mobile data asks first) or *Wi-Fi and mobile data*.
 
 **Fast, controllable transcription**
 - Choose the engine in Settings: Whisper (Tiny/Base/Small/Large v3 Turbo) or
-  **NVIDIA Parakeet TDT 0.6B v3** (fast and very accurate for 25 European languages).
+  **NVIDIA Parakeet TDT 0.6B v3** (fast and very accurate for 25 European languages; greyed out
+  for other languages, and podcasts in other languages use Whisper).
 - **Skips music and silence** with a voice-activity model, so only speech is processed.
 - whisper.cpp is built for several CPU generations; the app loads the fastest one the
   phone supports (e.g. dot-product and int8 matrix instructions on recent Snapdragons).

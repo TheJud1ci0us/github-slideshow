@@ -38,6 +38,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import com.ascolta.app.AppVisibility
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -182,11 +184,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         existing: Transcript?,
     ): Transcript? {
         val settings = graph.settings
-        val model = settings.model
-        if (!model.supports(language)) {
-            throw IllegalStateException(
-                applicationContext.getString(R.string.error_model_language, model.label, languageName(language)),
-            )
+        // Parakeet only knows 25 European languages: other podcasts use Whisper instead.
+        val model = settings.model.takeIf { it.supports(language) } ?: run {
+            val whisper = listOf(SpeechModel.TURBO, SpeechModel.SMALL, SpeechModel.BASE, SpeechModel.TINY, SpeechModel.CUSTOM)
+                .firstOrNull { it.supports(language) && graph.models.isDownloaded(it) } ?: SpeechModel.BASE
+            AppLog.i(TAG, "${settings.model.label} doesn't support ${languageName(language)}; using ${whisper.label}")
+            whisper
         }
         ensureModel(model)
 
@@ -242,11 +245,28 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         for (event in events) {
                             when (event) {
                                 is WriterEvent.Sentence -> {
+                                    // Never the same speech twice (block boundaries, recogniser loops).
+                                    val result = SentenceMerge.resolve(t.segments, event.segment)
+                                    val segment = when (result) {
+                                        is SentenceMerge.Result.Add -> result.segment
+                                        is SentenceMerge.Result.Replace -> result.segment
+                                        SentenceMerge.Result.Drop -> {
+                                            AppLog.i(TAG, "Dropped repeated sentence at ${event.segment.startMs / 1000}s: \"${event.segment.text.take(60)}\"")
+                                            continue
+                                        }
+                                    }
                                     val translation = if (canTranslate) runCatching {
-                                        withTimeoutOrNull(15_000) { graph.translation.translate(event.segment.text, language, target) }
+                                        withTimeoutOrNull(15_000) { graph.translation.translate(segment.text, language, target) }
                                     }.getOrNull() else null
+                                    val translated = segment.copy(translation = translation)
                                     t = t.copy(
-                                        segments = (t.segments + event.segment.copy(translation = translation)).sortedBy { it.startMs },
+                                        segments = SentenceMerge.apply(
+                                            t.segments,
+                                            when (result) {
+                                                is SentenceMerge.Result.Replace -> result.copy(segment = translated)
+                                                else -> SentenceMerge.Result.Add(translated)
+                                            },
+                                        ),
                                         model = model.id,
                                         translationLanguage = if (canTranslate) target else t.translationLanguage,
                                     )
@@ -267,55 +287,97 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     }
 
                     // Audio for a block, prepared on the efficiency cores: decoding, then speech
-                    // detection split across all efficiency cores.
+                    // detection split across all efficiency cores. Unless it is the end of the
+                    // file, the block is trimmed to end in a pause, so no word is cut in two.
                     suspend fun prepare(span: Span): PreparedBlock {
-                        val (samples, firstSample) = withContext(CoreDispatchers.light) {
+                        val (decoded, firstSample) = withContext(CoreDispatchers.light) {
                             val ctx = coroutineContext
                             reader.read(span.startMs, span.endMs - span.startMs) { !ctx.isActive }
                         }
-                        val speech = vadPath?.let { SpeechDetection.detect(it, samples) }
-                        return PreparedBlock(Span(firstSample / 16, firstSample / 16 + samples.size / 16L), samples, speech)
+                        var samples = decoded
+                        var speech = vadPath?.let { SpeechDetection.detect(it, samples) }
+                        val lengthMs = samples.size / 16L
+                        val startMs = firstSample / 16
+                        val endOfFile = startMs + lengthMs >= totalMs - 1_000 || lengthMs < span.endMs - span.startMs - 1_000
+                        if (!endOfFile && lengthMs > 20_000) {
+                            val cut = if (speech != null) BlockCut.atPause(speech, lengthMs)
+                            else withContext(CoreDispatchers.light) { BlockCut.quietest(samples) }
+                            if (cut != null && cut > lengthMs / 2) {
+                                samples = samples.copyOf((cut * 16).toInt())
+                                speech = speech?.mapNotNull { (s, e) -> if (s >= cut) null else s to minOf(e, cut) }
+                            }
+                        }
+                        return PreparedBlock(Span(startMs, startMs + samples.size / 16L), samples, speech)
                     }
+
+                    // What this loop has finished; kept here (not read back from the writer,
+                    // which may still be busy translating) so no block is ever done twice.
+                    var covered = initial.covered
+                    suspend fun done(span: Span) {
+                        covered = Coverage.add(covered, span)
+                        events.send(WriterEvent.Done(span))
+                    }
+                    fun speechAhead(positionMs: Long): Long =
+                        BufferPolicy.speechAhead(latest.value.segments, positionMs, Coverage.runEnd(covered, positionMs))
 
                     var prefetch: Pair<Span, Deferred<PreparedBlock>>? = null
                     var anchorMs = 0L          // where the work is heading
                     var lastListenPos = -1L
                     var speedFactor: Float? = null
                     var buffered = false        // paused because far enough ahead of playback
+                    var hidden = false          // paused because the app isn't on screen while listening
                     var jumpedToMs = -1L
 
                     while (true) {
                         if (isStopped) { stopped = true; break }
-                        val spans = latest.value.covered
+                        val spans = covered
                         if (Coverage.isComplete(spans, totalMs)) break
 
                         // Follow the listener when this episode is loaded in the player.
                         val player = graph.player.state.value
                         val following = player.episodeId == episodeId
-                        // Another episode is playing and waiting to be transcribed: let it go first.
-                        val playingOther = player.episodeId?.takeIf { it != episodeId }
-                        if (playingOther != null && dao.get(playingOther)?.transcriptState == TranscriptState.QUEUED) {
-                            AppLog.i(TAG, "Episode #$playingOther is playing and queued: pausing #$episodeId for it")
-                            yielded = true
-                            stopped = true
-                            break
-                        }
                         val listening = following && (player.isPlaying || player.isBuffering)
+
+                        // Listening with the phone locked or the app in the background: stop until
+                        // the app is opened again, then restart right where the listener is.
+                        if (listening && !AppVisibility.visible.value) {
+                            if (!hidden) {
+                                hidden = true
+                                AppLog.i(TAG, "App not on screen while listening: transcription paused")
+                                prefetch?.second?.cancel()
+                                prefetch = null
+                            }
+                            update(applicationContext.getString(R.string.status_paused_listening), progressOf(latest.value))
+                            AppVisibility.visible.first { it } // returns at once if visible meanwhile
+                            continue
+                        }
+                        if (hidden) {
+                            hidden = false
+                            lastListenPos = -1 // treat as a jump: short first block at the current position
+                            AppLog.i(TAG, "App back on screen: resuming at ${player.positionMs / 1000}s")
+                        }
+
                         if (following) {
                             if (lastListenPos < 0 || kotlin.math.abs(player.positionMs - lastListenPos) > 10_000) jumpedToMs = player.positionMs
                             lastListenPos = player.positionMs
                             anchorMs = player.positionMs
                         }
 
-                        // Like a video buffer: while listening, stop once far enough ahead.
+                        // Like a video buffer: while listening, stop once about 20% of the
+                        // episode's speech is transcribed ahead of the listener.
                         if (listening) {
-                            val limits = BufferPolicy.limits(speedFactor, player.speed, BLOCK_MS)
-                            val ahead = Coverage.runEnd(spans, player.positionMs) - player.positionMs
+                            val totalSpeech = BufferPolicy.estimatedSpeechMs(latest.value.segments, Coverage.totalMs(spans), totalMs)
+                            val limits = BufferPolicy.limits(speedFactor, player.speed, BLOCK_MS, totalSpeech)
+                            val ahead = speechAhead(player.positionMs)
                             if (limits != null) {
                                 if (buffered && ahead < limits.resumeBelowMs) buffered = false
                                 if (!buffered && ahead >= limits.pauseAboveMs) {
                                     buffered = true
-                                    AppLog.i(TAG, "Buffered ${ahead / 1000}s ahead of playback; pausing until below ${limits.resumeBelowMs / 1000}s")
+                                    AppLog.i(
+                                        TAG,
+                                        "Buffered ${ahead / 1000}s of speech ahead (episode ≈ ${totalSpeech / 1000}s of speech); " +
+                                            "pausing until below ${limits.resumeBelowMs / 1000}s",
+                                    )
                                 }
                                 if (buffered) {
                                     update(applicationContext.getString(R.string.status_buffered_ahead, (ahead / 1000).toInt()), progressOf(latest.value))
@@ -332,30 +394,32 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         val blockMs = if (nearJump) FIRST_BLOCK_MS else BLOCK_MS
                         val block = TranscriptionPlan.nextBlock(spans, anchorMs, totalMs, blockMs) ?: break
                         val blockStarted = System.currentTimeMillis()
-                        val ready = prefetch?.takeIf { it.first == block }?.second
+                        val ready = prefetch?.takeIf { it.first.startMs == block.startMs }?.second
                         if (ready == null) prefetch?.second?.cancel()
                         prefetch = null
                         val prepared = ready?.await() ?: prepare(block)
                         if (prepared.samples.isEmpty()) {
-                            events.send(WriterEvent.Done(block)) // past the decodable end of the file
+                            done(block) // past the decodable end of the file
                             continue
                         }
                         // Prepare the following block while this one is recognised.
-                        val nextSpan = TranscriptionPlan.nextBlock(Coverage.add(spans, block), block.endMs, totalMs, BLOCK_MS)
-                        if (nextSpan != null && nextSpan.startMs >= block.endMs) prefetch = nextSpan to async { prepare(nextSpan) }
+                        val nextSpan = TranscriptionPlan.nextBlock(Coverage.add(spans, prepared.span), prepared.span.endMs, totalMs, BLOCK_MS)
+                        if (nextSpan != null && nextSpan.startMs >= prepared.span.endMs) prefetch = nextSpan to async { prepare(nextSpan) }
 
-                        val prompt = latest.value.segments.filter { it.endMs <= block.startMs + 500 }.takeLast(3)
+                        val prompt = latest.value.segments.filter { it.endMs <= prepared.span.startMs + 500 }.takeLast(3)
                             .joinToString(" ") { it.text }.takeLast(200)
                         update(transcribing, progressOf(latest.value))
 
                         // While recognising, watch the player: if the listener jumps somewhere this
-                        // block doesn't help, abandon it and go there.
+                        // block doesn't help, or listens with the app closed, leave the block.
                         var abandoned = false
                         val watcher = launch {
                             while (isActive) {
                                 delay(300)
                                 val p = graph.player.state.value
-                                if (p.episodeId == episodeId && TranscriptionPlan.shouldAbandon(latest.value.covered, p.positionMs, block)) {
+                                val mine = p.episodeId == episodeId
+                                val away = mine && (p.isPlaying || p.isBuffering) && !AppVisibility.visible.value
+                                if (mine && (away || TranscriptionPlan.shouldAbandon(covered, p.positionMs, prepared.span))) {
                                     abandoned = true
                                     engine.abort()
                                     break
@@ -384,7 +448,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                                     seg.startMs + blockStartMs,
                                                     seg.endMs + blockStartMs,
                                                     text,
-                                                    words = seg.words?.map { it.copy(startMs = it.startMs + blockStartMs) },
+                                                    words = cleanWords(seg.words, seg.startMs, seg.endMs)
+                                                        ?.map { it.copy(startMs = it.startMs + blockStartMs) },
                                                 ),
                                             ),
                                         )
@@ -396,7 +461,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         if (!finished) {
                             if (abandoned && !isStopped) {
                                 // Keep what was recognised; the rest of this block is done later.
-                                if (lastEnd > blockStartMs) events.send(WriterEvent.Done(Span(blockStartMs, lastEnd)))
+                                if (lastEnd > blockStartMs) done(Span(blockStartMs, lastEnd))
                                 prefetch?.second?.cancel()
                                 prefetch = null
                                 AppLog.i(TAG, "Listener moved to ${graph.player.state.value.positionMs / 1000}s: left block at ${blockStartMs / 1000}s")
@@ -417,7 +482,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 "(${"%.1f".format(java.util.Locale.US, factor)}x real time)" +
                                 "${if (following) ", following playback at ${player.positionMs / 1000}s" else ""}, $count sentences",
                         )
-                        events.send(WriterEvent.Done(Span(blockStartMs, blockStartMs + blockLenMs)))
+                        done(Span(blockStartMs, blockStartMs + blockLenMs))
                         if (!following) anchorMs = blockStartMs + blockLenMs
                     }
                     prefetch?.second?.cancel()
@@ -435,6 +500,20 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val seconds = (System.currentTimeMillis() - started) / 1000
         AppLog.i(TAG, "Transcription finished in ${seconds}s for ${totalMs / 1000}s of audio")
         return latest.value.copy(complete = true, processedMs = totalMs, covered = listOf(Span(0, totalMs)))
+    }
+
+    /**
+     * Word timings in order and inside their sentence, so the highlight moves forward
+     * smoothly instead of jumping back or past the sentence.
+     */
+    private fun cleanWords(words: List<com.ascolta.app.data.Word>?, startMs: Long, endMs: Long): List<com.ascolta.app.data.Word>? {
+        if (words.isNullOrEmpty()) return words
+        var last = startMs
+        return words.map { w ->
+            val t = w.startMs.coerceIn(last, maxOf(last, endMs - 1))
+            last = t
+            w.copy(startMs = t)
+        }
     }
 
     private class PreparedBlock(val span: Span, val samples: FloatArray, val speech: List<Pair<Long, Long>>?)

@@ -116,6 +116,14 @@ fun SettingsScreen() {
             LanguagePicker(stringResource(R.string.learning_language), learning) { settings.learningLanguage.set(it) }
             LanguagePicker(stringResource(R.string.translate_into), native) { settings.nativeLanguage.set(it) }
             TranslationModelRow(learning, native)
+            // A model that can't transcribe the new language is replaced by a Whisper model.
+            LaunchedEffect(learning) {
+                if (!settings.model.supports(learning)) {
+                    val whisper = listOf(SpeechModel.TURBO, SpeechModel.SMALL, SpeechModel.BASE, SpeechModel.TINY)
+                        .firstOrNull { graph.models.isDownloaded(it) } ?: SpeechModel.BASE
+                    settings.modelId.set(whisper.id)
+                }
+            }
 
             HorizontalDivider()
             Section(stringResource(R.string.section_speech))
@@ -305,7 +313,8 @@ private fun ModelRow(
     var npuProblem by remember(refreshKey) {
         mutableStateOf(if (model.engine == Engine.PARAKEET_NPU) NpuSupport.unavailableReason(context) else null)
     }
-    val enabled = npuProblem == null
+    // Greyed out when it doesn't understand the language being learned (Parakeet: 25 European languages).
+    val enabled = npuProblem == null && supported
     LaunchedEffect(info?.state) { if (info?.state == WorkInfo.State.SUCCEEDED) onChanged() }
 
     ListItem(

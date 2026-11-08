@@ -6,6 +6,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Headphones
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -197,7 +201,14 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val listState = rememberLazyListState()
     val dragged by listState.interactionSource.collectIsDraggedAsState()
     var follow by remember { mutableStateOf(true) }
-    LaunchedEffect(dragged) { if (dragged) follow = false }
+    LaunchedEffect(dragged) {
+        if (dragged) follow = false
+        else if (!follow) {
+            // Follows the audio again a few seconds after the reader stops scrolling.
+            delay(6_000)
+            follow = true
+        }
+    }
     LaunchedEffect(navIndex, follow) {
         if (follow && navIndex >= 0) listState.animateScrollToItem((navIndex - 1).coerceAtLeast(0))
     }
@@ -284,7 +295,23 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ep != null) StatusBanner(ep, transcript, translating)
-            LazyColumn(
+            // No transcript (not chosen for this episode, or nothing recognised yet): the cover.
+            if (segments.isEmpty()) {
+                val cover = ep?.imageUrl ?: podcast?.imageUrl
+                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                    if (cover != null) {
+                        coil3.compose.AsyncImage(
+                            model = cover,
+                            contentDescription = ep?.title,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
+                        )
+                    } else {
+                        Icon(Icons.Filled.Headphones, null, Modifier.size(120.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -298,7 +325,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         showOriginal = showOriginal,
                         showTranslation = showTranslation,
                         textScale = textScale,
-                        onSeek = { seek(segment.startMs) },
+                        onSeek = { follow = true; seek(segment.startMs) },
                         onWord = { word ->
                             graph.player.pause()
                             lookup = WordLookup(word, segment)

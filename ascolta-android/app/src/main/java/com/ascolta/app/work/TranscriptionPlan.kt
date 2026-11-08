@@ -1,5 +1,6 @@
 package com.ascolta.app.work
 
+import com.ascolta.app.data.Segment
 import com.ascolta.app.data.Span
 
 /**
@@ -72,19 +73,176 @@ object TranscriptionPlan {
 }
 
 /**
- * How far ahead of playback the transcription should stay. Measured speed [speedFactor]
- * (audio seconds per second of work) and [playbackSpeed] give how much audio plays while one
- * block is being transcribed; the buffer is kept comfortably above that. Returns null when
- * transcription isn't clearly faster than playback (then it never pauses).
+ * How far ahead of playback the transcription stays while someone listens: about 20% of the
+ * episode's speech (estimated from the part already transcribed). It pauses once that much
+ * transcribed speech lies ahead of the listener and resumes when it drops to 15%.
+ * It never goes below what is needed for playback not to catch up while one block is
+ * transcribed. Returns null when transcription isn't clearly faster than playback (then it
+ * never pauses).
  */
 object BufferPolicy {
+    const val SHARE = 0.20f
+    const val RESUME_SHARE = 0.15f
+
+    /** Limits in milliseconds of speech ahead of the listener. */
     data class Limits(val resumeBelowMs: Long, val pauseAboveMs: Long)
 
-    fun limits(speedFactor: Float?, playbackSpeed: Float, blockMs: Long): Limits? {
+    fun limits(speedFactor: Float?, playbackSpeed: Float, blockMs: Long, totalSpeechMs: Long): Limits? {
         if (speedFactor == null || speedFactor < playbackSpeed * 1.2f) return null
-        val consumedPerBlock = (playbackSpeed * blockMs / speedFactor).toLong()
-        val low = maxOf(45_000L, 2 * consumedPerBlock + 15_000L)
-        val high = low + maxOf(2 * blockMs, 120_000L)
+        // Audio played while the next block is transcribed, plus a margin.
+        val safety = (playbackSpeed * blockMs / speedFactor).toLong() + 10_000L
+        val high = maxOf((totalSpeechMs * SHARE).toLong(), safety + 15_000L, 30_000L)
+        val low = maxOf(safety, (totalSpeechMs * RESUME_SHARE).toLong()).coerceAtMost(high - 10_000L)
         return Limits(low, high)
+    }
+
+    /** Transcribed speech between [positionMs] and [untilMs] (sentence durations). */
+    fun speechAhead(segments: List<Segment>, positionMs: Long, untilMs: Long): Long =
+        segments.sumOf { s -> (minOf(s.endMs, untilMs) - maxOf(s.startMs, positionMs)).coerceAtLeast(0) }
+
+    /**
+     * Estimated speech in the whole episode: the share of speech in what is transcribed so
+     * far, applied to its duration. Until a minute is done, assumes 85% speech.
+     */
+    fun estimatedSpeechMs(segments: List<Segment>, coveredMs: Long, totalMs: Long): Long {
+        if (coveredMs < 60_000) return (totalMs * 0.85).toLong()
+        val speech = segments.sumOf { (it.endMs - it.startMs).coerceAtLeast(0) }
+        return (speech.toDouble() / coveredMs * totalMs).toLong().coerceIn(totalMs / 10, totalMs)
+    }
+}
+
+/** Where to end a block so it doesn't cut a word in two (which made words appear twice). */
+object BlockCut {
+    /**
+     * With speech regions (ms within a block of [lengthMs]): the middle of the last pause in
+     * the final [searchMs]. Null when the block already ends in silence or has no pause there.
+     */
+    fun atPause(speech: List<Pair<Long, Long>>, lengthMs: Long, searchMs: Long = 15_000, minGapMs: Long = 120): Long? {
+        val regions = speech.sortedBy { it.first }
+        val last = regions.lastOrNull() ?: return null
+        if (last.second < lengthMs - 100) return null // no speech running into the end
+        for (i in regions.indices.reversed()) {
+            if (i == 0) break
+            val gapStart = regions[i - 1].second
+            val gapEnd = regions[i].first
+            val mid = (gapStart + gapEnd) / 2
+            if (mid < lengthMs - searchMs) break
+            if (gapEnd - gapStart >= minGapMs) return mid
+        }
+        return null
+    }
+
+    /** Without speech regions: the quietest 50 ms in the final [searchMs] of the block. */
+    fun quietest(samples: FloatArray, searchMs: Long = 10_000): Long? {
+        val frame = 800 // 50 ms
+        val from = (samples.size - (searchMs * 16).toInt()).coerceAtLeast(0)
+        var best = -1
+        var bestEnergy = Double.MAX_VALUE
+        var i = from
+        while (i + frame <= samples.size - frame) {
+            var e = 0.0
+            for (j in i until i + frame) e += samples[j] * samples[j]
+            if (e <= bestEnergy) { bestEnergy = e; best = i }
+            i += frame
+        }
+        return if (best < 0) null else (best + frame / 2) / 16L
+    }
+}
+
+/**
+ * Adds recognised sentences to a transcript without repeating speech: the same stretch
+ * recognised twice (e.g. at block boundaries) is kept once, and words at the start of a
+ * sentence that repeat the end of the one before it (a word cut in two) are dropped.
+ */
+object SentenceMerge {
+    sealed interface Result {
+        data object Drop : Result
+        data class Add(val segment: Segment) : Result
+        data class Replace(val index: Int, val segment: Segment) : Result
+    }
+
+    fun resolve(segments: List<Segment>, new: Segment): Result {
+        var seg = new
+        val newWords = words(seg.text)
+        if (newWords.isEmpty()) return Result.Drop
+        // Same speech twice: overlapping in time with similar text.
+        segments.forEachIndexed { i, e ->
+            val overlap = minOf(e.endMs, seg.endMs) - maxOf(e.startMs, seg.startMs)
+            val shorter = minOf(e.endMs - e.startMs, seg.endMs - seg.startMs).coerceAtLeast(1)
+            if (overlap * 2 > shorter && similar(e.text, seg.text)) {
+                return if (newWords.size > words(e.text).size) Result.Replace(i, seg) else Result.Drop
+            }
+        }
+        val prev = segments.lastOrNull { it.startMs < seg.startMs }
+        if (prev != null && seg.startMs - prev.endMs < 5_000 && norm(prev.text) == norm(seg.text) && newWords.size >= 3) {
+            return Result.Drop // a sentence repeated right after itself (recogniser loop)
+        }
+        if (prev != null && seg.startMs - prev.endMs < 2_000) {
+            val k = overlapWords(words(prev.text), newWords)
+            if (k > 0) seg = dropFirstWords(seg, k) ?: return Result.Drop
+        }
+        val next = segments.firstOrNull { it.startMs > seg.startMs }
+        if (next != null && next.startMs - seg.endMs < 2_000) {
+            val k = overlapWords(words(seg.text), words(next.text))
+            if (k > 0) seg = dropLastWords(seg, k) ?: return Result.Drop
+        }
+        return Result.Add(seg)
+    }
+
+    fun apply(segments: List<Segment>, result: Result): List<Segment> = when (result) {
+        Result.Drop -> segments
+        is Result.Add -> (segments + result.segment).sortedBy { it.startMs }
+        is Result.Replace -> segments.toMutableList().also { it[result.index] = result.segment }.sortedBy { it.startMs }
+    }
+
+    private fun words(text: String) = text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+    private fun key(word: String) = word.lowercase().trim { !it.isLetterOrDigit() }
+    private fun norm(text: String) = words(text).joinToString(" ") { key(it) }
+
+    private fun similar(a: String, b: String): Boolean {
+        val na = norm(a)
+        val nb = norm(b)
+        if (na == nb) return true
+        if (na.length >= 8 && nb.length >= 8 && (na.contains(nb) || nb.contains(na))) return true
+        val sa = na.split(" ").toSet()
+        val sb = nb.split(" ").toSet()
+        val common = sa.intersect(sb).size
+        return common.toFloat() / (sa.union(sb).size.coerceAtLeast(1)) >= 0.6f
+    }
+
+    /** Largest k (≤ 4) such that the last k words of [before] equal the first k of [after]. */
+    fun overlapWords(before: List<String>, after: List<String>): Int {
+        for (k in minOf(4, before.size, after.size) downTo 1) {
+            val tail = before.takeLast(k).map(::key)
+            val head = after.take(k).map(::key)
+            if (tail == head && tail.all { it.isNotEmpty() }) {
+                // One repeated short word is often legitimate ("… e. E poi …").
+                if (k == 1 && tail[0].length < 4) return 0
+                return k
+            }
+        }
+        return 0
+    }
+
+    private fun dropFirstWords(seg: Segment, k: Int): Segment? {
+        val w = words(seg.text)
+        if (w.size <= k) return null
+        val timed = seg.words?.takeIf { it.size == w.size }?.drop(k)
+        return seg.copy(
+            startMs = timed?.firstOrNull()?.startMs ?: seg.startMs,
+            text = w.drop(k).joinToString(" "),
+            words = timed ?: seg.words?.let { null },
+        )
+    }
+
+    private fun dropLastWords(seg: Segment, k: Int): Segment? {
+        val w = words(seg.text)
+        if (w.size <= k) return null
+        val timed = seg.words?.takeIf { it.size == w.size }
+        return seg.copy(
+            endMs = timed?.get(w.size - k)?.startMs ?: seg.endMs,
+            text = w.dropLast(k).joinToString(" "),
+            words = timed?.dropLast(k),
+        )
     }
 }

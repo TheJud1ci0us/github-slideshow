@@ -229,4 +229,5 @@
     <string name="npu_log_title">Log da NPU</string>
     <string name="npu_log_text">Verifica agora a configuração da NPU do telefone e mostra cada tentativa</string>
     <string name="action_clear">Limpar</string>
+    <string name="status_paused_listening">Pausado enquanto você ouve com o app fechado — abra o Ascolta para continuar</string>
 </resources>

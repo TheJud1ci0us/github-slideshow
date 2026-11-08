@@ -229,4 +229,5 @@
     <string name="npu_log_title">Journal NPU</string>
     <string name="npu_log_text">Vérifie maintenant la configuration NPU du téléphone et affiche chaque essai</string>
     <string name="action_clear">Effacer</string>
+    <string name="status_paused_listening">En pause pendant l’écoute app fermée — ouvrez Ascolta pour continuer</string>
 </resources>

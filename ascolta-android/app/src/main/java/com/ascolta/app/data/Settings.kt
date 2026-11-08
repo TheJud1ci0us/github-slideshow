@@ -89,7 +89,8 @@ class Settings(context: Context) {
     val skipNonSpeech = bool("skip_non_speech", true)
 
     val autoDownloadNew = bool("auto_download_new", true)
-    val autoTranscribe = bool("auto_transcribe", true)
+    /** Off by default: transcription is chosen per episode with the Transcribe button. */
+    val autoTranscribe = bool("auto_transcribe_v2", false)
     /** Network mode: true = Wi-Fi only (downloads, streaming, models); false = Wi-Fi and mobile data. */
     val wifiOnly = bool("wifi_only", true)
     val chargingOnly = bool("charging_only", false)

@@ -199,7 +199,9 @@ class PodcastRepository(
         val episode = episodeDao.get(episodeId) ?: return
         if (episode.downloadState in listOf(DownloadState.QUEUED, DownloadState.DOWNLOADING, DownloadState.DONE)) return
         episodeDao.setDownload(episodeId, DownloadState.QUEUED, 0f)
-        WorkScheduler.download(context, episodeId, transcribeAfter = settings.autoTranscribe.value || manual, manual = manual)
+        // Downloading doesn't start a transcription: that's chosen per episode (Transcribe button)
+        // unless automatic transcription is switched on in Settings.
+        WorkScheduler.download(context, episodeId, transcribeAfter = settings.autoTranscribe.value, manual = manual)
         if (manual && WorkScheduler.blockedByNetworkMode(context)) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 android.widget.Toast.makeText(context, context.getString(R.string.waiting_for_wifi), android.widget.Toast.LENGTH_LONG).show()
@@ -327,10 +329,12 @@ class PodcastRepository(
             if (segment.translation != null && !stale) segment
             else segment.copy(translation = translation.translate(segment.text, transcript.language, target))
         }
-        // Re-read in case transcription appended more segments meanwhile.
+        // Re-read in case transcription added sentences meanwhile (anywhere, after a jump), and
+        // put the translations on matching sentences instead of relying on positions.
         val latest = transcripts.load(episodeId) ?: transcript
+        val translated = segments.associateBy { it.startMs to it.text }
         val merged = latest.copy(
-            segments = segments + latest.segments.drop(segments.size),
+            segments = latest.segments.map { seg -> translated[seg.startMs to seg.text] ?: seg },
             translationLanguage = target,
         )
         transcripts.save(episodeId, merged)
