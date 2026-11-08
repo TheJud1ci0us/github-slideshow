@@ -361,4 +361,8 @@
     <string name="badge_polyglot_title">Poliglota ×%1$d</string>
     <string name="badge_polyglot_desc">Aprenda %1$d idiomas</string>
     <string name="notif_channel_milestones">Marcos</string>
+    <string name="ja_script_title">Texto japonês</string>
+    <string name="ja_script_kanji">Kanji (como escrito)</string>
+    <string name="ja_script_furigana">Kanji com furigana</string>
+    <string name="ja_script_romaji">Romaji</string>
 </resources>

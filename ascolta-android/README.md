@@ -72,7 +72,7 @@ the phone.
 - ★ **Favourite** podcasts are listed first and send a **notification** when a new episode is out.
 - Per-podcast automatic download; feed check every 1/3/6/12/24 hours or only by hand.
 - Downloaded episodes can be **deleted automatically** after 1–30 days (transcripts are kept).
-- Theme: like the phone, light or dark; colours from the wallpaper or Ascolta's own.
+- Dark mode only; colours from the wallpaper or Ascolta's own.
 
 **Flashcards**
 - Saved words keep their **sentence and its translation** (the word highlighted in it) and a
@@ -96,6 +96,9 @@ the phone.
 - Previous / next / repeat sentence, **pause after each sentence**, 0.5×–1.5× speed.
 - Hide either language to test yourself; adjustable text size. The highlighted sentence and
   its translation always stay fully on screen.
+- **Japanese**: transcripts as written, with **furigana** (hiragana readings above kanji) or in
+  **romaji** (Hepburn), from an offline dictionary (Kuromoji + IPADIC). Word-by-word highlighting
+  and tap-to-look-up work on real Japanese words; saved words and flashcards show the reading.
 - **Transcript only**: switch off *Translate sentences* (Settings or the player menu).
 - Show the **episode picture** instead of the transcript at any time (top-bar button); the
   transcript is kept and comes back with the same button. Under the picture, one line shows

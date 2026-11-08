@@ -21,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.7.1"
+        versionCode = 14
+        versionName = "0.8.0"
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
@@ -73,9 +73,11 @@ android {
     }
 
     packaging {
+        resources {
+            // Kuromoji's two jars both carry these; the notices are in the app's credits screen.
+            pickFirsts += listOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
+        }
         jniLibs {
-            // Qualcomm runtime: only the NPU (HTP) backend is used; drop the others.
-            excludes += listOf("**/libQnnGpu*.so", "**/libQnnDsp*.so", "**/libQnnCpu.so", "**/libQnnSaver.so", "**/libQnnLpai*.so")
             // Extract native libraries to disk: ggml looks for its CPU-variant
             // plug-ins (libggml-cpu-*.so) in the app's native library folder.
             useLegacyPackaging = true
@@ -141,6 +143,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Japanese readings (furigana / romaji): morphological analyzer with the IPADIC dictionary.
+    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
     implementation("io.coil-kt.coil3:coil-compose:3.2.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
 

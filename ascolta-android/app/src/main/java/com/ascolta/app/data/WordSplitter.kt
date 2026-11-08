@@ -17,6 +17,10 @@ object WordSplitter {
     /** Character ranges of the words in [text] (punctuation and spaces left out). */
     fun ranges(text: String, language: String?): List<IntRange> {
         if (text.isEmpty()) return emptyList()
+        // Japanese: the same words that carry the readings (furigana / romaji), once loaded.
+        if (language == "ja") Japanese.tokens(text)?.let { tokens ->
+            return tokens.filter { it.isWord }.map { it.start until it.end }
+        }
         val it = BreakIterator.getWordInstance(language?.let(Locale::forLanguageTag) ?: Locale.getDefault())
         it.setText(text)
         val out = mutableListOf<IntRange>()

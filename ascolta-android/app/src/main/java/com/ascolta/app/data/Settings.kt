@@ -196,8 +196,8 @@ class Settings(context: Context) {
     /** Notification when a favourite podcast has a new episode. */
     val notifyFavourites = bool("notify_favourites", true)
 
-    /** "system", "light" or "dark". */
-    val theme = string("theme", "system")
+    /** Japanese transcripts: "furigana", "kanji" (as written) or "romaji". */
+    val japaneseScript = string("japanese_script", "furigana")
     /** Colours from the wallpaper (Android 12+). */
     val dynamicColor = bool("dynamic_color", true)
 

@@ -381,4 +381,8 @@
     <string name="badge_polyglot_title">Polyglot ×%1$d</string>
     <string name="badge_polyglot_desc">Learn %1$d languages</string>
     <string name="notif_channel_milestones">Milestones</string>
+    <string name="ja_script_title">Japanese text</string>
+    <string name="ja_script_kanji">Kanji (as written)</string>
+    <string name="ja_script_furigana">Kanji with furigana</string>
+    <string name="ja_script_romaji">Romaji</string>
 </resources>

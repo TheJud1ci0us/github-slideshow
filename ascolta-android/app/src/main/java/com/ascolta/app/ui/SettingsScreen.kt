@@ -184,11 +184,18 @@ fun SettingsScreen() {
 
             HorizontalDivider()
             Section(stringResource(R.string.section_appearance))
-            ChoiceRow(
-                stringResource(R.string.theme_title),
-                settings.theme,
-                listOf("system" to stringResource(R.string.theme_system), "light" to stringResource(R.string.theme_light), "dark" to stringResource(R.string.theme_dark)),
-            )
+            // Japanese: show transcripts as written, with furigana, or in romaji.
+            if ("ja" in remember(learningAll, learning) { settings.learningList() }) {
+                ChoiceRow(
+                    stringResource(R.string.ja_script_title),
+                    settings.japaneseScript,
+                    listOf(
+                        "furigana" to stringResource(R.string.ja_script_furigana),
+                        "kanji" to stringResource(R.string.ja_script_kanji),
+                        "romaji" to stringResource(R.string.ja_script_romaji),
+                    ),
+                )
+            }
             if (android.os.Build.VERSION.SDK_INT >= 31) {
                 SwitchRow(stringResource(R.string.dynamic_color_title), stringResource(R.string.dynamic_color_text), settings.dynamicColor)
             }

@@ -354,4 +354,8 @@
     <string name="badge_polyglot_title">Polyglott ×%1$d</string>
     <string name="badge_polyglot_desc">Lerne %1$d Sprachen</string>
     <string name="notif_channel_milestones">Meilensteine</string>
+    <string name="ja_script_title">Japanischer Text</string>
+    <string name="ja_script_kanji">Kanji (wie geschrieben)</string>
+    <string name="ja_script_furigana">Kanji mit Furigana</string>
+    <string name="ja_script_romaji">Rōmaji</string>
 </resources>

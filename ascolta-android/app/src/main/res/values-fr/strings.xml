@@ -361,4 +361,8 @@
     <string name="badge_polyglot_title">Polyglotte ×%1$d</string>
     <string name="badge_polyglot_desc">Apprenez %1$d langues</string>
     <string name="notif_channel_milestones">Paliers</string>
+    <string name="ja_script_title">Texte japonais</string>
+    <string name="ja_script_kanji">Kanji (tel qu’écrit)</string>
+    <string name="ja_script_furigana">Kanji avec furigana</string>
+    <string name="ja_script_romaji">Rōmaji</string>
 </resources>

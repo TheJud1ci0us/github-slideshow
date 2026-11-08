@@ -171,7 +171,13 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     // Word being spoken inside the highlighted sentence (when the engine gave word timings).
     // Real words in every language (Japanese and Chinese have no spaces), each with its start time.
     val textLanguage = transcript?.language ?: settings.learningLanguage.value
-    val timedWords = remember(segments, textLanguage) {
+    // Japanese: readings for furigana / romaji (dictionary loaded on first use).
+    val isJapanese = textLanguage == "ja"
+    LaunchedEffect(isJapanese) { if (isJapanese) com.ascolta.app.data.Japanese.load() }
+    val jaReady by com.ascolta.app.data.Japanese.ready.collectAsState()
+    val jaScriptPref by settings.japaneseScript.flow.collectAsState()
+    val jaScript = com.ascolta.app.data.JapaneseScript.of(jaScriptPref)
+    val timedWords = remember(segments, textLanguage, jaReady) {
         segments.map { WordSplitter.timedWords(it.text, it.words, it.startMs, it.endMs, textLanguage) }
     }
     val currentWord = if (!wordHighlight) -1
@@ -292,6 +298,21 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         if (translateOn) CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
                         CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
                         CheckItem(stringResource(R.string.highlight_words), wordHighlight) { settings.wordHighlight.set(it) }
+                        if (isJapanese) {
+                            HorizontalDivider()
+                            com.ascolta.app.data.JapaneseScript.entries.forEach { s ->
+                                CheckItem(
+                                    stringResource(
+                                        when (s) {
+                                            com.ascolta.app.data.JapaneseScript.KANJI -> R.string.ja_script_kanji
+                                            com.ascolta.app.data.JapaneseScript.FURIGANA -> R.string.ja_script_furigana
+                                            com.ascolta.app.data.JapaneseScript.ROMAJI -> R.string.ja_script_romaji
+                                        },
+                                    ),
+                                    jaScript == s,
+                                ) { settings.japaneseScript.set(s.key) }
+                            }
+                        }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text(stringResource(R.string.larger_text)) }, onClick = {
                             settings.transcriptTextScale.set((textScale + 0.15f).coerceAtMost(2f))
@@ -368,7 +389,12 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
                 // With a transcript: one line of what is being said, under the picture.
                 segments.getOrNull(currentIndex)?.let { seg ->
-                    LiveLine(seg, timedWords.getOrNull(currentIndex), if (wordHighlight) currentWord else -1)
+                    if (isJapanese && jaReady && jaScript == com.ascolta.app.data.JapaneseScript.ROMAJI) {
+                        val romaji = remember(seg.text) { com.ascolta.app.data.Japanese.romaji(seg.text).orEmpty() }
+                        LiveLine(seg.copy(text = romaji), null, -1)
+                    } else {
+                        LiveLine(seg, timedWords.getOrNull(currentIndex), if (wordHighlight) currentWord else -1)
+                    }
                 }
             } else LazyColumn(
                 state = listState,
@@ -381,6 +407,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         segment = segment,
                         words = timedWords.getOrNull(i),
                         language = textLanguage,
+                        japanese = if (isJapanese && jaReady && jaScript != com.ascolta.app.data.JapaneseScript.KANJI) jaScript else null,
                         active = i == currentIndex,
                         activeWord = if (i == currentIndex) currentWord else -1,
                         showOriginal = showOriginal,
@@ -565,6 +592,7 @@ private fun SegmentItem(
     segment: Segment,
     words: List<Word>?,
     language: String?,
+    japanese: com.ascolta.app.data.JapaneseScript? = null,
     active: Boolean,
     activeWord: Int,
     showOriginal: Boolean,
@@ -586,7 +614,15 @@ private fun SegmentItem(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures { onSeek() } }.padding(bottom = 2.dp),
         )
-        if (showOriginal) {
+        val textStyle = MaterialTheme.typography.bodyLarge.copy(
+            fontSize = (18 * textScale).sp,
+            lineHeight = (26 * textScale).sp,
+            color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+        )
+        val jaTokens = remember(segment.text, japanese) { japanese?.let { com.ascolta.app.data.Japanese.tokens(segment.text) } }
+        if (showOriginal && japanese != null && jaTokens != null) {
+            JapaneseSentence(jaTokens, japanese, activeWord, textStyle, onWord)
+        } else if (showOriginal) {
             val wordRanges = remember(segment, words) { wordRanges(segment.text, words) }
             val highlight = MaterialTheme.colorScheme.primary
             val text = remember(segment.text, activeWord, wordRanges, highlight) {
@@ -688,6 +724,15 @@ private fun WordSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text(lookup.word, style = MaterialTheme.typography.headlineMedium)
+            if (language == "ja") {
+                // Reading and romaji of the Japanese word.
+                val reading = remember(lookup.word) { com.ascolta.app.data.Japanese.reading(lookup.word) }
+                val romaji = remember(lookup.word) { com.ascolta.app.data.Japanese.romaji(lookup.word) }
+                if (reading != null || romaji != null) {
+                    Text(listOfNotNull(reading, romaji).joinToString(" · "), style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Spacer(Modifier.height(4.dp))
             if (translation == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
             else Text(translation!!, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)

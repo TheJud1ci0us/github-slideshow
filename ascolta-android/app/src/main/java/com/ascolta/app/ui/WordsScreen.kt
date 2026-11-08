@@ -74,6 +74,10 @@ fun WordsScreen(openReview: () -> Unit) {
     val graph = context.graph
     val scope = rememberCoroutineScope()
     val words by graph.repo.vocab.collectAsState(initial = emptyList())
+    // Japanese words are shown with their reading (hiragana and romaji).
+    val learningNow by graph.settings.learningLanguage.flow.collectAsState()
+    LaunchedEffect(learningNow) { if (learningNow == "ja") com.ascolta.app.data.Japanese.load() }
+    val jaReady by com.ascolta.app.data.Japanese.ready.collectAsState()
     val now = remember(words) { System.currentTimeMillis() }
     val due = words.count { it.dueAt <= now }
     var adding by remember { mutableStateOf(false) }
@@ -127,7 +131,10 @@ fun WordsScreen(openReview: () -> Unit) {
                     items(words, key = { it.id }) { w ->
                         ListItem(
                             headlineContent = {
-                                Text(if (w.isSentence) w.word else "${w.word}  →  ${w.translation}")
+                                val shown = if (w.language == "ja" && jaReady && !w.isSentence) {
+                                    withReading(w.word, com.ascolta.app.data.Japanese.reading(w.word), com.ascolta.app.data.Japanese.romaji(w.word))
+                                } else w.word
+                                Text(if (w.isSentence) w.word else "$shown  →  ${w.translation}")
                             },
                             supportingContent = {
                                 Column {
@@ -227,7 +234,10 @@ fun ReviewScreen(onBack: () -> Unit) {
     var queue by remember { mutableStateOf<List<VocabEntity>?>(null) }
     var flipped by remember { mutableStateOf(false) }
     var reviewed by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { queue = graph.repo.dueCardsNow() }
+    LaunchedEffect(Unit) {
+        queue = graph.repo.dueCardsNow()
+        if (queue.orEmpty().any { it.language == "ja" }) com.ascolta.app.data.Japanese.load()
+    }
 
     Scaffold(
         topBar = {
@@ -254,6 +264,15 @@ fun ReviewScreen(onBack: () -> Unit) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(card.word, style = if (card.isSentence) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
                             if (showBack) {
+                                if (card.language == "ja") {
+                                    // The reading, once the learner has tried to read the kanji.
+                                    val reading = remember(card.word) { com.ascolta.app.data.Japanese.reading(card.word) }
+                                    val romaji = remember(card.word) { com.ascolta.app.data.Japanese.romaji(card.word) }
+                                    listOfNotNull(reading, romaji).takeIf { it.isNotEmpty() }?.let {
+                                        Text(it.joinToString(" · "), style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                                    }
+                                }
                                 Spacer(Modifier.height(16.dp))
                                 Text(card.translation, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
                                 if (!card.isSentence) {

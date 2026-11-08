@@ -38,17 +38,8 @@ private val Dark = darkColorScheme(
 fun AscoltaTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val settings = context.graph.settings
-    val theme by settings.theme.flow.collectAsState()
     val dynamic by settings.dynamicColor.flow.collectAsState()
-    val dark = when (theme) {
-        "light" -> false
-        "dark" -> true
-        else -> isSystemInDarkTheme()
-    }
-    val colors = when {
-        dynamic && Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> Dark
-        else -> Light
-    }
+    // Dark mode only (easier on the eyes for long listening, and at night).
+    val colors = if (dynamic && Build.VERSION.SDK_INT >= 31) dynamicDarkColorScheme(context) else Dark
     MaterialTheme(colorScheme = colors, content = content)
 }
