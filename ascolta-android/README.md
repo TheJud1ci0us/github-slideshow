@@ -132,7 +132,6 @@ Run on a **real phone**. The emulator works but whisper is very slow there.
 | Whisper Small | 190 MB | ~3× slower than Base | noticeably better | all |
 | Whisper Large v3 Turbo | 574 MB | slow | best Whisper; needs ~8 GB RAM | all |
 | **NVIDIA Parakeet v3** | 670 MB | fast | very good, with punctuation | 25 European (not ja/zh) |
-| NVIDIA Parakeet v3 (NPU) | 2.3 GB | NPU; first use compiles it | same as above | 25 European; Snapdragon only |
 
 In a test on Italian speech, Parakeet transcribed perfectly where Whisper Base made
 mistakes, and was about 3× faster. Run the speed test in Settings to compare models,
