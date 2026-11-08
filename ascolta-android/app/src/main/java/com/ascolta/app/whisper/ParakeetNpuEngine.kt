@@ -19,8 +19,9 @@ object NpuSupport {
 
     /** Why the NPU can't be used on this phone, or null if it looks usable. */
     fun unavailableReason(context: Context): String? {
-        val failure = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("failure", null)
-        if (failure != null) return failure
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val failure = prefs.getString("failure", null)
+        if (failure != null && prefs.getLong("failure_version", -1) == appVersion(context)) return failure
         if (!Build.SUPPORTED_ABIS.contains("arm64-v8a")) return "not an ARM64 phone"
         val manufacturer = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MANUFACTURER else Build.HARDWARE
         val qualcomm = manufacturer.contains("QTI", ignoreCase = true) ||
@@ -35,13 +36,32 @@ object NpuSupport {
     fun chipName(): String =
         if (Build.VERSION.SDK_INT >= 31) "${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}" else Build.HARDWARE
 
-    /** Remembers that the NPU failed, so the option is disabled with the reason. */
+    /**
+     * Remembers that the NPU failed, so the option is disabled with the reason. The failure is
+     * tied to this app version: after an update the NPU is tried again automatically.
+     */
     fun markFailed(context: Context, reason: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("failure", reason.take(200)).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("failure", reason.take(300))
+            .putLong("failure_version", appVersion(context))
+            .apply()
     }
 
+    /** Which encoder layout worked last time ("full" or "split"), to start with it. */
+    fun preferredLayout(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("layout", null)
+
+    fun rememberLayout(context: Context, layout: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("layout", layout).apply()
+    }
+
+    private fun appVersion(context: Context): Long = runCatching {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+    }.getOrDefault(0)
+
     fun clearFailure(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("failure").apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("failure").remove("layout").apply()
     }
 }
 
@@ -130,11 +150,18 @@ class ParakeetNpuEngine(
     tokensFile: File,
     private val options: EngineOptions,
     private val npu: Boolean = true,
+    /**
+     * Split encoder: its first layers (subsampling convolutions, ~2% of the work) run on the
+     * CPU and the 24 conformer layers on the NPU. Used when the NPU refuses the full encoder.
+     */
+    private val split: Boolean = false,
     private val cacheDir: File? = null,
 ) : SpeechEngine {
     @Volatile private var aborted = false
     private val env = OrtEnvironment.getEnvironment()
     private val vocab = ParakeetVocabulary(tokensFile)
+    /** CPU part of a split encoder (features → "linear"), or null for a single encoder. */
+    private var preEncoder: OrtSession? = null
     private val encoder: OrtSession
     private val decoder: OrtSession
     private val joint: OrtSession
@@ -142,7 +169,18 @@ class ParakeetNpuEngine(
     override val needsSpeechRegions: Boolean get() = true
 
     init {
-        encoder = createEncoder()
+        if (split) {
+            preEncoder = env.createSession(
+                File(modelDir, "encoder_onnx/encoder_pre.onnx").path,
+                OrtSession.SessionOptions().apply { setIntraOpNumThreads(options.threads) },
+            )
+        }
+        encoder = try {
+            createEncoder()
+        } catch (e: Throwable) {
+            preEncoder?.close()
+            throw e
+        }
         val small = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(1)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
@@ -152,7 +190,7 @@ class ParakeetNpuEngine(
     }
 
     private fun createEncoder(): OrtSession {
-        val model = File(modelDir, "encoder_onnx/encoder.onnx")
+        val model = File(modelDir, if (split) "encoder_onnx/encoder_post.onnx" else "encoder_onnx/encoder.onnx")
         val so = OrtSession.SessionOptions()
         if (!npu) {
             so.setIntraOpNumThreads(options.threads)
@@ -160,7 +198,7 @@ class ParakeetNpuEngine(
         }
         // Compiling the encoder for the NPU takes a while; ONNX Runtime saves the result
         // ("context binary") next to the cache so later loads are quick.
-        val ctxModel = File(cacheDir ?: modelDir, "encoder_qnn_ctx.onnx")
+        val ctxModel = File(cacheDir ?: modelDir, if (split) "encoder_post_qnn_ctx.onnx" else "encoder_qnn_ctx.onnx")
         val useCached = ctxModel.exists() && ctxModel.length() > 0
         so.addQnn(
             mapOf(
@@ -178,7 +216,7 @@ class ParakeetNpuEngine(
         }
         val started = System.currentTimeMillis()
         val session = env.createSession((if (useCached) ctxModel else model).path, so)
-        AppLog.i("Npu", "Encoder ready on NPU in ${System.currentTimeMillis() - started} ms (cached=$useCached)")
+        AppLog.i("Npu", "Encoder ready on NPU in ${System.currentTimeMillis() - started} ms (cached=$useCached, split=$split)")
         return session
     }
 
@@ -226,11 +264,15 @@ class ParakeetNpuEngine(
         val enc: Array<FloatArray>
         OnnxTensor.createTensor(env, FloatBuffer.wrap(input), longArrayOf(1, WINDOW_FRAMES.toLong(), ParakeetFeatures.N_MELS.toLong())).use { f ->
             OnnxTensor.createTensor(env, IntBuffer.wrap(mask), longArrayOf(1, WINDOW_FRAMES.toLong())).use { m ->
-                encoder.run(mapOf("input_features" to f, "attention_mask" to m)).use { r ->
-                    val flat = r.floats("encoder_out")
-                    val frames = flat.size / TdtDecoder.HIDDEN
-                    enc = Array(frames) { i -> flat.copyOfRange(i * TdtDecoder.HIDDEN, (i + 1) * TdtDecoder.HIDDEN) }
-                }
+                val flat = preEncoder?.let { pre ->
+                    // Split encoder: subsampling on the CPU, then the conformer layers on the NPU.
+                    pre.run(mapOf("input_features" to f, "attention_mask" to m)).use { r1 ->
+                        val linear = r1.get("linear").get() as OnnxTensor
+                        encoder.run(mapOf("linear" to linear, "attention_mask" to m)).use { r2 -> r2.floats("encoder_out") }
+                    }
+                } ?: encoder.run(mapOf("input_features" to f, "attention_mask" to m)).use { r -> r.floats("encoder_out") }
+                val frames = flat.size / TdtDecoder.HIDDEN
+                enc = Array(frames) { i -> flat.copyOfRange(i * TdtDecoder.HIDDEN, (i + 1) * TdtDecoder.HIDDEN) }
             }
         }
         val tokens = TdtDecoder.decode(enc, feats.validFrames / SUBSAMPLING, network)
@@ -279,6 +321,7 @@ class ParakeetNpuEngine(
     }
 
     override fun close() {
+        runCatching { preEncoder?.close() }
         runCatching { encoder.close() }
         runCatching { decoder.close() }
         runCatching { joint.close() }

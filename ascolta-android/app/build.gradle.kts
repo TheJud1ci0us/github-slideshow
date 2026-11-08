@@ -21,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.0"
+        versionCode = 6
+        versionName = "0.3.1"
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
@@ -162,7 +162,7 @@ dependencies {
     implementation(files(sherpaAar))
     implementation(files(ortQnnAar))
     // Qualcomm's NPU runtime (HTP backend) used by ONNX Runtime's QNN provider.
-    implementation("com.qualcomm.qti:qnn-runtime:2.42.0")
+    implementation("com.qualcomm.qti:qnn-runtime:2.50.0") // the version Qualcomm exported the NPU model with
     implementation("androidx.appcompat:appcompat:1.7.1")
 
     val composeBom = platform("androidx.compose:compose-bom:2025.06.01")

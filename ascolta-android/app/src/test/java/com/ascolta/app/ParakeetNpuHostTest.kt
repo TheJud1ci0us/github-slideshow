@@ -18,7 +18,13 @@ import java.nio.ByteOrder
  */
 class ParakeetNpuHostTest {
     @Test
-    fun transcribesItalianSample() {
+    fun transcribesItalianSample() = run(split = false)
+
+    /** The fallback layout: subsampling and conformer layers as two separate models. */
+    @Test
+    fun transcribesItalianSampleWithSplitEncoder() = run(split = true)
+
+    private fun run(split: Boolean) {
         val dir = System.getProperty("parakeetNpuDir")?.let(::File)
         assumeTrue("set -DparakeetNpuDir to run", dir != null && File(dir, "encoder_onnx/encoder.onnx").exists())
         val tokens = File(System.getProperty("parakeetTokens")!!)
@@ -27,7 +33,13 @@ class ParakeetNpuHostTest {
         val audio = FloatArray(pcm.remaining()) { pcm.get(it) / 32768f }
         val reference = File("src/main/assets/benchmark_it.txt").readText()
 
-        val engine = ParakeetNpuEngine(dir!!, tokens, EngineOptions(threads = 4, flashAttention = false), npu = false)
+        if (split) {
+            // Same files the app installs next to encoder.data from its assets.
+            listOf("encoder_pre.onnx", "encoder_post.onnx").forEach { name ->
+                File("src/main/assets/parakeet_npu/$name").copyTo(File(dir!!, "encoder_onnx/$name"), overwrite = true)
+            }
+        }
+        val engine = ParakeetNpuEngine(dir!!, tokens, EngineOptions(threads = 4, flashAttention = false), npu = false, split = split)
         val segments = mutableListOf<WhisperSegment>()
         val t0 = System.currentTimeMillis()
         engine.transcribe(audio, null, "it", null, onProgress = {}, onSegment = { segments += it })
@@ -35,7 +47,7 @@ class ParakeetNpuHostTest {
         engine.close()
         val text = segments.joinToString(" ") { it.text }
         val accuracy = WordAccuracy.accuracy(reference, text)
-        println("NPU model on host CPU: ${took} ms, accuracy ${(accuracy * 100).toInt()}%")
+        println("NPU model on host CPU (split=$split): ${took} ms, accuracy ${(accuracy * 100).toInt()}%")
         segments.forEach { println("  [${it.startMs}-${it.endMs}] ${it.text}  words=${it.words?.take(4)}") }
         assertTrue("accuracy $accuracy: $text", accuracy > 0.8f)
     }
