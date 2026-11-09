@@ -20,7 +20,7 @@
     <string name="tab_words">Palabras</string>
     <string name="tab_settings">Ajustes</string>
     <string name="add_podcast_title">Añadir un podcast</string>
-    <string name="add_podcast_hint">Pega un feed RSS o un enlace de Apple Podcasts o Spotify. Consejo: en Spotify, toca Compartir → Ascolta.</string>
+    <string name="add_podcast_hint">Pega un feed RSS o un enlace de Apple Podcasts o Spotify. Consejo: en Spotify, toca Compartir → LingoPod.</string>
     <string name="add_podcast_error">No se pudo añadir: %1$s</string>
     <string name="refresh_feeds">Buscar episodios nuevos</string>
     <string name="no_new_episodes">No hay episodios nuevos</string>
@@ -99,7 +99,7 @@
     <string name="word_translation_unavailable">(traducción no disponible: %1$s)</string>
     <string name="words_title">Palabras (%1$d)</string>
     <string name="export">Exportar</string>
-    <string name="export_subject">Palabras de Ascolta</string>
+    <string name="export_subject">Palabras de LingoPod</string>
     <string name="export_chooser">Exportar palabras (Anki: separadas por tabulaciones)</string>
     <string name="words_empty">Toca cualquier palabra de una transcripción para traducirla y guárdala aquí.\n\nExporta la lista (separada por tabulaciones) para importarla en Anki u otra app de tarjetas.</string>
     <string name="section_languages">Idiomas</string>
@@ -163,7 +163,7 @@
     <string name="share_log">Compartir registro</string>
     <string name="speech_engine_info">Motor de voz: %1$s</string>
     <string name="section_about">Acerca de</string>
-    <string name="about_text">Ascolta reproduce feeds RSS públicos de podcasts. El reconocimiento de voz (Whisper o NVIDIA Parakeet) y la traducción (ML Kit) funcionan en este teléfono. Los modelos se descargan una vez; el audio y las transcripciones nunca salen del dispositivo.</string>
+    <string name="about_text">LingoPod reproduce feeds RSS públicos de podcasts. El reconocimiento de voz (Whisper o NVIDIA Parakeet) y la traducción (ML Kit) funcionan en este teléfono. Los modelos se descargan una vez; el audio y las transcripciones nunca salen del dispositivo.</string>
     <string name="notif_channel">Descargas y transcripción</string>
     <string name="notif_channel_desc">Progreso de las descargas de episodios y de la transcripción en el dispositivo</string>
     <string name="status_waiting">En espera</string>
@@ -229,7 +229,7 @@
     <string name="npu_log_title">Registro NPU</string>
     <string name="npu_log_text">Comprueba ahora la configuración NPU del teléfono y muestra cada intento</string>
     <string name="action_clear">Borrar</string>
-    <string name="status_paused_listening">En pausa mientras escuchas con la app cerrada — abre Ascolta para continuar</string>
+    <string name="status_paused_listening">En pausa mientras escuchas con la app cerrada — abre LingoPod para continuar</string>
     <string name="translate_title">Traducir frases</string>
     <string name="translate_text">Desactivado: solo la transcripción, sin traducción (las palabras tocadas se siguen traduciendo)</string>
     <string name="model_languages">Idiomas (%1$d): %2$s</string>
@@ -257,7 +257,7 @@
     <string name="theme_light">Claro</string>
     <string name="theme_dark">Oscuro</string>
     <string name="dynamic_color_title">Colores del fondo</string>
-    <string name="dynamic_color_text">Desactivado: colores de Ascolta</string>
+    <string name="dynamic_color_text">Desactivado: colores de LingoPod</string>
     <string name="refresh_title">Buscar episodios nuevos</string>
     <string name="refresh_manual">Solo a mano</string>
     <string name="notify_fav_title">Avisos de episodios nuevos</string>
@@ -375,7 +375,7 @@
     <string name="speed_test_language">La prueba usa una grabación en italiano, que %1$s no entiende. Cambia a un idioma compatible (p. ej. italiano).</string>
     <string name="section_privacy">Privacidad</string>
     <string name="analytics_title">Compartir estadísticas de uso anónimas</string>
-    <string name="analytics_text">Ayuda a mejorar Ascolta: qué funciones y modelos de voz se usan y su velocidad. Nunca nombres de podcasts, búsquedas, transcripciones ni palabras guardadas. Puedes cambiarlo en Ajustes cuando quieras.</string>
+    <string name="analytics_text">Ayuda a mejorar LingoPod: qué funciones y modelos de voz se usan y su velocidad. Nunca nombres de podcasts, búsquedas, transcripciones ni palabras guardadas. Puedes cambiarlo en Ajustes cuando quieras.</string>
     <string name="analytics_yes">Compartir</string>
     <string name="analytics_no">No, gracias</string>
 </resources>

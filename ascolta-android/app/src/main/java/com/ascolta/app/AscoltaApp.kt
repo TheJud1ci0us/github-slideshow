@@ -51,6 +51,12 @@ class AscoltaApp : Application() {
             )
             getSharedPreferences("analytics", MODE_PRIVATE).edit().remove("crash").apply()
         }
+        graph.scope.launch {
+            runCatching { logLastExit() }
+            // Load the speech engine's CPU code early (safely chosen on x86_64 emulators).
+            runCatching { com.ascolta.app.whisper.WhisperLib.ensureBackends(applicationInfo.nativeLibraryDir) }
+                .onFailure { AppLog.w("App", "Speech engine libraries", it) }
+        }
         // Statistics are sent when the app goes to the background (and every minute).
         graph.scope.launch { AppVisibility.visible.collect { if (!it) com.ascolta.app.data.Analytics.flush() } }
         Notifications.createChannels(this)
@@ -61,6 +67,41 @@ class AscoltaApp : Application() {
             runCatching { graph.repo.assignLibraryLanguages() }.onFailure { AppLog.w("App", "Library languages", it) }
             runCatching { graph.repo.deleteOldDownloads() }.onFailure { AppLog.w("App", "Old downloads", it) }
         }
+    }
+}
+
+/**
+ * Writes why the app's previous run ended to the log (Settings → Diagnostics), when it wasn't
+ * a normal exit: a native crash (e.g. an unsupported CPU instruction), running out of memory,
+ * being stopped while not responding… Java crashes are already logged when they happen.
+ */
+private fun AscoltaApp.logLastExit() {
+    if (android.os.Build.VERSION.SDK_INT < 30) return
+    val am = getSystemService(android.app.ActivityManager::class.java) ?: return
+    val prefs = getSharedPreferences("diagnostics", android.content.Context.MODE_PRIVATE)
+    val seen = prefs.getLong("last_exit_seen", 0)
+    val exits = am.getHistoricalProcessExitReasons(packageName, 0, 5).filter { it.timestamp > seen }
+    exits.firstOrNull()?.let { prefs.edit().putLong("last_exit_seen", it.timestamp).apply() }
+    val reasons = mapOf(
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE to "native crash",
+        android.app.ApplicationExitInfo.REASON_CRASH to "crash",
+        android.app.ApplicationExitInfo.REASON_LOW_MEMORY to "killed: phone low on memory",
+        android.app.ApplicationExitInfo.REASON_ANR to "not responding",
+        android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE to "killed: too much CPU/battery",
+        android.app.ApplicationExitInfo.REASON_SIGNALED to "killed by signal",
+        android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE to "failed to start",
+    )
+    for (e in exits.reversed()) {
+        val reason = reasons[e.reason] ?: continue
+        AppLog.w(
+            "LastExit",
+            "${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(e.timestamp))}: $reason" +
+                " (status ${e.status}, ${e.description ?: "no details"}, memory ${e.pss / 1024} MB)",
+        )
+        com.ascolta.app.data.Analytics.track(
+            "TelemetryDeck.Error.occurred",
+            mapOf("TelemetryDeck.Error.id" to "exit:$reason status ${e.status}", "TelemetryDeck.Error.category" to "exit"),
+        )
     }
 }
 

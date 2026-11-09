@@ -20,7 +20,7 @@
     <string name="tab_words">Parole</string>
     <string name="tab_settings">Impostazioni</string>
     <string name="add_podcast_title">Aggiungi un podcast</string>
-    <string name="add_podcast_hint">Incolla un feed RSS o un link di Apple Podcasts o Spotify. Suggerimento: in Spotify tocca Condividi → Ascolta.</string>
+    <string name="add_podcast_hint">Incolla un feed RSS o un link di Apple Podcasts o Spotify. Suggerimento: in Spotify tocca Condividi → LingoPod.</string>
     <string name="add_podcast_error">Impossibile aggiungerlo: %1$s</string>
     <string name="refresh_feeds">Cerca nuovi episodi</string>
     <string name="no_new_episodes">Nessun nuovo episodio</string>
@@ -99,7 +99,7 @@
     <string name="word_translation_unavailable">(traduzione non disponibile: %1$s)</string>
     <string name="words_title">Parole (%1$d)</string>
     <string name="export">Esporta</string>
-    <string name="export_subject">Parole di Ascolta</string>
+    <string name="export_subject">Parole di LingoPod</string>
     <string name="export_chooser">Esporta parole (Anki: separate da tabulazioni)</string>
     <string name="words_empty">Tocca una parola in una trascrizione per tradurla, poi salvala qui.\n\nEsporta l\'elenco (separato da tabulazioni) per importarlo in Anki o in un\'altra app di flashcard.</string>
     <string name="section_languages">Lingue</string>
@@ -163,7 +163,7 @@
     <string name="share_log">Condividi registro</string>
     <string name="speech_engine_info">Motore vocale: %1$s</string>
     <string name="section_about">Informazioni</string>
-    <string name="about_text">Ascolta riproduce feed RSS pubblici di podcast. Il riconoscimento vocale (Whisper o NVIDIA Parakeet) e la traduzione (ML Kit) funzionano entrambi su questo telefono. I modelli vengono scaricati una volta; audio e trascrizioni non lasciano mai il dispositivo.</string>
+    <string name="about_text">LingoPod riproduce feed RSS pubblici di podcast. Il riconoscimento vocale (Whisper o NVIDIA Parakeet) e la traduzione (ML Kit) funzionano entrambi su questo telefono. I modelli vengono scaricati una volta; audio e trascrizioni non lasciano mai il dispositivo.</string>
     <string name="notif_channel">Download e trascrizione</string>
     <string name="notif_channel_desc">Avanzamento dei download degli episodi e della trascrizione sul dispositivo</string>
     <string name="status_waiting">In attesa</string>
@@ -222,14 +222,14 @@
     <string name="translation_needs_wifi">Modalità solo Wi-Fi: il modello di traduzione si scarica con il Wi-Fi</string>
     <string name="stream_mobile_title">Stai usando i dati mobili</string>
     <string name="stream_mobile_text">La modalità solo Wi-Fi è attiva. Vuoi ascoltare l’episodio in streaming con i dati mobili o scaricarlo quando sarai sul Wi-Fi?</string>
-    <string name="stream_anyway">Ascolta comunque</string>
+    <string name="stream_anyway">LingoPod comunque</string>
     <string name="download_on_wifi">Scarica con il Wi-Fi</string>
     <string name="npu_verbose_title">Log NPU dettagliato</string>
     <string name="npu_verbose_text">Registra i messaggi di ONNX Runtime e Qualcomm quando si prova la NPU</string>
     <string name="npu_log_title">Log NPU</string>
     <string name="npu_log_text">Controlla ora la configurazione NPU del telefono e mostra ogni tentativo</string>
     <string name="action_clear">Cancella</string>
-    <string name="status_paused_listening">In pausa mentre ascolti con l’app chiusa — apri Ascolta per continuare</string>
+    <string name="status_paused_listening">In pausa mentre ascolti con l’app chiusa — apri LingoPod per continuare</string>
     <string name="translate_title">Traduci le frasi</string>
     <string name="translate_text">Disattivato: solo la trascrizione, senza traduzione (le parole toccate vengono comunque tradotte)</string>
     <string name="model_languages">Lingue (%1$d): %2$s</string>
@@ -257,7 +257,7 @@
     <string name="theme_light">Chiaro</string>
     <string name="theme_dark">Scuro</string>
     <string name="dynamic_color_title">Colori dallo sfondo</string>
-    <string name="dynamic_color_text">Disattivato: i colori di Ascolta</string>
+    <string name="dynamic_color_text">Disattivato: i colori di LingoPod</string>
     <string name="refresh_title">Controlla nuovi episodi</string>
     <string name="refresh_manual">Solo a mano</string>
     <string name="notify_fav_title">Notifiche nuovi episodi</string>
@@ -332,7 +332,7 @@
     <string name="onboarding_level_text">Livello QCER (A1 = principiante … C2 = quasi madrelingua). Serve a suggerire podcast; puoi saltarlo.</string>
     <string name="onboarding_interests_title">Temi che ti piacciono</string>
     <string name="onboarding_finish">Inizia ad ascoltare</string>
-    <string name="play_clip">Ascolta l’audio originale</string>
+    <string name="play_clip">LingoPod l’audio originale</string>
     <string name="sleep_timer">Timer di spegnimento</string>
     <string name="sleep_timer_text">Si ferma alla fine della frase in corso, con una breve dissolvenza.</string>
     <string name="sleep_end_short">Fine</string>
@@ -340,7 +340,7 @@
     <string name="sleep_minutes">%1$d minuti</string>
     <string name="sleep_off">Disattiva</string>
     <string name="tab_progress">Progressi</string>
-    <string name="progress_listened">Ascoltato in %1$s</string>
+    <string name="progress_listened">LingoPodto in %1$s</string>
     <string name="progress_next_milestone">Prossimo traguardo: %1$d h</string>
     <string name="progress_streak">%1$d giorni</string>
     <string name="progress_best">di fila (record %1$d)</string>
@@ -349,9 +349,9 @@
     <string name="progress_badges">Badge · %1$d su %2$d</string>
     <string name="badge_unlocked">Badge ottenuto!</string>
     <string name="badge_listen_title">%1$d h di ascolto</string>
-    <string name="badge_listen_desc">Ascolta %1$d ore in una lingua</string>
+    <string name="badge_listen_desc">LingoPod %1$d ore in una lingua</string>
     <string name="badge_streak_title">%1$d giorni di fila</string>
-    <string name="badge_streak_desc">Ascolta %1$d giorni di fila</string>
+    <string name="badge_streak_desc">LingoPod %1$d giorni di fila</string>
     <string name="badge_words_title">%1$d parole</string>
     <string name="badge_words_desc">Salva %1$d parole o frasi</string>
     <string name="badge_reviews_title">%1$d ripassi</string>
@@ -375,7 +375,7 @@
     <string name="speed_test_language">Il test usa una registrazione in italiano, che %1$s non capisce. Passa a una lingua supportata (es. italiano) per provarlo.</string>
     <string name="section_privacy">Privacy</string>
     <string name="analytics_title">Condividi statistiche d’uso anonime</string>
-    <string name="analytics_text">Aiuta a migliorare Ascolta: quali funzioni e modelli vocali si usano e quanto sono veloci. Mai nomi di podcast, ricerche, trascrizioni o parole salvate. Puoi cambiare idea in qualsiasi momento nelle Impostazioni.</string>
+    <string name="analytics_text">Aiuta a migliorare LingoPod: quali funzioni e modelli vocali si usano e quanto sono veloci. Mai nomi di podcast, ricerche, trascrizioni o parole salvate. Puoi cambiare idea in qualsiasi momento nelle Impostazioni.</string>
     <string name="analytics_yes">Condividi</string>
     <string name="analytics_no">No, grazie</string>
 </resources>

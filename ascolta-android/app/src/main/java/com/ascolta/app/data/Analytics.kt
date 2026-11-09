@@ -152,9 +152,9 @@ object Analytics {
             "TelemetryDeck.Device.brand" to Build.BRAND,
             "TelemetryDeck.Device.modelName" to Build.MODEL,
             "TelemetryDeck.RunContext.locale" to Locale.getDefault().toLanguageTag(),
-            "Ascolta.learning" to settings.learningLanguage.value,
-            "Ascolta.native" to settings.nativeLanguage.value,
-            "Ascolta.languagesLearned" to settings.learningList().size.toString(),
+            "LingoPod.learning" to settings.learningLanguage.value,
+            "LingoPod.native" to settings.nativeLanguage.value,
+            "LingoPod.languagesLearned" to settings.learningList().size.toString(),
         )
     }
 

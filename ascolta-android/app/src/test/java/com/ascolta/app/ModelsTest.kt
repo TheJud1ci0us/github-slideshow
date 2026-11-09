@@ -42,3 +42,20 @@ class ModelsTest {
         assertEquals(2, out.size)
     }
 }
+
+class X86VariantsTest {
+    private fun choose(flags: String) = com.ascolta.app.whisper.X86Variants.choose("", flags.split(' ').toSet())
+
+    @Test
+    fun picksOnlyWhatTheKernelEnabled() {
+        // A typical emulator: AVX2 enabled, AVX-512 reported by CPUID but not enabled by the kernel.
+        assertEquals("libggml-cpu-haswell.so", choose("fpu sse4_2 avx f16c avx2 bmi2 fma"))
+        // No AVX in the guest: the plain SSE 4.2 build.
+        assertEquals("libggml-cpu-sse42.so", choose("fpu sse4_2"))
+        assertEquals("libggml-cpu-x64.so", choose("fpu"))
+        assertEquals(
+            "libggml-cpu-skylakex.so",
+            choose("sse4_2 avx f16c avx2 bmi2 fma avx512f avx512cd avx512vl avx512dq avx512bw"),
+        )
+    }
+}

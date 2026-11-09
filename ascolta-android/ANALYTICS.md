@@ -1,13 +1,13 @@
 # Anonymous usage statistics
 
-Ascolta can send anonymous usage statistics to [TelemetryDeck](https://telemetrydeck.com)
+LingoPod can send anonymous usage statistics to [TelemetryDeck](https://telemetrydeck.com)
 (privacy-first analytics, EU). It is **opt-in**: new users choose on the last onboarding page
 (switch off by default); existing users are asked once; anyone can change it in
 Settings → Privacy. Builds without an App ID contain the code but never collect or send anything.
 
 ## Turning it on
 
-1. Create a free account at telemetrydeck.com and add an app ("Ascolta").
+1. Create a free account at telemetrydeck.com and add an app ("LingoPod").
 2. Copy its **App ID** (a UUID) into `ascolta-android/gradle.properties`:
    `telemetryDeckAppId=…` (the salt is already set; never change it, or user counts restart).
 3. Build. Debug builds send signals marked as *test mode*: switch the dashboard's
@@ -43,7 +43,7 @@ names, feed URLs, search text, transcripts, translations, saved words, anything 
 ## Useful insights to create in the dashboard
 
 - Daily/weekly active users, new users, retention (built in).
-- Languages learned: breakdown of `Ascolta.learning`.
+- Languages learned: breakdown of `LingoPod.learning`.
 - Speech models: `Transcription.started` by `model`; average `Transcription.speed` floatValue by
   `model` and `TelemetryDeck.Device.modelName` (which phones run which model well).
 - Failures: `Transcription.failed` by `model` and `error`; crashes by `TelemetryDeck.Error.id`.

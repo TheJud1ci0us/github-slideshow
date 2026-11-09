@@ -1,6 +1,6 @@
-# Ascolta: learn languages with podcasts (Android)
+# LingoPod: learn languages with podcasts (Android)
 
-Ascolta is a podcast player that generates a **transcript on your phone** for any
+LingoPod is a podcast player that generates a **transcript on your phone** for any
 episode and shows a **translation under every sentence**. It's built for learning
 Italian with English as the native language, and also supports Spanish, French,
 German, Portuguese, Japanese and Chinese.
@@ -17,9 +17,9 @@ the phone.
 **Getting podcasts**
 - **Search** millions of shows (open Apple Podcasts directory, no account needed) and follow them.
 - **Paste or share a link**: RSS feed, Apple Podcasts, or **Spotify**. Spotify doesn't
-  give apps its audio, so for a Spotify link Ascolta reads the show's name and finds
-  the same show's public RSS feed. In the Spotify app: *Share → Ascolta*.
-- **Import audio files** (MP3, M4A, …) from your phone, or *Open with → Ascolta*.
+  give apps its audio, so for a Spotify link LingoPod reads the show's name and finds
+  the same show's public RSS feed. In the Spotify app: *Share → LingoPod*.
+- **Import audio files** (MP3, M4A, …) from your phone, or *Open with → LingoPod*.
 - **Import OPML** subscriptions exported from Pocket Casts, AntennaPod, Overcast, etc.
 
 **Automatic, like Spotify**
@@ -79,7 +79,7 @@ the phone.
 - ★ **Favourite** podcasts are listed first and send a **notification** when a new episode is out.
 - Per-podcast automatic download; feed check every 1/3/6/12/24 hours or only by hand.
 - Downloaded episodes can be **deleted automatically** after 1–30 days (transcripts are kept).
-- Dark mode only; colours from the wallpaper or Ascolta's own.
+- Dark mode only; colours from the wallpaper or LingoPod's own.
 
 **Flashcards**
 - Saved words keep their **sentence and its translation** (the word highlighted in it) and a

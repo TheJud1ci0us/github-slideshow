@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Ascolta</string>
+    <string name="app_name" translatable="false">LingoPod</string>
 
     <!-- Common -->
     <string name="action_cancel">Cancel</string>
@@ -27,7 +27,7 @@
 
     <!-- Add podcast dialog -->
     <string name="add_podcast_title">Add a podcast</string>
-    <string name="add_podcast_hint">Paste an RSS feed, or a link from Apple Podcasts or Spotify. Tip: in Spotify, tap Share → Ascolta.</string>
+    <string name="add_podcast_hint">Paste an RSS feed, or a link from Apple Podcasts or Spotify. Tip: in Spotify, tap Share → LingoPod.</string>
     <string name="add_podcast_error">Couldn\'t add it: %1$s</string>
 
     <!-- Library -->
@@ -132,7 +132,7 @@
     <!-- Words -->
     <string name="words_title">Words (%1$d)</string>
     <string name="export">Export</string>
-    <string name="export_subject">Ascolta words</string>
+    <string name="export_subject">LingoPod words</string>
     <string name="export_chooser">Export words (Anki: tab-separated)</string>
     <string name="words_empty">Tap any word in a transcript to translate it, then save it here.\n\nExport the list (tab-separated) to import into Anki or another flashcard app.</string>
 
@@ -203,7 +203,7 @@
     <string name="speech_engine_info">Speech engine: %1$s</string>
 
     <string name="section_about">About</string>
-    <string name="about_text">Ascolta plays public podcast RSS feeds. Speech recognition (Whisper or NVIDIA Parakeet) and translation (ML Kit) both run on this phone. Models are downloaded once; audio and transcripts never leave the device.</string>
+    <string name="about_text">LingoPod plays public podcast RSS feeds. Speech recognition (Whisper or NVIDIA Parakeet) and translation (ML Kit) both run on this phone. Models are downloaded once; audio and transcripts never leave the device.</string>
 
     <!-- Background work -->
     <string name="notif_channel">Downloads &amp; transcription</string>
@@ -252,7 +252,7 @@
     <string name="npu_log_title">NPU log</string>
     <string name="npu_log_text">Checks the phone\'s NPU setup now and shows every NPU attempt</string>
     <string name="action_clear">Clear</string>
-    <string name="status_paused_listening">Paused while you listen with the app closed — open Ascolta to continue</string>
+    <string name="status_paused_listening">Paused while you listen with the app closed — open LingoPod to continue</string>
     <string name="translate_title">Translate sentences</string>
     <string name="translate_text">Off: only the transcript is shown and nothing is translated (tapped words are still translated)</string>
     <string name="model_languages">Languages (%1$d): %2$s</string>
@@ -280,7 +280,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="dynamic_color_title">Colours from wallpaper</string>
-    <string name="dynamic_color_text">Off: Ascolta’s own colours</string>
+    <string name="dynamic_color_text">Off: LingoPod’s own colours</string>
     <string name="refresh_title">Check for new episodes</string>
     <string name="refresh_manual">Only by hand</string>
     <string name="notify_fav_title">New episode notifications</string>
@@ -395,7 +395,7 @@
     <string name="speed_test_language">The speed test uses an Italian recording, which %1$s doesn’t understand. Switch to a language it supports (e.g. Italian) to test.</string>
     <string name="section_privacy">Privacy</string>
     <string name="analytics_title">Share anonymous usage statistics</string>
-    <string name="analytics_text">Helps improve Ascolta: which features and speech models are used and how fast they run. Never podcast names, searches, transcripts or saved words. You can change this any time in Settings.</string>
+    <string name="analytics_text">Helps improve LingoPod: which features and speech models are used and how fast they run. Never podcast names, searches, transcripts or saved words. You can change this any time in Settings.</string>
     <string name="analytics_yes">Share</string>
     <string name="analytics_no">No thanks</string>
 </resources>

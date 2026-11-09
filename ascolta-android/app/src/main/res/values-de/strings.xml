@@ -20,7 +20,7 @@
     <string name="tab_words">Wörter</string>
     <string name="tab_settings">Einstellungen</string>
     <string name="add_podcast_title">Podcast hinzufügen</string>
-    <string name="add_podcast_hint">Füge einen RSS-Feed oder einen Link von Apple Podcasts oder Spotify ein. Tipp: Tippe in Spotify auf Teilen → Ascolta.</string>
+    <string name="add_podcast_hint">Füge einen RSS-Feed oder einen Link von Apple Podcasts oder Spotify ein. Tipp: Tippe in Spotify auf Teilen → LingoPod.</string>
     <string name="add_podcast_error">Konnte nicht hinzugefügt werden: %1$s</string>
     <string name="refresh_feeds">Nach neuen Folgen suchen</string>
     <string name="no_new_episodes">Keine neuen Folgen</string>
@@ -99,7 +99,7 @@
     <string name="word_translation_unavailable">(Übersetzung nicht verfügbar: %1$s)</string>
     <string name="words_title">Wörter (%1$d)</string>
     <string name="export">Exportieren</string>
-    <string name="export_subject">Ascolta-Wörter</string>
+    <string name="export_subject">LingoPod-Wörter</string>
     <string name="export_chooser">Wörter exportieren (Anki: tabulatorgetrennt)</string>
     <string name="words_empty">Tippe auf ein Wort in einem Transkript, um es zu übersetzen, und speichere es hier.\n\nExportiere die Liste (tabulatorgetrennt), um sie in Anki oder eine andere Karteikarten-App zu importieren.</string>
     <string name="section_languages">Sprachen</string>
@@ -163,7 +163,7 @@
     <string name="share_log">Protokoll teilen</string>
     <string name="speech_engine_info">Sprach-Engine: %1$s</string>
     <string name="section_about">Über</string>
-    <string name="about_text">Ascolta spielt öffentliche Podcast-RSS-Feeds ab. Spracherkennung (Whisper oder NVIDIA Parakeet) und Übersetzung (ML Kit) laufen beide auf diesem Handy. Modelle werden einmal heruntergeladen; Audio und Transkripte verlassen nie das Gerät.</string>
+    <string name="about_text">LingoPod spielt öffentliche Podcast-RSS-Feeds ab. Spracherkennung (Whisper oder NVIDIA Parakeet) und Übersetzung (ML Kit) laufen beide auf diesem Handy. Modelle werden einmal heruntergeladen; Audio und Transkripte verlassen nie das Gerät.</string>
     <string name="notif_channel">Downloads &amp; Transkription</string>
     <string name="notif_channel_desc">Fortschritt von Folgen-Downloads und der Transkription auf dem Gerät</string>
     <string name="status_waiting">Wartet</string>
@@ -225,7 +225,7 @@
     <string name="npu_log_title">NPU-Protokoll</string>
     <string name="npu_log_text">Prüft jetzt die NPU-Einrichtung des Telefons und zeigt jeden Versuch</string>
     <string name="action_clear">Leeren</string>
-    <string name="status_paused_listening">Pausiert, während du bei geschlossener App hörst – öffne Ascolta zum Fortsetzen</string>
+    <string name="status_paused_listening">Pausiert, während du bei geschlossener App hörst – öffne LingoPod zum Fortsetzen</string>
     <string name="translate_title">Sätze übersetzen</string>
     <string name="translate_text">Aus: nur das Transkript, keine Übersetzung (angetippte Wörter werden weiterhin übersetzt)</string>
     <string name="model_languages">Sprachen (%1$d): %2$s</string>
@@ -253,7 +253,7 @@
     <string name="theme_light">Hell</string>
     <string name="theme_dark">Dunkel</string>
     <string name="dynamic_color_title">Farben vom Hintergrund</string>
-    <string name="dynamic_color_text">Aus: Ascoltas eigene Farben</string>
+    <string name="dynamic_color_text">Aus: LingoPods eigene Farben</string>
     <string name="refresh_title">Nach neuen Folgen suchen</string>
     <string name="refresh_manual">Nur manuell</string>
     <string name="notify_fav_title">Benachrichtigung bei neuen Folgen</string>
@@ -368,7 +368,7 @@
     <string name="speed_test_language">Der Test nutzt eine italienische Aufnahme, die %1$s nicht versteht. Wechsle zu einer unterstützten Sprache (z. B. Italienisch).</string>
     <string name="section_privacy">Datenschutz</string>
     <string name="analytics_title">Anonyme Nutzungsstatistiken teilen</string>
-    <string name="analytics_text">Hilft, Ascolta zu verbessern: welche Funktionen und Sprachmodelle genutzt werden und wie schnell sie laufen. Nie Podcast-Namen, Suchen, Transkripte oder gespeicherte Wörter. Jederzeit in den Einstellungen änderbar.</string>
+    <string name="analytics_text">Hilft, LingoPod zu verbessern: welche Funktionen und Sprachmodelle genutzt werden und wie schnell sie laufen. Nie Podcast-Namen, Suchen, Transkripte oder gespeicherte Wörter. Jederzeit in den Einstellungen änderbar.</string>
     <string name="analytics_yes">Teilen</string>
     <string name="analytics_no">Nein, danke</string>
 </resources>

@@ -163,11 +163,20 @@ whisper_vad_params vadParams() {
  * variant best suited to this phone's CPU (e.g. with dot-product / int8 matmul support).
  */
 extern "C" JNIEXPORT void JNICALL
-Java_com_ascolta_app_whisper_WhisperLib_nativeLoadBackends(JNIEnv *env, jclass, jstring libDir) {
+Java_com_ascolta_app_whisper_WhisperLib_nativeLoadBackends(JNIEnv *env, jclass, jstring libDir, jstring cpuVariant) {
     std::string dir = toStdString(env, libDir);
-    std::call_once(backendsLoaded, [&dir]() {
-        ggml_backend_load_all_from_path(dir.c_str());
-        LOGI("Loaded %zu ggml backends from %s", ggml_backend_reg_count(), dir.c_str());
+    std::string variant = cpuVariant != nullptr ? toStdString(env, cpuVariant) : "";
+    std::call_once(backendsLoaded, [&dir, &variant]() {
+        if (variant.empty()) {
+            ggml_backend_load_all_from_path(dir.c_str());
+        } else {
+            // x86_64 (emulators): ggml's own choice trusts CPUID without checking that the OS
+            // enabled those instructions, so the app picks the CPU variant and loads it alone.
+            ggml_backend_load((dir + "/" + variant).c_str());
+            std::string gpu = dir + "/libggml-opencl.so";
+            if (FILE *f = fopen(gpu.c_str(), "rb")) { fclose(f); ggml_backend_load(gpu.c_str()); }
+        }
+        LOGI("Loaded %zu ggml backends from %s (%s)", ggml_backend_reg_count(), dir.c_str(), variant.empty() ? "auto" : variant.c_str());
     });
 }
 

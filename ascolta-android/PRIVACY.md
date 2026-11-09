@@ -1,7 +1,7 @@
-ASCOLTA — PRIVACY POLICY
+LINGOPOD — PRIVACY POLICY
 Last updated: 9 November 2026
 
-Summary: Ascolta has no account, no advertising and no tracking. Speech recognition and translation happen on your phone. Only if you agree, anonymous usage statistics are sent (section 3); otherwise the developer receives no data from the app.
+Summary: LingoPod has no account, no advertising and no tracking. Speech recognition and translation happen on your phone. Only if you agree, anonymous usage statistics are sent (section 3); otherwise the developer receives no data from the app.
 
 1. Data that stays on your phone
 - Podcasts you follow, episodes, listening positions, favourites, settings.
@@ -37,7 +37,7 @@ No location, contacts, microphone or camera access.
 The app is not directed at children under 13 and collects no personal data from anyone.
 
 6. Your rights
-Since no personal data is collected or stored by the developer, there is nothing for us to access, correct or delete. You control all data on your device and can delete it at any time (Settings → Apps → Ascolta → Storage → Clear data).
+Since no personal data is collected or stored by the developer, there is nothing for us to access, correct or delete. You control all data on your device and can delete it at any time (Settings → Apps → LingoPod → Storage → Clear data).
 
 7. Changes and contact
 Changes to this policy will be published with app updates. Contact: see the store listing or the project's repository.
