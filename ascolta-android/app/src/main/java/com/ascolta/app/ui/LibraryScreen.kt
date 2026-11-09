@@ -4,6 +4,10 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -106,7 +110,8 @@ fun LibraryScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
+                title = { Text(stringResource(R.string.tab_home), style = MaterialTheme.typography.headlineMedium) },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
                     IconButton(
                         enabled = !refreshing,
@@ -185,25 +190,22 @@ fun LibraryScreen(
                 }
                 if (recent.isNotEmpty()) {
                     item { SectionTitle(stringResource(R.string.section_continue)) }
-                    items(recent, key = { "recent-${it.id}" }) { ep ->
-                        ListItem(
-                            modifier = Modifier.clickable { openPlayer(ep.id) },
-                            headlineContent = { Text(ep.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            supportingContent = {
-                                val total = ep.durationSec * 1000
-                                Text(
-                                    if (total > 0) "${formatTime(ep.playbackPositionMs)} / ${formatTime(total)}"
-                                    else formatTime(ep.playbackPositionMs),
-                                )
-                            },
-                            leadingContent = { Artwork(ep.imageUrl, 40.dp) },
-                        )
+                    // Continue listening: big artwork cards with how far you got.
+                    item(key = "recent-row") {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(recent, key = { it.id }) { ep -> ContinueCard(ep) { openPlayer(ep.id) } }
+                        }
                     }
                 }
                 val favourites = list.orEmpty().filter { it.podcast.favourite }
                 if (favourites.isNotEmpty()) {
                     item { SectionTitle(stringResource(R.string.section_favourites)) }
-                    items(favourites, key = { "fav-${it.podcast.id}" }) { p -> PodcastRow(p, openPodcast) }
+                    items(favourites.chunked(3), key = { row -> "fav-" + row.joinToString { it.podcast.id.toString() } }) { row ->
+                        PodcastGridRow(row, openPodcast)
+                    }
                 }
                 item { SectionTitle(stringResource(R.string.section_podcasts)) }
                 if (importedCount > 0) {
@@ -216,7 +218,9 @@ fun LibraryScreen(
                         )
                     }
                 }
-                items(list.orEmpty().filter { !it.podcast.favourite }, key = { it.podcast.id }) { p -> PodcastRow(p, openPodcast) }
+                items(list.orEmpty().filter { !it.podcast.favourite }.chunked(3), key = { row -> "pod-" + row.joinToString { it.podcast.id.toString() } }) { row ->
+                    PodcastGridRow(row, openPodcast)
+                }
             }
         }
         }
@@ -228,6 +232,51 @@ fun LibraryScreen(
             openPodcast = { linkDialog = false; openPodcast(it) },
             openSearch = { linkDialog = false; openDiscover(it) },
         )
+    }
+}
+
+/** Three podcasts side by side: square rounded artwork, title, ★ for favourites. */
+@Composable
+private fun PodcastGridRow(row: List<com.ascolta.app.data.PodcastWithStats>, openPodcast: (Long?) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        row.forEach { p ->
+            Column(Modifier.weight(1f).clickable { openPodcast(p.podcast.id) }) {
+                Box {
+                    coil3.compose.AsyncImage(
+                        model = p.podcast.imageUrl, contentDescription = p.podcast.title,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large)
+                            .background(MaterialTheme.colorScheme.surfaceContainer),
+                    )
+                    if (p.podcast.favourite) {
+                        Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(18.dp))
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(p.podcast.title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+/** A "continue listening" card: artwork, episode title and a progress line. */
+@Composable
+private fun ContinueCard(ep: EpisodeEntity, onClick: () -> Unit) {
+    Column(
+        Modifier.width(150.dp).clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClick = onClick).padding(10.dp),
+    ) {
+        Artwork(ep.imageUrl, 130.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(ep.title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.height(40.dp))
+        val total = ep.durationSec * 1000
+        if (total > 0) {
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(progress = { (ep.playbackPositionMs.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 

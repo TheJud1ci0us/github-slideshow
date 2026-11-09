@@ -13,6 +13,11 @@ import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Style
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -43,13 +48,20 @@ import androidx.compose.ui.res.stringResource
 
 private data class Tab(val route: String, val label: Int, val icon: ImageVector)
 
+/** Home · Discover · Words · Profile (progress and settings live under Profile). */
 private val TABS = listOf(
-    Tab("library", R.string.tab_library, Icons.AutoMirrored.Filled.LibraryBooks),
-    Tab("discover", R.string.tab_discover, Icons.Filled.Search),
-    Tab("words", R.string.tab_words, Icons.Filled.Translate),
-    Tab("progress", R.string.tab_progress, Icons.Filled.EmojiEvents),
-    Tab("settings", R.string.tab_settings, Icons.Filled.Settings),
+    Tab("library", R.string.tab_home, Icons.Outlined.Home),
+    Tab("discover", R.string.tab_discover, Icons.Outlined.Explore),
+    Tab("words", R.string.tab_words, Icons.Outlined.Style),
+    Tab("profile", R.string.tab_profile, Icons.Outlined.Person),
 )
+
+/** Which tab a screen belongs to, for the highlighted item in the bar. */
+private fun tabOf(route: String): String = when {
+    route.startsWith("settings") || route == "progress" || route == "personalize" || route == "profile" -> "profile"
+    route == "review" -> "words"
+    else -> route.substringBefore('?')
+}
 
 object Routes {
     fun podcast(id: Long?) = "podcast/${id ?: -1}"
@@ -79,18 +91,13 @@ fun AscoltaRoot() {
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             if (!inPlayer) {
-                Column {
+                Column(Modifier.navigationBarsPadding()) {
                     MiniPlayer(onOpen = { id -> nav.navigate(Routes.player(id)) })
-                    NavigationBar {
-                        TABS.forEach { tab ->
-                            NavigationBarItem(
-                                selected = route.substringBefore('?') == tab.route,
-                                onClick = { nav.navigateToTab(tab.route) },
-                                icon = { Icon(tab.icon, contentDescription = null) },
-                                label = { Text(stringResource(tab.label)) },
-                            )
-                        }
-                    }
+                    FloatingNavBar(
+                        items = TABS.map { NavItem(it.route, stringResource(it.label), it.icon) },
+                        current = tabOf(route),
+                        onSelect = { nav.navigateToTab(it) },
+                    )
                 }
             }
         },
@@ -114,8 +121,20 @@ fun AscoltaRoot() {
             }
             composable("words") { WordsScreen(openReview = { nav.navigate("review") }) }
             composable("review") { ReviewScreen(onBack = { nav.popBackStack() }) }
-            composable("progress") { ProgressScreen() }
-            composable("settings") { SettingsScreen() }
+            composable("profile") {
+                ProfileScreen(
+                    openSettings = { section -> nav.navigate("settings/$section") },
+                    openProgress = { nav.navigate("progress") },
+                    openPersonalize = { nav.navigate("personalize") },
+                )
+            }
+            composable("progress") { ProgressScreen(onBack = { nav.popBackStack() }) }
+            composable("settings/{section}") { entry ->
+                SettingsScreen(section = entry.arguments?.getString("section") ?: "", onBack = { nav.popBackStack() })
+            }
+            composable("personalize") {
+                PersonalizeScreen(onDone = { nav.popBackStack() })
+            }
             composable(
                 "podcast/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),

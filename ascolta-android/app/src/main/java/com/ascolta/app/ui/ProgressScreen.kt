@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
@@ -47,7 +48,7 @@ import java.util.Locale
 /** Listening hours per language, streak, and badges (earned in colour, locked greyed out). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProgressScreen() {
+fun ProgressScreen(onBack: () -> Unit) {
     val graph = LocalContext.current.graph
     val stats by graph.progress.stats.collectAsState()
     val learning by graph.settings.learningLanguage.flow.collectAsState()
@@ -56,7 +57,16 @@ fun ProgressScreen() {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_progress)) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.tab_progress)) },
+                navigationIcon = {
+                    androidx.compose.material3.IconButton(onClick = onBack) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, null)
+                    }
+                },
+            )
+        },
     ) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),

@@ -62,6 +62,14 @@ the phone.
 - **Stop** a running transcription (what's done is kept; *Continue* resumes), or remove
   waiting items from the queue.
 
+**Design**
+- Calm, minimal dark design: near-black background, rounded cards, pill buttons, big titles, a
+  floating tab bar (Home · Discover · Words · Profile).
+- First launch in four steps: languages, level (CEFR), favourite categories, then a grid of
+  suggested podcasts for that language, level and themes to follow in one tap (all but the
+  first step can be skipped; Profile → Categories & podcasts reopens the last two).
+- Profile: learner card (language, level, hours, streak, badges) and settings grouped in cards.
+
 **Languages**
 - On first launch, choose the languages you're learning (57 available, each with its flag).
   Each language has its **own library** of podcasts, words and flashcards; switch with the

@@ -54,7 +54,7 @@ import java.util.Date
 
 @Composable
 fun Artwork(url: String?, size: Dp, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(size / 8)
+    val shape = RoundedCornerShape(size / 5)
     Box(
         modifier
             .size(size)
@@ -103,7 +103,11 @@ fun MiniPlayer(onOpen: (Long) -> Unit) {
     val player = LocalContext.current.graph.player
     val state by player.state.collectAsState()
     val id = state.episodeId ?: return
-    Surface(tonalElevation = 3.dp) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.padding(horizontal = 12.dp).padding(top = 6.dp),
+    ) {
         Column {
             if (state.durationMs > 0) {
                 LinearProgressIndicator(
@@ -132,7 +136,6 @@ fun MiniPlayer(onOpen: (Long) -> Unit) {
                 }
             }
         }
-        HorizontalDivider()
     }
 }
 

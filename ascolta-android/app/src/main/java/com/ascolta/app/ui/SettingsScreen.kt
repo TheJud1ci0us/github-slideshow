@@ -80,7 +80,7 @@ private val APP_LANGUAGES = listOf("en", "it", "fr", "es", "de", "pt")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(section: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val graph = context.graph
     val settings = graph.settings
@@ -106,146 +106,161 @@ fun SettingsScreen() {
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_settings)) }) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
-            Section(stringResource(R.string.section_languages))
-            AppLanguagePicker()
-            // Languages being learned (the flags in the quick-switch bar) and the current one.
-            val learningAll by settings.learningLanguages.flow.collectAsState()
-            var pickLearning by remember { mutableStateOf(false) }
-            ListItem(
-                modifier = Modifier.clickable { pickLearning = true },
-                headlineContent = { Text(stringResource(R.string.languages_learning)) },
-                supportingContent = { Text(remember(learningAll, learning) { settings.learningList() }.joinToString("   ") { flagAndName(it) }) },
-            )
-            if (pickLearning) {
-                LanguagePickerDialog(
-                    title = stringResource(R.string.languages_learning),
-                    initial = settings.learningList(),
-                    multi = true,
-                    onDone = { settings.setLearningList(it); pickLearning = false },
-                    onDismiss = { pickLearning = false },
-                )
-            }
-            LanguageBar(Modifier.padding(vertical = 4.dp))
-            // CEFR level in the current language (used to suggest podcasts in Discover).
-            val levelsPref by settings.levels.flow.collectAsState()
-            var levelMenu by remember { mutableStateOf(false) }
-            Box {
+    // One page per group of settings (opened from Profile).
+    val learningAll by settings.learningLanguages.flow.collectAsState()
+    val title = when (section) {
+        "languages" -> stringResource(R.string.section_languages)
+        "speech" -> stringResource(R.string.section_speech_for, flagAndName(learning))
+        "speed" -> stringResource(R.string.section_speed)
+        "display" -> stringResource(R.string.section_display)
+        "downloads" -> stringResource(R.string.section_downloads)
+        "privacy" -> stringResource(R.string.section_privacy)
+        "diagnostics" -> stringResource(R.string.section_diagnostics)
+        else -> stringResource(R.string.section_about)
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        ScreenTitle(title, onBack = onBack)
+        when (section) {
+            "languages" -> {
+                AppLanguagePicker()
+                // Languages being learned (the flags in the quick-switch bar) and the current one.
+                var pickLearning by remember { mutableStateOf(false) }
                 ListItem(
-                    modifier = Modifier.clickable { levelMenu = true },
-                    headlineContent = { Text(stringResource(R.string.level_title, languageName(learning))) },
-                    supportingContent = { Text(remember(levelsPref, learning) { settings.levelFor(learning) } ?: stringResource(R.string.level_unset)) },
+                    modifier = Modifier.clickable { pickLearning = true },
+                    headlineContent = { Text(stringResource(R.string.languages_learning)) },
+                    supportingContent = { Text(remember(learningAll, learning) { settings.learningList() }.joinToString("   ") { flagAndName(it) }) },
                 )
-                DropdownMenu(expanded = levelMenu, onDismissRequest = { levelMenu = false }) {
-                    com.ascolta.app.data.CEFR_LEVELS.forEach { l ->
-                        DropdownMenuItem(text = { Text(l) }, onClick = { settings.setLevel(learning, l); levelMenu = false })
+                if (pickLearning) {
+                    LanguagePickerDialog(
+                        title = stringResource(R.string.languages_learning),
+                        initial = settings.learningList(),
+                        multi = true,
+                        onDone = { settings.setLearningList(it); pickLearning = false },
+                        onDismiss = { pickLearning = false },
+                    )
+                }
+                LanguageBar(Modifier.padding(vertical = 4.dp))
+                // CEFR level in the current language (used to suggest podcasts in Discover).
+                val levelsPref by settings.levels.flow.collectAsState()
+                var levelMenu by remember { mutableStateOf(false) }
+                Box {
+                    ListItem(
+                        modifier = Modifier.clickable { levelMenu = true },
+                        headlineContent = { Text(stringResource(R.string.level_title, languageName(learning))) },
+                        supportingContent = { Text(remember(levelsPref, learning) { settings.levelFor(learning) } ?: stringResource(R.string.level_unset)) },
+                    )
+                    DropdownMenu(expanded = levelMenu, onDismissRequest = { levelMenu = false }) {
+                        com.ascolta.app.data.CEFR_LEVELS.forEach { l ->
+                            DropdownMenuItem(text = { Text(l) }, onClick = { settings.setLevel(learning, l); levelMenu = false })
+                        }
                     }
                 }
+                SwitchRow(stringResource(R.string.translate_title), stringResource(R.string.translate_text), settings.translate)
+                val translateOn by settings.translate.flow.collectAsState()
+                if (translateOn) {
+                    LanguagePicker(stringResource(R.string.translate_into), native) { settings.nativeLanguage.set(it) }
+                    TranslationModelRow(learning, native)
+                }
             }
-            SwitchRow(stringResource(R.string.translate_title), stringResource(R.string.translate_text), settings.translate)
-            val translateOn by settings.translate.flow.collectAsState()
-            if (translateOn) {
-                LanguagePicker(stringResource(R.string.translate_into), native) { settings.nativeLanguage.set(it) }
-                TranslationModelRow(learning, native)
+            "speech" -> {
+                // Each language has its own speech model; the list is for the language selected above.
+                Hint(stringResource(R.string.speech_intro))
+                val languageModels by settings.languageModels.flow.collectAsState()
+                val current = remember(languageModels, modelId, learning) { settings.modelFor(learning) }
+                // Models for this language first, the others (greyed out) after.
+                SpeechModel.entries.sortedBy { if (it.supports(learning)) 0 else 1 }.forEach { model ->
+                    if (model != SpeechModel.CUSTOM || graph.models.isDownloaded(model)) {
+                        ModelRow(
+                            model, selected = model == current, learning = learning, refreshKey = refreshKey,
+                            onSelect = { settings.setModelFor(learning, model) }, onChanged = { refreshKey++ },
+                        )
+                    }
+                }
+                TextButton(onClick = { importModel.launch(arrayOf("*/*")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    Text(stringResource(R.string.import_model))
+                }
+
             }
-            HorizontalDivider()
-            // Each language has its own speech model; the list is for the language selected above.
-            Section(stringResource(R.string.section_speech_for, flagAndName(learning)))
-            Hint(stringResource(R.string.speech_intro))
-            val languageModels by settings.languageModels.flow.collectAsState()
-            val current = remember(languageModels, modelId, learning) { settings.modelFor(learning) }
-            // Models for this language first, the others (greyed out) after.
-            SpeechModel.entries.sortedBy { if (it.supports(learning)) 0 else 1 }.forEach { model ->
-                if (model != SpeechModel.CUSTOM || graph.models.isDownloaded(model)) {
-                    ModelRow(
-                        model, selected = model == current, learning = learning, refreshKey = refreshKey,
-                        onSelect = { settings.setModelFor(learning, model) }, onChanged = { refreshKey++ },
+            "speed" -> {
+                ThreadsRow(settings.threads)
+                SwitchRow(stringResource(R.string.flash_title), stringResource(R.string.flash_text), settings.flashAttention)
+                SwitchRow(stringResource(R.string.skip_title), stringResource(R.string.skip_text), settings.skipNonSpeech)
+                SwitchRow(stringResource(R.string.gpu_title), stringResource(R.string.gpu_text), settings.useGpu)
+                SpeedTestRow()
+
+            }
+            "display" -> {
+                // Transcript display (also in the player's menu).
+                SwitchRow(stringResource(R.string.highlight_words), stringResource(R.string.highlight_words_text), settings.wordHighlight)
+                SwitchRow(stringResource(R.string.pause_each_sentence), stringResource(R.string.pause_each_sentence_text), settings.autoPause)
+                SwitchRow(stringResource(R.string.show_original_title), stringResource(R.string.show_original_text), settings.showOriginal)
+                SwitchRow(stringResource(R.string.show_translation_title), stringResource(R.string.show_translation_text), settings.showTranslation)
+                // Japanese: show transcripts as written, with furigana, or in romaji.
+                if ("ja" in remember(learningAll, learning) { settings.learningList() }) {
+                    ChoiceRow(
+                        stringResource(R.string.ja_script_title),
+                        settings.japaneseScript,
+                        listOf(
+                            "furigana" to stringResource(R.string.ja_script_furigana),
+                            "kanji" to stringResource(R.string.ja_script_kanji),
+                            "romaji" to stringResource(R.string.ja_script_romaji),
+                        ),
+                    )
+                }
+                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    SwitchRow(stringResource(R.string.dynamic_color_title), stringResource(R.string.dynamic_color_text), settings.dynamicColor)
+                }
+
+            }
+            "downloads" -> {
+                Section(stringResource(R.string.section_network))
+                NetworkModeRows(settings.wifiOnly)
+
+                Section(stringResource(R.string.section_auto))
+                SwitchRow(stringResource(R.string.auto_new_title), stringResource(R.string.auto_new_text), settings.autoDownloadNew)
+                SwitchRow(stringResource(R.string.auto_transcribe_title), stringResource(R.string.auto_transcribe_text), settings.autoTranscribe)
+                SwitchRow(stringResource(R.string.charging_only_title), stringResource(R.string.charging_only_text), settings.chargingOnly)
+                IntChoiceRow(
+                    stringResource(R.string.refresh_title),
+                    settings.refreshHours,
+                    listOf(0, 1, 3, 6, 12, 24).map { h -> h to if (h == 0) stringResource(R.string.refresh_manual) else pluralStringResource(R.plurals.every_hours, h, h) },
+                    onChanged = { WorkScheduler.schedulePeriodicRefresh(context) },
+                )
+                SwitchRow(stringResource(R.string.notify_fav_title), stringResource(R.string.notify_fav_text), settings.notifyFavourites)
+                IntChoiceRow(
+                    stringResource(R.string.delete_after_title),
+                    settings.deleteAfterDays,
+                    listOf(0, 1, 3, 7, 14, 30).map { d -> d to if (d == 0) stringResource(R.string.delete_never) else pluralStringResource(R.plurals.after_days, d, d) },
+                    onChanged = { scope.launch { runCatching { graph.repo.deleteOldDownloads() } } },
+                )
+                TextButton(onClick = {
+                    WorkScheduler.refreshNow(context)
+                    Toast.makeText(context, context.getString(R.string.checking_feeds), Toast.LENGTH_SHORT).show()
+                }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.check_feeds)) }
+
+            }
+            "privacy" -> {
+                if (com.ascolta.app.data.Analytics.available) {
+                    val consent by settings.analyticsConsent.flow.collectAsState()
+                    val on = consent == com.ascolta.app.data.Analytics.CONSENT_YES
+                    ListItem(
+                        modifier = Modifier.clickable { com.ascolta.app.data.Analytics.setConsent(!on) },
+                        headlineContent = { Text(stringResource(R.string.analytics_title)) },
+                        supportingContent = { Text(stringResource(R.string.analytics_text)) },
+                        trailingContent = { Switch(checked = on, onCheckedChange = { com.ascolta.app.data.Analytics.setConsent(it) }) },
                     )
                 }
             }
-            TextButton(onClick = { importModel.launch(arrayOf("*/*")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                Text(stringResource(R.string.import_model))
+            "diagnostics" -> {
+                DiagnosticsSection()
+
             }
-
-            HorizontalDivider()
-            Section(stringResource(R.string.section_speed))
-            ThreadsRow(settings.threads)
-            SwitchRow(stringResource(R.string.flash_title), stringResource(R.string.flash_text), settings.flashAttention)
-            SwitchRow(stringResource(R.string.skip_title), stringResource(R.string.skip_text), settings.skipNonSpeech)
-            SwitchRow(stringResource(R.string.gpu_title), stringResource(R.string.gpu_text), settings.useGpu)
-            SpeedTestRow()
-
-            HorizontalDivider()
-            Section(stringResource(R.string.section_appearance))
-            // Japanese: show transcripts as written, with furigana, or in romaji.
-            if ("ja" in remember(learningAll, learning) { settings.learningList() }) {
-                ChoiceRow(
-                    stringResource(R.string.ja_script_title),
-                    settings.japaneseScript,
-                    listOf(
-                        "furigana" to stringResource(R.string.ja_script_furigana),
-                        "kanji" to stringResource(R.string.ja_script_kanji),
-                        "romaji" to stringResource(R.string.ja_script_romaji),
-                    ),
-                )
+            else -> {
+                Hint(stringResource(R.string.about_text), Modifier.padding(16.dp))
+                LegalSection()
             }
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                SwitchRow(stringResource(R.string.dynamic_color_title), stringResource(R.string.dynamic_color_text), settings.dynamicColor)
-            }
-
-            HorizontalDivider()
-            Section(stringResource(R.string.section_network))
-            NetworkModeRows(settings.wifiOnly)
-
-            HorizontalDivider()
-            Section(stringResource(R.string.section_auto))
-            SwitchRow(stringResource(R.string.auto_new_title), stringResource(R.string.auto_new_text), settings.autoDownloadNew)
-            SwitchRow(stringResource(R.string.auto_transcribe_title), stringResource(R.string.auto_transcribe_text), settings.autoTranscribe)
-            SwitchRow(stringResource(R.string.charging_only_title), stringResource(R.string.charging_only_text), settings.chargingOnly)
-            IntChoiceRow(
-                stringResource(R.string.refresh_title),
-                settings.refreshHours,
-                listOf(0, 1, 3, 6, 12, 24).map { h -> h to if (h == 0) stringResource(R.string.refresh_manual) else pluralStringResource(R.plurals.every_hours, h, h) },
-                onChanged = { WorkScheduler.schedulePeriodicRefresh(context) },
-            )
-            SwitchRow(stringResource(R.string.notify_fav_title), stringResource(R.string.notify_fav_text), settings.notifyFavourites)
-            IntChoiceRow(
-                stringResource(R.string.delete_after_title),
-                settings.deleteAfterDays,
-                listOf(0, 1, 3, 7, 14, 30).map { d -> d to if (d == 0) stringResource(R.string.delete_never) else pluralStringResource(R.plurals.after_days, d, d) },
-                onChanged = { scope.launch { runCatching { graph.repo.deleteOldDownloads() } } },
-            )
-            TextButton(onClick = {
-                WorkScheduler.refreshNow(context)
-                Toast.makeText(context, context.getString(R.string.checking_feeds), Toast.LENGTH_SHORT).show()
-            }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.check_feeds)) }
-
-            HorizontalDivider()
-            Section(stringResource(R.string.section_diagnostics))
-            DiagnosticsSection()
-
-            HorizontalDivider()
-            if (com.ascolta.app.data.Analytics.available) {
-                Section(stringResource(R.string.section_privacy))
-                val consent by settings.analyticsConsent.flow.collectAsState()
-                val on = consent == com.ascolta.app.data.Analytics.CONSENT_YES
-                ListItem(
-                    modifier = Modifier.clickable { com.ascolta.app.data.Analytics.setConsent(!on) },
-                    headlineContent = { Text(stringResource(R.string.analytics_title)) },
-                    supportingContent = { Text(stringResource(R.string.analytics_text)) },
-                    trailingContent = { Switch(checked = on, onCheckedChange = { com.ascolta.app.data.Analytics.setConsent(it) }) },
-                )
-                HorizontalDivider()
-            }
-            Section(stringResource(R.string.section_about))
-            Hint(stringResource(R.string.about_text), Modifier.padding(16.dp))
-            LegalSection()
-            Spacer(Modifier.height(24.dp))
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

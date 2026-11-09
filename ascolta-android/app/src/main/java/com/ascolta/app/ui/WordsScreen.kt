@@ -86,7 +86,7 @@ fun WordsScreen(openReview: () -> Unit) {
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.words_title, words.size)) },
+                title = { Text(stringResource(R.string.words_title, words.size), style = MaterialTheme.typography.headlineMedium) },
                 actions = {
                     if (words.isNotEmpty()) {
                         IconButton(onClick = {

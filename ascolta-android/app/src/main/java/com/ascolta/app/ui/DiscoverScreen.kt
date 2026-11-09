@@ -32,6 +32,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -147,10 +149,11 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         }
     }
     // Nothing searched yet: suggestions for this learner (courses for beginners, else a favourite theme).
-    LaunchedEffect(learning) {
-        if (initialQuery.isNullOrBlank() && query.isBlank()) {
-            browse(if (myBand == LevelBand.BEGINNER) GENRE_LEARNING else settings.interestList().firstOrNull() ?: GENRE_LEARNING)
-        }
+    // "For you": suggestions for the language, favourite themes and level (shown before any search).
+    val forYou by produceState<List<com.ascolta.app.data.Pick>?>(null, learning, interestsPref, levelsPref) {
+        value = runCatching {
+            com.ascolta.app.data.Recommendations.picks(graph.directory, learning, settings.interestList(), myBand, 20)
+        }.getOrDefault(emptyList())
     }
 
     val estimates = remember(results, genre) {
@@ -163,11 +166,9 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         GENRES.sortedBy { g -> if (g.id == GENRE_LEARNING) -1 else mine.indexOf(g.id).let { if (it < 0) 100 else it } }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.tab_discover)) }) },
-    ) { padding ->
+    Scaffold(contentWindowInsets = WindowInsets(0)) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            ScreenTitle(stringResource(R.string.tab_discover))
             // Search the directory of the language being learned (its country's store).
             LanguageBar(Modifier.padding(bottom = 6.dp))
             OutlinedTextField(
@@ -178,14 +179,33 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { search(query) }),
+                shape = androidx.compose.foundation.shape.CircleShape,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
+            // Categories as round-icon tiles.
+            Text(stringResource(R.string.discover_categories), style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 6.dp))
+            androidx.compose.foundation.lazy.LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(genres, key = { it.id }) { g ->
+                    SelectTile(
+                        label = stringResource(g.nameRes),
+                        selected = genre == g.id,
+                        icon = genreIcon(g.id),
+                        onClick = { browse(g.id) },
+                        modifier = Modifier.width(104.dp),
+                    )
+                }
+            }
             // Level (CEFR) filter.
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterChip(selected = band == null, onClick = { band = null }, label = { Text(stringResource(R.string.level_all)) })
+                FilterChip(selected = band == null, onClick = { band = null }, label = { Text(stringResource(R.string.level_all)) },
+                    shape = androidx.compose.foundation.shape.CircleShape)
                 LevelBand.entries.forEach { b ->
                     FilterChip(
                         selected = band == b,
@@ -194,19 +214,17 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                             com.ascolta.app.data.Analytics.track("Discover.levelFilter", mapOf("band" to (band?.name ?: "all")))
                         },
                         label = { Text("${b.label} · ${stringResource(b.nameRes)}") },
+                        shape = androidx.compose.foundation.shape.CircleShape,
                     )
                 }
             }
-            // Themes.
+            // Starter searches.
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                genres.forEach { g ->
-                    FilterChip(selected = genre == g.id, onClick = { browse(g.id) }, label = { Text(stringResource(g.nameRes)) })
-                }
                 SUGGESTIONS[learning].orEmpty().forEach { s ->
-                    AssistChip(onClick = { query = s; search(s) }, label = { Text(s) })
+                    AssistChip(onClick = { query = s; search(s) }, label = { Text(s) }, shape = androidx.compose.foundation.shape.CircleShape)
                 }
             }
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -222,12 +240,35 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 )
             }
             if (results.isEmpty() && !loading && error == null) {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.TopCenter) {
-                    Text(
-                        stringResource(R.string.discover_intro),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                // Before any search: suggestions for this learner. Tap to follow (or open).
+                Text(stringResource(R.string.discover_for_you), style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 6.dp))
+                val picks = forYou
+                if (picks == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
+                else if (picks.isEmpty()) {
+                    Text(stringResource(R.string.discover_intro), style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))
+                } else androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(picks.size, key = { picks[it].podcast.feedUrl }) { i ->
+                        val r = picks[i].podcast
+                        SelectTile(
+                            label = r.title,
+                            selected = r.feedUrl in subscribed,
+                            imageUrl = r.artworkUrl,
+                            onClick = {
+                                scope.launch {
+                                    runCatching { graph.repo.subscribe(r.feedUrl) }
+                                        .onSuccess { if (r.feedUrl in subscribed) openPodcast(it) }
+                                        .onFailure { error = context.getString(R.string.feed_failed, it.message ?: "") }
+                                }
+                            },
+                        )
+                    }
                 }
             }
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {

@@ -112,7 +112,7 @@ class Pref<T>(
         val TRACKED = setOf(
             "language_models", "japanese_script", "translate_sentences", "show_translation", "show_original",
             "word_highlight", "auto_pause", "wifi_only", "use_gpu", "auto_transcribe_v2", "refresh_hours",
-            "delete_after_days", "notify_favourites", "dynamic_color", "show_cover", "flash_attention",
+            "delete_after_days", "notify_favourites", "dynamic_color_v2", "show_cover", "flash_attention",
             "skip_non_speech", "threads", "playback_speed", "native_language",
         )
     }
@@ -211,7 +211,7 @@ class Settings(context: Context) {
     /** Japanese transcripts: "furigana", "kanji" (as written) or "romaji". */
     val japaneseScript = string("japanese_script", "furigana")
     /** Colours from the wallpaper (Android 12+). */
-    val dynamicColor = bool("dynamic_color", true)
+    val dynamicColor = bool("dynamic_color_v2", false)
 
     val showOriginal = bool("show_original", true)
     val showTranslation = bool("show_translation", true)

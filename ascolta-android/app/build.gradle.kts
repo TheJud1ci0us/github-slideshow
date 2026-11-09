@@ -69,8 +69,12 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Screenshot tests (Robolectric + Roborazzi) render screens with the app's resources.
+        unitTests.isIncludeAndroidResources = true
         unitTests.all { test ->
             test.maxHeapSize = "6g"
+            test.systemProperty("roborazzi.test.record", "true")
+            test.systemProperty("robolectric.graphicsMode", "NATIVE")
         }
     }
 
@@ -158,5 +162,12 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
 
     testImplementation("junit:junit:4.13.2")
+    // Screenshots of screens on the computer, without an emulator.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.43.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.43.0")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("net.sf.kxml:kxml2:2.3.0")
 }

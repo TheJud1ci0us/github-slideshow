@@ -46,6 +46,33 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ascolta.app.R
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.material.icons.outlined.Newspaper
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.SentimentSatisfied
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.SportsSoccer
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.WorkOutline
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.ascolta.app.data.LANGUAGES
 import com.ascolta.app.data.CEFR_LEVELS
 import com.ascolta.app.data.GENRES
@@ -162,22 +189,22 @@ fun LanguagePickerDialog(
 }
 
 /**
- * First launch: which languages are being learned, and the user's own language (for
- * translations). Shown once; both can be changed later in Settings and the flag bar.
+ * First launch, in four short steps (dashes at the top, Skip where it makes sense, one big
+ * Continue button): languages, level, favourite themes, favourite podcasts.
  */
 @Composable
 fun OnboardingScreen(onDone: () -> Unit) {
-    val settings = LocalContext.current.graph.settings
+    val context = LocalContext.current
+    val graph = context.graph
+    val settings = graph.settings
+    val scope = rememberCoroutineScope()
     val learning = remember { mutableStateListOf<String>() }
     var native by remember { mutableStateOf(settings.nativeLanguage.value) }
-    var pickNative by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
-    val sorted = remember { LANGUAGES.sortedBy { languageName(it.code) } }
-    val shown = sorted.filter { it.code != native && (query.isBlank() || languageName(it.code).contains(query, ignoreCase = true)) }
-    var step by remember { mutableStateOf(0) }
     val levels = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
     val interests = remember { mutableStateListOf<Int>() }
+    val chosenPodcasts = remember { mutableStateListOf<String>() }
     var shareStats by remember { mutableStateOf(false) }
+    var step by remember { mutableStateOf(0) }
 
     fun finish() {
         settings.nativeLanguage.set(native)
@@ -190,76 +217,258 @@ fun OnboardingScreen(onDone: () -> Unit) {
             com.ascolta.app.data.Analytics.setConsent(shareStats)
             com.ascolta.app.data.Analytics.track(
                 "TelemetryDeck.Activation.onboardingCompleted",
-                mapOf("languages" to learning.joinToString(","), "levels" to levels.size.toString(), "interests" to interests.size.toString()),
+                mapOf("languages" to learning.joinToString(","), "levels" to levels.size.toString(),
+                    "interests" to interests.size.toString(), "podcasts" to chosenPodcasts.size.toString()),
             )
         }
+        // Follow the chosen podcasts in the background.
+        val feeds = chosenPodcasts.toList()
+        graph.scope.launch { feeds.forEach { runCatching { graph.repo.subscribe(it, downloadLatest = false) } } }
         onDone()
     }
 
-    if (step == 1) {
-        LevelAndInterests(learning, levels, interests, shareStats, { shareStats = it }, onBack = { step = 0 }, onDone = { finish() })
-        return
-    }
-
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(24.dp))
-        Text(stringResource(R.string.onboarding_title), style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.onboarding_text), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(12.dp))
-        ListItem(
-            modifier = Modifier.clickable { pickNative = true },
-            headlineContent = { Text(stringResource(R.string.onboarding_native)) },
-            supportingContent = { Text(flagAndName(native)) },
-        )
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text(stringResource(R.string.languages_search)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        LazyColumn(Modifier.weight(1f)) {
-            items(shown, key = { it.code }) { lang ->
-                val selected = lang.code in learning
-                ListItem(
-                    modifier = Modifier.clickable { if (selected) learning.remove(lang.code) else learning.add(lang.code) },
-                    headlineContent = { Text(flagAndName(lang.code)) },
-                    trailingContent = {
-                        Checkbox(checked = selected, onCheckedChange = { if (selected) learning.remove(lang.code) else learning.add(lang.code) })
-                    },
+    androidx.activity.compose.BackHandler(enabled = step > 0) { step-- }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
+        StepHeader(step, 4, onSkip = if (step == 0) null else ({ if (step == 3) finish() else step++ }), skipLabel = stringResource(R.string.onboarding_skip))
+        Box(Modifier.weight(1f)) {
+            when (step) {
+                0 -> LanguagesStep(learning, native, onNative = { native = it; learning.remove(it) })
+                1 -> LevelStep(learning, levels)
+                2 -> CategoryStep(interests)
+                else -> PodcastStep(
+                    language = learning.firstOrNull() ?: settings.learningLanguage.value,
+                    genres = interests,
+                    band = com.ascolta.app.data.LevelBand.of(levels[learning.firstOrNull()]),
+                    chosen = chosenPodcasts,
+                    footer = if (com.ascolta.app.data.Analytics.available) ({
+                        ListItem(
+                            modifier = Modifier.clickable { shareStats = !shareStats },
+                            headlineContent = { Text(stringResource(R.string.analytics_title)) },
+                            supportingContent = { Text(stringResource(R.string.analytics_text)) },
+                            trailingContent = { androidx.compose.material3.Switch(checked = shareStats, onCheckedChange = { shareStats = it }) },
+                        )
+                    }) else null,
                 )
             }
         }
-        Text(
-            stringResource(R.string.onboarding_privacy),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        PillButton(
+            text = when {
+                step == 0 && learning.isEmpty() -> stringResource(R.string.onboarding_choose)
+                step == 3 && chosenPodcasts.isNotEmpty() -> stringResource(R.string.onboarding_follow, chosenPodcasts.size)
+                step == 3 -> stringResource(R.string.onboarding_finish)
+                else -> stringResource(R.string.onboarding_continue)
+            },
+            enabled = step != 0 || learning.isNotEmpty(),
+            onClick = { if (step == 3) finish() else step++ },
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
         )
-        Button(
-            enabled = learning.isNotEmpty(),
-            onClick = { step = 1 },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-        ) {
-            Text(
-                if (learning.isEmpty()) stringResource(R.string.onboarding_choose)
-                else stringResource(R.string.onboarding_start, learning.joinToString(" ") { languageFlag(it) }),
+    }
+}
+
+@Composable
+private fun LanguagesStep(learning: MutableList<String>, native: String, onNative: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    var pickNative by remember { mutableStateOf(false) }
+    val sorted = remember { LANGUAGES.sortedBy { languageName(it.code) } }
+    val shown = sorted.filter { it.code != native && (query.isBlank() || languageName(it.code).contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true)) }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column {
+                ScreenTitle(stringResource(R.string.onboarding_title), stringResource(R.string.onboarding_text))
+                SettingsRow(androidx.compose.material.icons.Icons.Filled.Translate, stringResource(R.string.onboarding_native), subtitle = flagAndName(native)) { pickNative = true }
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Search, null) },
+                    placeholder = { Text(stringResource(R.string.languages_search)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                )
+            }
+        }
+        gridItems(shown, key = { it.code }) { lang ->
+            val on = lang.code in learning
+            SelectTile(
+                label = languageName(lang.code),
+                selected = on,
+                emoji = languageFlag(lang.code),
+                onClick = { if (on) learning.remove(lang.code) else learning.add(lang.code) },
             )
         }
     }
-
     if (pickNative) {
         LanguagePickerDialog(
             title = stringResource(R.string.onboarding_native),
             initial = listOf(native),
             multi = false,
-            onDone = { native = it.first(); learning.remove(native); pickNative = false },
+            onDone = { onNative(it.first()); pickNative = false },
             onDismiss = { pickNative = false },
         )
     }
+}
+
+@Composable
+private fun LevelStep(learning: List<String>, levels: MutableMap<String, String>) {
+    val labels = listOf(R.string.cefr_a1, R.string.cefr_a2, R.string.cefr_b1, R.string.cefr_b2, R.string.cefr_c1, R.string.cefr_c2)
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ScreenTitle(stringResource(R.string.onboarding_level_title), stringResource(R.string.onboarding_level_text))
+        }
+        learning.forEach { code ->
+            if (learning.size > 1) item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(flagAndName(code), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+            }
+            CEFR_LEVELS.forEachIndexed { i, level ->
+                item(key = "$code-$level") {
+                    SelectTile(
+                        label = stringResource(labels[i]),
+                        selected = levels[code] == level,
+                        emoji = level,
+                        onClick = { levels[code] = level },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** "Which categories do you prefer?": a grid of themes with icons. */
+@Composable
+fun CategoryStep(interests: MutableList<Int>) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ScreenTitle(stringResource(R.string.onboarding_interests_title), stringResource(R.string.onboarding_interests_text))
+        }
+        gridItems(GENRES.filter { it.id != GENRE_LEARNING }, key = { it.id }) { g ->
+            val on = g.id in interests
+            SelectTile(
+                label = stringResource(g.nameRes),
+                selected = on,
+                icon = genreIcon(g.id),
+                onClick = { if (on) interests.remove(g.id) else interests.add(g.id) },
+            )
+        }
+    }
+}
+
+/** "Pick your favorite podcasts": suggestions for the language, themes and level. */
+@Composable
+fun PodcastStep(
+    language: String,
+    genres: List<Int>,
+    band: com.ascolta.app.data.LevelBand?,
+    chosen: MutableList<String>,
+    footer: (@Composable () -> Unit)? = null,
+) {
+    val graph = LocalContext.current.graph
+    val picks by produceState<List<com.ascolta.app.data.Pick>?>(null, language, genres.toList(), band) {
+        value = runCatching { com.ascolta.app.data.Recommendations.picks(graph.directory, language, genres.toList(), band, 30) }
+            .getOrDefault(emptyList())
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ScreenTitle(stringResource(R.string.onboarding_podcasts_title), stringResource(R.string.onboarding_podcasts_text))
+        }
+        val list = picks
+        when {
+            list == null -> items(9) {
+                // Placeholders while suggestions load.
+                Box(Modifier.aspectRatio(0.84f).clip(MaterialTheme.shapes.extraLarge).background(MaterialTheme.colorScheme.surfaceContainer))
+            }
+            list.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(stringResource(R.string.onboarding_podcasts_none), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+            }
+            else -> gridItems(list, key = { it.podcast.feedUrl }) { pick ->
+                val on = pick.podcast.feedUrl in chosen
+                SelectTile(
+                    label = pick.podcast.title,
+                    selected = on,
+                    imageUrl = pick.podcast.artworkUrl,
+                    onClick = { if (on) chosen.remove(pick.podcast.feedUrl) else chosen.add(pick.podcast.feedUrl) },
+                )
+            }
+        }
+        if (footer != null) item(span = { GridItemSpan(maxLineSpan) }) { footer() }
+    }
+}
+
+/**
+ * Personalize (from Profile): the same theme and podcast steps as the first launch, for
+ * people who have already set up the app.
+ */
+@Composable
+fun PersonalizeScreen(onDone: () -> Unit) {
+    val graph = LocalContext.current.graph
+    val settings = graph.settings
+    val interests = remember { mutableStateListOf<Int>().apply { addAll(settings.interestList()) } }
+    val chosen = remember { mutableStateListOf<String>() }
+    var step by remember { mutableStateOf(0) }
+    androidx.activity.compose.BackHandler(enabled = step > 0) { step-- }
+    Column(Modifier.fillMaxSize()) {
+        StepHeader(step, 2, onSkip = null, skipLabel = "")
+        Box(Modifier.weight(1f)) {
+            if (step == 0) CategoryStep(interests)
+            else PodcastStep(
+                language = settings.learningLanguage.value,
+                genres = interests,
+                band = com.ascolta.app.data.LevelBand.of(settings.levelFor(settings.learningLanguage.value)),
+                chosen = chosen,
+            )
+        }
+        PillButton(
+            text = if (step == 1 && chosen.isNotEmpty()) stringResource(R.string.onboarding_follow, chosen.size) else stringResource(R.string.onboarding_continue),
+            onClick = {
+                if (step == 0) {
+                    settings.interests.set(interests.joinToString(","))
+                    step = 1
+                } else {
+                    val feeds = chosen.toList()
+                    graph.scope.launch { feeds.forEach { runCatching { graph.repo.subscribe(it, downloadLatest = false) } } }
+                    onDone()
+                }
+            },
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+        )
+    }
+}
+
+/** Icon for a podcast theme. */
+fun genreIcon(id: Int): androidx.compose.ui.graphics.vector.ImageVector = when (id) {
+    1489 -> Icons.Outlined.Newspaper
+    1324 -> Icons.Outlined.Groups
+    1487 -> Icons.Outlined.AccountBalance
+    1303 -> Icons.Outlined.SentimentSatisfied
+    1533 -> Icons.Outlined.Science
+    1318 -> Icons.Outlined.Memory
+    1545 -> Icons.Outlined.SportsSoccer
+    1483 -> Icons.Outlined.MenuBook
+    1321 -> Icons.Outlined.WorkOutline
+    1512 -> Icons.Outlined.FavoriteBorder
+    1305 -> Icons.Outlined.ChildCare
+    1488 -> Icons.Outlined.Gavel
+    1301 -> Icons.Outlined.Palette
+    1309 -> Icons.Outlined.Movie
+    1310 -> Icons.Outlined.MusicNote
+    else -> Icons.Outlined.School
 }
 
 /** Centered placeholder used by screens with nothing to show. */
@@ -275,64 +484,3 @@ fun FlagRow(codes: List<String>) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { codes.forEach { Text(languageFlag(it)) } }
 }
 
-/**
- * Second onboarding step: the level in each language (CEFR, A1–C2) and favourite themes, so
- * Discover can suggest podcasts that fit.
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun LevelAndInterests(
-    learning: List<String>,
-    levels: MutableMap<String, String>,
-    interests: MutableList<Int>,
-    shareStats: Boolean,
-    onShareStats: (Boolean) -> Unit,
-    onBack: () -> Unit,
-    onDone: () -> Unit,
-) {
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 16.dp)
-            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
-    ) {
-        Spacer(Modifier.height(24.dp))
-        Text(stringResource(R.string.onboarding_level_title), style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.onboarding_level_text), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        learning.forEach { code ->
-            Spacer(Modifier.height(12.dp))
-            Text(flagAndName(code), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                CEFR_LEVELS.forEach { level ->
-                    FilterChip(
-                        selected = levels[code] == level,
-                        onClick = { levels[code] = level },
-                        label = { Text(level) },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(20.dp))
-        Text(stringResource(R.string.onboarding_interests_title), style = MaterialTheme.typography.titleMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            GENRES.filter { it.id != GENRE_LEARNING }.forEach { g ->
-                val on = g.id in interests
-                FilterChip(selected = on, onClick = { if (on) interests.remove(g.id) else interests.add(g.id) }, label = { Text(stringResource(g.nameRes)) })
-            }
-        }
-        if (com.ascolta.app.data.Analytics.available) {
-            Spacer(Modifier.height(20.dp))
-            // Explicit choice, off unless the user turns it on.
-            ListItem(
-                modifier = Modifier.clickable { onShareStats(!shareStats) },
-                headlineContent = { Text(stringResource(R.string.analytics_title)) },
-                supportingContent = { Text(stringResource(R.string.analytics_text)) },
-                trailingContent = { androidx.compose.material3.Switch(checked = shareStats, onCheckedChange = onShareStats) },
-            )
-        }
-        Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
-            TextButton(onClick = onBack) { Text(stringResource(R.string.action_back)) }
-            Spacer(Modifier.weight(1f))
-            Button(onClick = onDone) { Text(stringResource(R.string.onboarding_finish)) }
-        }
-    }
-}
