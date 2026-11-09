@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.Search
@@ -74,7 +75,11 @@ fun AscoltaRoot() {
     // First launch: choose the languages being learned.
     val onboarded by LocalContext.current.graph.settings.onboarded.flow.collectAsState()
     if (!onboarded) {
-        OnboardingScreen(onDone = {})
+        // A Surface sets the light text colour (without it, text defaults to black).
+        androidx.compose.material3.Surface(
+            Modifier.fillMaxSize(),
+            color = androidx.compose.material3.MaterialTheme.colorScheme.background,
+        ) { OnboardingScreen(onDone = {}) }
         return
     }
     val nav = rememberNavController()
