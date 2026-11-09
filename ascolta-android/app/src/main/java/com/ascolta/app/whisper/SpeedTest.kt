@@ -114,6 +114,12 @@ object SpeedTest {
                     if (run > 0) runs += took
                     text = segments.joinToString(" ") { it.text.trim() }
                 }
+                com.ascolta.app.data.Analytics.track(
+                    "SpeedTest.completed",
+                    mapOf("model" to model.id, "threads" to threads.toString(), "gpu" to options.gpu.toString(),
+                        "accuracy" to "%.2f".format(java.util.Locale.US, WordAccuracy.accuracy(reference, text))),
+                    value = audio.size / 16.0 / runs.sorted()[runs.size / 2].coerceAtLeast(1),
+                )
                 SpeedResult(
                     model = model.label,
                     audioMs = audio.size / 16L,

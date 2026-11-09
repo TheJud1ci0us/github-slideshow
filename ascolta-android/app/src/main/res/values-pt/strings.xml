@@ -373,4 +373,9 @@
     <string name="gpu_title">Usar o chip gráfico (experimental)</string>
     <string name="gpu_text">Para os modelos Whisper “· GPU”, em Snapdragon (Adreno). Se o telefone não permitir, usa a CPU.</string>
     <string name="speed_test_language">O teste usa uma gravação em italiano, que %1$s não entende. Mude para um idioma compatível (ex.: italiano).</string>
+    <string name="section_privacy">Privacidade</string>
+    <string name="analytics_title">Compartilhar estatísticas de uso anônimas</string>
+    <string name="analytics_text">Ajuda a melhorar o Ascolta: quais recursos e modelos de fala são usados e a velocidade deles. Nunca nomes de podcasts, buscas, transcrições ou palavras salvas. Você pode mudar isso a qualquer momento nas Configurações.</string>
+    <string name="analytics_yes">Compartilhar</string>
+    <string name="analytics_no">Não, obrigado</string>
 </resources>

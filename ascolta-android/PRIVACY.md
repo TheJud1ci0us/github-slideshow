@@ -1,7 +1,7 @@
 ASCOLTA — PRIVACY POLICY
-Last updated: 8 November 2026
+Last updated: 9 November 2026
 
-Summary: Ascolta has no account, no analytics, no advertising and no tracking. Speech recognition and translation happen on your phone. The developer receives no data from the app.
+Summary: Ascolta has no account, no advertising and no tracking. Speech recognition and translation happen on your phone. Only if you agree, anonymous usage statistics are sent (section 3); otherwise the developer receives no data from the app.
 
 1. Data that stays on your phone
 - Podcasts you follow, episodes, listening positions, favourites, settings.
@@ -18,17 +18,26 @@ To work, the app connects directly (not through any server of ours) to:
 - Spotify / Apple Podcasts pages, only when you paste or share a link to them, to find the show's public feed.
 Each of these services has its own privacy policy.
 
-3. Permissions
+3. Anonymous usage statistics (only with your consent)
+You are asked once whether to share anonymous usage statistics; it is off unless you agree, and you can change it at any time in Settings → Privacy. If you agree, the app sends:
+- which features are used (for example: a transcription started with a given speech model and language, a flashcard reviewed, the sleep timer set, a setting changed, a screen opened, a badge earned);
+- numbers such as transcription speed and minutes listened per language;
+- the app version, Android version, phone brand and model, and the app's language settings;
+- the type and location in the code of a crash, if one happened.
+It never sends podcast or episode names, feed addresses, search text, transcripts, translations, saved words or anything you type. You are identified only by a random number created on your phone, hashed (SHA-256 with a salt) before it is sent, so the statistics cannot be linked to you or your device; turning statistics off deletes that number and anything not yet sent.
+The statistics are processed by TelemetryDeck (TelemetryDeck GmbH, Germany; https://telemetrydeck.com/privacy), a privacy-focused analytics service, and are only used to improve the app.
+
+4. Permissions
 - Notifications: progress of downloads/transcriptions and new episodes of favourite podcasts.
 - Foreground service / media playback: to keep playing and transcribing in the background.
 - Network access: for the requests above.
 No location, contacts, microphone or camera access.
 
-4. Children
+5. Children
 The app is not directed at children under 13 and collects no personal data from anyone.
 
-5. Your rights
+6. Your rights
 Since no personal data is collected or stored by the developer, there is nothing for us to access, correct or delete. You control all data on your device and can delete it at any time (Settings → Apps → Ascolta → Storage → Clear data).
 
-6. Changes and contact
+7. Changes and contact
 Changes to this policy will be published with app updates. Contact: see the store listing or the project's repository.

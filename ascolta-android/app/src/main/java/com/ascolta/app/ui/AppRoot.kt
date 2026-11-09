@@ -148,6 +148,34 @@ fun AscoltaRoot() {
         }
     }
     celebrate?.let { BadgeUnlockedDialog(it, onDismiss = { celebrate = null }) }
+
+    // Screens visited (route templates only, e.g. "player/{episodeId}", never ids).
+    LaunchedEffect(route) {
+        if (route.isNotEmpty()) com.ascolta.app.data.Analytics.track(
+            "TelemetryDeck.Navigation.pathChanged",
+            mapOf("TelemetryDeck.Navigation.destinationPath" to route.substringBefore('?')),
+        )
+    }
+
+    // People who installed before analytics existed are asked once.
+    val consent by context.graph.settings.analyticsConsent.flow.collectAsState()
+    if (com.ascolta.app.data.Analytics.available && consent.isEmpty()) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.analytics_title)) },
+            text = { Text(stringResource(R.string.analytics_text)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { com.ascolta.app.data.Analytics.setConsent(true) }) {
+                    Text(stringResource(R.string.analytics_yes))
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { com.ascolta.app.data.Analytics.setConsent(false) }) {
+                    Text(stringResource(R.string.analytics_no))
+                }
+            },
+        )
+    }
     val shared by context.graph.pendingSharedText.collectAsState()
     shared?.let { text ->
         AddLinkDialog(

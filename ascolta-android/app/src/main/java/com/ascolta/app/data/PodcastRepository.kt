@@ -66,10 +66,14 @@ class PodcastRepository(
         }
     }
 
-    suspend fun setFavourite(podcastId: Long, favourite: Boolean) = podcastDao.setFavourite(podcastId, favourite)
+    suspend fun setFavourite(podcastId: Long, favourite: Boolean) {
+        podcastDao.setFavourite(podcastId, favourite)
+        Analytics.track(if (favourite) "Podcast.favourited" else "Podcast.unfavourited")
+    }
 
     /** Moves a podcast to another language's library. */
     suspend fun moveToLanguage(podcastId: Long, language: String) {
+        Analytics.track("Podcast.movedLanguage", mapOf("to" to language))
         if (language !in settings.learningList()) settings.setLearningList(settings.learningList() + language)
         podcastDao.setLibraryLanguage(podcastId, language)
     }
@@ -107,6 +111,8 @@ class PodcastRepository(
         )
         if (podcastId <= 0) return podcastDao.getByFeedUrl(feedUrl)!!.id
         episodeDao.insertAll(feed.episodes.map { it.toEntity(podcastId) })
+        // Only the podcast's language, never its name or address.
+        Analytics.track("Podcast.followed", mapOf("podcastLanguage" to (feed.language?.take(2) ?: "?"), "library" to libraryLanguageFor(feed.language)))
 
         // Get the newest episode ready straight away so there's something to listen to.
         if (downloadLatest && settings.autoDownloadNew.value) {
@@ -250,6 +256,7 @@ class PodcastRepository(
     }
 
     suspend fun transcribe(episodeId: Long, manual: Boolean = true) {
+        Analytics.track("Transcription.requested", mapOf("manual" to manual.toString()))
         val episode = episodeDao.get(episodeId) ?: return
         if (episode.transcriptState in listOf(TranscriptState.QUEUED, TranscriptState.RUNNING, TranscriptState.DONE)) return
         val podcast = podcastDao.get(episode.podcastId ?: -1)
@@ -408,6 +415,11 @@ class PodcastRepository(
     suspend fun saveWord(entry: VocabEntity): Boolean {
         if (vocabDao.count(entry.word, entry.language) > 0) return false
         vocabDao.insert(entry)
+        Analytics.track(
+            "Word.saved",
+            mapOf("kind" to if (entry.isSentence) "sentence" else "word", "audioClip" to (entry.audioPath != null).toString(),
+                "fromEpisode" to (entry.episodeId != null).toString(), "language" to entry.language),
+        )
         refreshProgressCounts()
         return true
     }
@@ -460,6 +472,7 @@ class PodcastRepository(
 
     /** Records a review answer and schedules the card's next review. */
     suspend fun review(card: VocabEntity, grade: Flashcards.Grade) {
+        Analytics.track("Flashcard.reviewed", mapOf("grade" to grade.name, "kind" to if (card.isSentence) "sentence" else "word", "language" to card.language))
         vocabDao.update(Flashcards.schedule(card, grade, System.currentTimeMillis()))
         (context.applicationContext as com.ascolta.app.AscoltaApp).graph.progress.recordReview()
     }

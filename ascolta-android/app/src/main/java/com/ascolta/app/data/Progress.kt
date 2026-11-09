@@ -120,6 +120,8 @@ class ProgressStore(context: Context) {
             edit.putInt("best_streak", maxOf(streak, prefs.getInt("best_streak", 0)))
         }
         edit.apply()
+        // Minutes listened per language (anonymous; no episode information).
+        pendingMs.forEach { (lang, ms) -> Analytics.track("Listening.time", mapOf("language" to lang), value = ms / 60_000.0) }
         pendingMs = mutableMapOf()
         update { load().copy(wordsSaved = it.wordsSaved, transcribed = it.transcribed, languages = it.languages) }
     }
@@ -142,6 +144,9 @@ class ProgressStore(context: Context) {
             prefs.edit().putString("earned", earned.entries.joinToString(",") { "${it.key}:${it.value}" }).apply()
         }
         _stats.value = stats.copy(earned = earned)
-        newly.forEach { _unlocked.tryEmit(it) }
+        newly.forEach {
+            _unlocked.tryEmit(it)
+            Analytics.track("Badge.earned", mapOf("badge" to it.id))
+        }
     }
 }

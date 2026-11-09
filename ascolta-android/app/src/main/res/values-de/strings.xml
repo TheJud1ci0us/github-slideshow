@@ -366,4 +366,9 @@
     <string name="gpu_title">Grafikchip verwenden (experimentell)</string>
     <string name="gpu_text">Für Whisper-Modelle „· GPU“ auf Snapdragon (Adreno). Sonst wird die CPU genutzt.</string>
     <string name="speed_test_language">Der Test nutzt eine italienische Aufnahme, die %1$s nicht versteht. Wechsle zu einer unterstützten Sprache (z. B. Italienisch).</string>
+    <string name="section_privacy">Datenschutz</string>
+    <string name="analytics_title">Anonyme Nutzungsstatistiken teilen</string>
+    <string name="analytics_text">Hilft, Ascolta zu verbessern: welche Funktionen und Sprachmodelle genutzt werden und wie schnell sie laufen. Nie Podcast-Namen, Suchen, Transkripte oder gespeicherte Wörter. Jederzeit in den Einstellungen änderbar.</string>
+    <string name="analytics_yes">Teilen</string>
+    <string name="analytics_no">Nein, danke</string>
 </resources>

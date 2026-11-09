@@ -229,6 +229,18 @@ fun SettingsScreen() {
             DiagnosticsSection()
 
             HorizontalDivider()
+            if (com.ascolta.app.data.Analytics.available) {
+                Section(stringResource(R.string.section_privacy))
+                val consent by settings.analyticsConsent.flow.collectAsState()
+                val on = consent == com.ascolta.app.data.Analytics.CONSENT_YES
+                ListItem(
+                    modifier = Modifier.clickable { com.ascolta.app.data.Analytics.setConsent(!on) },
+                    headlineContent = { Text(stringResource(R.string.analytics_title)) },
+                    supportingContent = { Text(stringResource(R.string.analytics_text)) },
+                    trailingContent = { Switch(checked = on, onCheckedChange = { com.ascolta.app.data.Analytics.setConsent(it) }) },
+                )
+                HorizontalDivider()
+            }
             Section(stringResource(R.string.section_about))
             Hint(stringResource(R.string.about_text), Modifier.padding(16.dp))
             LegalSection()

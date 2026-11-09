@@ -69,6 +69,7 @@ class PlayerConnection(
 
     /** Starts the sleep timer: [minutes] from now, 0 = at the end of the episode, null = off. */
     fun setSleepTimer(minutes: Int?) {
+        com.ascolta.app.data.Analytics.track("SleepTimer.set", mapOf("minutes" to (minutes?.toString() ?: "off")))
         controller?.volume = 1f
         _sleep.value = when (minutes) {
             null -> null
@@ -122,6 +123,11 @@ class PlayerConnection(
             return
         }
         saveCurrentPosition()
+        com.ascolta.app.data.Analytics.track(
+            "Episode.played",
+            mapOf("source" to if (episode.localPath?.let { File(it).exists() } == true) "downloaded" else "streamed",
+                "imported" to (episode.podcastId == null).toString()),
+        )
         val uri = episode.localPath?.takeIf { File(it).exists() }?.let { Uri.fromFile(File(it)) }
             ?: episode.audioUrl?.let(Uri::parse)
             ?: return

@@ -373,4 +373,9 @@
     <string name="gpu_title">Utiliser la puce graphique (expérimental)</string>
     <string name="gpu_text">Pour les modèles Whisper « · GPU », sur Snapdragon (Adreno). Repasse au processeur si le téléphone ne le permet pas.</string>
     <string name="speed_test_language">Le test utilise un enregistrement en italien, que %1$s ne comprend pas. Passez à une langue prise en charge (ex. italien).</string>
+    <string name="section_privacy">Confidentialité</string>
+    <string name="analytics_title">Partager des statistiques d’utilisation anonymes</string>
+    <string name="analytics_text">Aide à améliorer Ascolta : fonctions et modèles vocaux utilisés, et leur vitesse. Jamais de noms de podcasts, recherches, transcriptions ou mots enregistrés. Modifiable à tout moment dans les Paramètres.</string>
+    <string name="analytics_yes">Partager</string>
+    <string name="analytics_no">Non merci</string>
 </resources>

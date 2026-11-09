@@ -104,6 +104,17 @@ class Pref<T>(
     fun set(value: T) {
         prefs.edit().apply { write(key, value) }.apply()
         state.value = value
+        if (key in TRACKED) Analytics.track("Settings.changed", mapOf("setting" to key, "value" to value.toString()))
+    }
+
+    companion object {
+        /** Settings whose changes are counted (anonymously) to see which options people use. */
+        val TRACKED = setOf(
+            "language_models", "japanese_script", "translate_sentences", "show_translation", "show_original",
+            "word_highlight", "auto_pause", "wifi_only", "use_gpu", "auto_transcribe_v2", "refresh_hours",
+            "delete_after_days", "notify_favourites", "dynamic_color", "show_cover", "flash_attention",
+            "skip_non_speech", "threads", "playback_speed", "native_language",
+        )
     }
 }
 
@@ -166,6 +177,7 @@ class Settings(context: Context) {
     fun interestList(): List<Int> = interests.value.split(',').mapNotNull { it.trim().toIntOrNull() }
 
     fun switchLanguage(code: String) {
+        if (code != learningLanguage.value) Analytics.track("Language.switched", mapOf("to" to code))
         if (code !in learningList()) setLearningList(learningList() + code)
         learningLanguage.set(code)
     }
@@ -217,6 +229,9 @@ class Settings(context: Context) {
 
     /** Speech model chosen per language, e.g. "it:parakeet-v3,ja:sensevoice". */
     val languageModels = string("language_models", "")
+    /** Anonymous usage statistics: "" = not asked yet, "yes", "no". */
+    val analyticsConsent = string("analytics_consent", "")
+
     /** Whisper on the graphics chip (experimental; needs a "· GPU" model). */
     val useGpu = bool("use_gpu", false)
 

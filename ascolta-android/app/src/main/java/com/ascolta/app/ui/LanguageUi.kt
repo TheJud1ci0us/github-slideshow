@@ -177,6 +177,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
     var step by remember { mutableStateOf(0) }
     val levels = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
     val interests = remember { mutableStateListOf<Int>() }
+    var shareStats by remember { mutableStateOf(false) }
 
     fun finish() {
         settings.nativeLanguage.set(native)
@@ -185,11 +186,18 @@ fun OnboardingScreen(onDone: () -> Unit) {
         levels.forEach { (code, level) -> settings.setLevel(code, level) }
         settings.interests.set(interests.joinToString(","))
         settings.onboarded.set(true)
+        if (com.ascolta.app.data.Analytics.available) {
+            com.ascolta.app.data.Analytics.setConsent(shareStats)
+            com.ascolta.app.data.Analytics.track(
+                "TelemetryDeck.Activation.onboardingCompleted",
+                mapOf("languages" to learning.joinToString(","), "levels" to levels.size.toString(), "interests" to interests.size.toString()),
+            )
+        }
         onDone()
     }
 
     if (step == 1) {
-        LevelAndInterests(learning, levels, interests, onBack = { step = 0 }, onDone = { finish() })
+        LevelAndInterests(learning, levels, interests, shareStats, { shareStats = it }, onBack = { step = 0 }, onDone = { finish() })
         return
     }
 
@@ -277,6 +285,8 @@ private fun LevelAndInterests(
     learning: List<String>,
     levels: MutableMap<String, String>,
     interests: MutableList<Int>,
+    shareStats: Boolean,
+    onShareStats: (Boolean) -> Unit,
     onBack: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -307,6 +317,16 @@ private fun LevelAndInterests(
                 val on = g.id in interests
                 FilterChip(selected = on, onClick = { if (on) interests.remove(g.id) else interests.add(g.id) }, label = { Text(stringResource(g.nameRes)) })
             }
+        }
+        if (com.ascolta.app.data.Analytics.available) {
+            Spacer(Modifier.height(20.dp))
+            // Explicit choice, off unless the user turns it on.
+            ListItem(
+                modifier = Modifier.clickable { onShareStats(!shareStats) },
+                headlineContent = { Text(stringResource(R.string.analytics_title)) },
+                supportingContent = { Text(stringResource(R.string.analytics_text)) },
+                trailingContent = { androidx.compose.material3.Switch(checked = shareStats, onCheckedChange = onShareStats) },
+            )
         }
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {

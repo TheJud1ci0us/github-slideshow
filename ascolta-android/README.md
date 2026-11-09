@@ -185,6 +185,11 @@ PlayerScreen ◄── Media3 (PlaybackService) + transcript ──► synced du
 | `player/` | Media3 playback service and controller |
 | `ui/` | Jetpack Compose screens |
 
+## Anonymous usage statistics
+
+Opt-in, privacy-first analytics with TelemetryDeck (see [ANALYTICS.md](ANALYTICS.md) for setup,
+the full list of signals and suggested dashboard insights). Off in builds without an App ID.
+
 ## Legal
 
 - [Privacy policy](PRIVACY.md) and [terms of use](TERMS.md), also in the app (Settings → About).

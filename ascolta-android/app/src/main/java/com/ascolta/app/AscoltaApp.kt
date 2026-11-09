@@ -33,9 +33,26 @@ class AscoltaApp : Application() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             runCatching { AppLog.w("Crash", "on ${thread.name}: ${error.stackTraceToString().take(4000)}") }
+            // Reported (as the error type and place only) on the next launch, if analytics is on.
+            runCatching {
+                getSharedPreferences("analytics", MODE_PRIVATE).edit()
+                    .putString("crash", "${error.javaClass.simpleName} @ ${error.stackTrace.firstOrNull { it.className.startsWith("com.ascolta") }?.let { "${it.className.substringAfterLast('.')}.${it.methodName}" } ?: "?"}")
+                    .commit()
+            }
             previous?.uncaughtException(thread, error)
         }
         graph = AppGraph(this)
+        com.ascolta.app.data.Analytics.init(this, graph.settings, graph.http)
+        com.ascolta.app.data.Analytics.track("TelemetryDeck.Session.started")
+        getSharedPreferences("analytics", MODE_PRIVATE).getString("crash", null)?.let { crash ->
+            com.ascolta.app.data.Analytics.track(
+                "TelemetryDeck.Error.occurred",
+                mapOf("TelemetryDeck.Error.id" to crash, "TelemetryDeck.Error.category" to "crash"),
+            )
+            getSharedPreferences("analytics", MODE_PRIVATE).edit().remove("crash").apply()
+        }
+        // Statistics are sent when the app goes to the background (and every minute).
+        graph.scope.launch { AppVisibility.visible.collect { if (!it) com.ascolta.app.data.Analytics.flush() } }
         Notifications.createChannels(this)
         WorkScheduler.schedulePeriodicRefresh(this)
         graph.scope.launch {

@@ -112,12 +112,14 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     fun search(term: String) {
         if (term.isBlank()) return
         genre = null
+        com.ascolta.app.data.Analytics.track("Discover.searched", mapOf("language" to learning)) // never the search text
         load { graph.directory.search(term, country) }
     }
 
     /** Podcasts of a theme in the learning language's store; for learners, courses in that language. */
     fun browse(genreId: Int) {
         genre = genreId
+        com.ascolta.app.data.Analytics.track("Discover.themeBrowsed", mapOf("genre" to genreId.toString(), "language" to learning))
         query = ""
         load {
             val lang = learning
@@ -187,7 +189,10 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 LevelBand.entries.forEach { b ->
                     FilterChip(
                         selected = band == b,
-                        onClick = { band = if (band == b) null else b },
+                        onClick = {
+                            band = if (band == b) null else b
+                            com.ascolta.app.data.Analytics.track("Discover.levelFilter", mapOf("band" to (band?.name ?: "all")))
+                        },
                         label = { Text("${b.label} · ${stringResource(b.nameRes)}") },
                     )
                 }

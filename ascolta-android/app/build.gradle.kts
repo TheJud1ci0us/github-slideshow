@@ -21,8 +21,14 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.9.1"
+        versionCode = 17
+        versionName = "0.10.0"
+
+        // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
+        // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
+        fun prop(name: String) = (project.findProperty(name) as String?).orEmpty().replace("\"", "")
+        buildConfigField("String", "TELEMETRYDECK_APP_ID", "\"${prop("telemetryDeckAppId")}\"")
+        buildConfigField("String", "TELEMETRYDECK_SALT", "\"${prop("telemetryDeckSalt")}\"")
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
@@ -58,6 +64,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {

@@ -89,6 +89,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val language = episode.transcriptLanguage ?: graph.settings.learningLanguage.value
             val target = graph.settings.nativeLanguage.value
             AppLog.i(TAG, "Start #$episodeId \"$title\" lang=$language→$target model=${graph.settings.modelFor(language).id} attempt=$runAttemptCount")
+            com.ascolta.app.data.Analytics.track(
+                "Transcription.started",
+                mapOf("model" to graph.settings.modelFor(language).id, "language" to language, "attempt" to runAttemptCount.toString(),
+                    "gpu" to graph.settings.useGpu.value.toString(), "threads" to graph.settings.effectiveThreads().toString()),
+            )
             try {
                 coroutineScope {
                     val reporter = launch { reportProgress() }
@@ -103,6 +108,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 throw e
             } catch (e: Throwable) {
                 AppLog.w(TAG, "Failed #$episodeId", e)
+                com.ascolta.app.data.Analytics.track(
+                    "Transcription.failed",
+                    mapOf("model" to graph.settings.modelFor(language).id, "language" to language, "error" to e.javaClass.simpleName),
+                )
                 dao.setTranscript(episodeId, TranscriptState.FAILED, 0f, null, e.message ?: e.javaClass.simpleName)
                 Result.success()
             }
@@ -149,6 +158,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         dao.setTranscript(episodeId, TranscriptState.DONE, 1f, null)
         runCatching { graph.repo.refreshProgressCounts() }
         AppLog.i(TAG, "Done #$episodeId: ${transcript.segments.size} sentences")
+        com.ascolta.app.data.Analytics.track(
+            "Transcription.completed",
+            mapOf("model" to graph.settings.modelFor(language).id, "language" to language, "source" to transcript.source),
+            value = (episode.durationSec / 60.0),
+        )
         return Result.success()
     }
 
@@ -505,6 +519,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 "${if (following) ", following playback at ${player.positionMs / 1000}s" else ""}, $count sentences",
                         )
                         done(Span(blockStartMs, blockStartMs + blockLenMs))
+                        // Speed (× real time) per model, to see what runs well on which phones.
+                        com.ascolta.app.data.Analytics.track(
+                            "Transcription.speed",
+                            mapOf("model" to model.id, "language" to language, "threads" to threads.toString(), "gpu" to options.gpu.toString()),
+                            value = factor.toDouble(),
+                        )
                     }
                     prefetch?.second?.cancel()
                     events.close()
