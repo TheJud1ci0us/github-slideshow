@@ -55,6 +55,8 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -467,6 +469,19 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             language = transcript?.language ?: settings.learningLanguage.value,
             episode = ep,
             onPlaySentence = { seek(l.segment.startMs) },
+            onPlayWord = { from, to ->
+                if (isCurrent) graph.player.playSnippet(from, to)
+                else scope.launch {
+                    // Not loaded in the player: cut the word from the downloaded audio.
+                    val path = ep?.localPath?.takeIf { java.io.File(it).exists() } ?: return@launch
+                    val out = java.io.File(context.cacheDir, "word.wav")
+                    val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.ascolta.app.whisper.AudioClip.extract(path, from, to, out, padBeforeMs = 60, padAfterMs = 150)
+                    }
+                    if (ok) com.ascolta.app.whisper.AudioClip.play(out.path)
+                }
+            },
+            canPlayWord = isCurrent || ep?.localPath?.let { java.io.File(it).exists() } == true,
             onDismiss = { lookup = null },
         )
     }
@@ -724,6 +739,8 @@ private fun WordSheet(
     language: String,
     episode: EpisodeEntity?,
     onPlaySentence: () -> Unit,
+    onPlayWord: (Long, Long) -> Unit,
+    canPlayWord: Boolean,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -745,6 +762,44 @@ private fun WordSheet(
                     Text(listOfNotNull(reading, romaji).joinToString(" · "), style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+            }
+            // Hear the word: as the speaker said it (from its timing in the sentence), or the phone's voice.
+            val timing = remember(lookup) {
+                val seg = lookup.segment
+                val words = com.ascolta.app.data.WordSplitter.timedWords(seg.text, seg.words, seg.startMs, seg.endMs, language)
+                val i = words?.indexOfFirst { it.text.equals(lookup.word, ignoreCase = true) } ?: -1
+                if (words == null || i < 0) null
+                else words[i].startMs to (words.getOrNull(i + 1)?.startMs ?: seg.endMs).coerceAtMost(words[i].startMs + 2_500)
+            }
+            var noVoice by remember { mutableStateOf(false) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                if (timing != null && canPlayWord) {
+                    AssistChip(
+                        onClick = { onPlayWord(timing.first, timing.second) },
+                        label = { Text(stringResource(R.string.hear_podcast)) },
+                        leadingIcon = { Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)) },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                    )
+                }
+                AssistChip(
+                    onClick = {
+                        noVoice = com.ascolta.app.data.Speech.speak(context, lookup.word, language) == com.ascolta.app.data.Speech.Result.NO_VOICE
+                    },
+                    label = { Text(stringResource(R.string.hear_voice)) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null, Modifier.size(18.dp)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                )
+            }
+            if (noVoice) {
+                // No phone voice for this language: explain and offer to install one.
+                Text(stringResource(R.string.no_tts_voice, com.ascolta.app.data.languageName(language)),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(android.content.Intent(android.speech.tts.TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }) { Text(stringResource(R.string.install_voice)) }
             }
             Spacer(Modifier.height(4.dp))
             if (translation == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))

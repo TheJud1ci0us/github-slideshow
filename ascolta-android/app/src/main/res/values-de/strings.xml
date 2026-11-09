@@ -407,4 +407,8 @@
     <string name="cefr_c2">Fast muttersprachlich</string>
     <string name="discover_for_you">Für dich</string>
     <string name="discover_categories">Kategorien</string>
+    <string name="hear_podcast">Wie gesagt</string>
+    <string name="hear_voice">Klare Stimme</string>
+    <string name="no_tts_voice">Dieses Telefon hat noch keine Stimme für %1$s.</string>
+    <string name="install_voice">Stimme installieren</string>
 </resources>

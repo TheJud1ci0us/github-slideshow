@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -151,6 +152,10 @@ fun WordsScreen(openReview: () -> Unit) {
                             },
                             trailingContent = {
                                 Row {
+                                    // The word in the phone's voice.
+                                    if (!w.isSentence) IconButton(onClick = { com.ascolta.app.data.Speech.speak(context, w.word, w.language) }) {
+                                        Icon(Icons.Filled.RecordVoiceOver, stringResource(R.string.hear_voice))
+                                    }
                                     // The sentence as it was said in the episode.
                                     w.audioPath?.let { clip ->
                                         IconButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }) {
@@ -229,7 +234,8 @@ private fun AddCardDialog(onDismiss: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReviewScreen(onBack: () -> Unit) {
-    val graph = LocalContext.current.graph
+    val context = LocalContext.current
+    val graph = context.graph
     val scope = rememberCoroutineScope()
     var queue by remember { mutableStateOf<List<VocabEntity>?>(null) }
     var flipped by remember { mutableStateOf(false) }
@@ -264,6 +270,7 @@ fun ReviewScreen(onBack: () -> Unit) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(card.word, style = if (card.isSentence) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
                             if (showBack) {
+                                LaunchedEffect(card.id) { if (card.audioPath == null) com.ascolta.app.data.Speech.speak(context, card.word, card.language) }
                                 if (card.language == "ja") {
                                     // The reading, once the learner has tried to read the kanji.
                                     val reading = remember(card.word) { com.ascolta.app.data.Japanese.reading(card.word) }

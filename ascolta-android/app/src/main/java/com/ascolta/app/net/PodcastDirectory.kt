@@ -12,6 +12,8 @@ data class DirectoryResult(
     val genre: String?,
     /** Short description (from the charts), used to guess the language level. */
     val summary: String? = null,
+    /** Language the feed declares (filled in when checked). */
+    val language: String? = null,
 )
 
 /** What a pasted link turned out to be. */

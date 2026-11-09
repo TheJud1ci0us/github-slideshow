@@ -414,4 +414,8 @@
     <string name="cefr_c2">Quasi natif</string>
     <string name="discover_for_you">Pour vous</string>
     <string name="discover_categories">Catégories</string>
+    <string name="hear_podcast">Tel que dit</string>
+    <string name="hear_voice">Voix claire</string>
+    <string name="no_tts_voice">Ce téléphone n’a pas encore de voix pour %1$s.</string>
+    <string name="install_voice">Installer une voix</string>
 </resources>

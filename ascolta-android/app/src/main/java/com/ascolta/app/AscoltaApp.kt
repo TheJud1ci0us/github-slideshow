@@ -116,6 +116,7 @@ class AppGraph(app: Application) {
     val models = ModelManager(app, http)
     val translation = TranslationService()
     val directory = PodcastDirectory(http)
+    val feedLanguage = com.ascolta.app.net.FeedLanguage(http)
     val repo = PodcastRepository(app, db, http, settings, transcripts, translation)
     val player = PlayerConnection(app, db, settings, progress)
 

@@ -71,6 +71,10 @@ object LevelGuess {
         "learn", "learning", "lesson", "learners", "students", "impara", "imparare", "per stranieri",
         "apprendre", "apprenants", "aprender", "aprende", "estudiantes", "lernen", "deutschkurs",
         "aprenda", "aprendizado", "course", "corso", "cours", "curso", "kurs", "vocabulary", "grammar",
+        // Other languages' words for learning / lessons / course.
+        "язык", "урок", "учим", "изуч", "для начинающих", "мова", "вивча", "nauka", "lekcj", "leren", "lessen",
+        "öğren", "ders", "lära", "lektion", "oppia", "μάθ", "μάθημα", "ללמוד", "تعلم", "یادگیری", "सीख",
+        "学ぶ", "レッスン", "講座", "学习", "课程", "배우", "강의", "เรียน",
     )
 
     fun estimate(title: String, summary: String?, genreId: Int? = null, genreName: String? = null): Estimate {
@@ -91,6 +95,12 @@ object LevelGuess {
             genreId == GENRE_KIDS || genreName?.contains("Kids", ignoreCase = true) == true -> Estimate("B1–B2", LevelBand.INTERMEDIATE)
             else -> Estimate("C1–C2", LevelBand.ADVANCED)
         }
+    }
+
+    /** Looks like a course or lessons for learners (not just a show that mentions a language). */
+    fun looksLikeCourse(text: String): Boolean {
+        val lower = text.lowercase()
+        return learner.any { lower.contains(it) } || explicit.containsMatchIn(text)
     }
 
     private val englishWords = setOf("the", "and", "of", "to", "you", "with", "your", "is", "for", "this", "that", "we", "our", "about", "every", "from")

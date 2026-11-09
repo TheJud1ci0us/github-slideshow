@@ -12,14 +12,17 @@ import java.nio.ByteOrder
  * saved word so it can be heard again in the Words list and during flashcard review.
  */
 object AudioClip {
-    private const val PAD_BEFORE_MS = 250L
-    private const val PAD_AFTER_MS = 400L
+    const val PAD_BEFORE_MS = 250L
+    const val PAD_AFTER_MS = 400L
     private const val MAX_MS = 20_000L
 
     /** Cuts [startMs]..[endMs] (plus a little padding) of [audioPath] into a 16 kHz WAV file. */
-    fun extract(audioPath: String, startMs: Long, endMs: Long, out: File): Boolean = runCatching {
-        val from = (startMs - PAD_BEFORE_MS).coerceAtLeast(0)
-        val length = (endMs + PAD_AFTER_MS - from).coerceIn(500, MAX_MS)
+    fun extract(
+        audioPath: String, startMs: Long, endMs: Long, out: File,
+        padBeforeMs: Long = PAD_BEFORE_MS, padAfterMs: Long = PAD_AFTER_MS,
+    ): Boolean = runCatching {
+        val from = (startMs - padBeforeMs).coerceAtLeast(0)
+        val length = (endMs + padAfterMs - from).coerceIn(300, MAX_MS)
         val samples = BlockReader(audioPath).use { it.read(from, length).first }
         if (samples.isEmpty()) return false
         out.parentFile?.mkdirs()

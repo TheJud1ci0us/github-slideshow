@@ -152,6 +152,35 @@ class PlayerConnection(
         lastTickPosition = episode.playbackPositionMs
     }
 
+    private var snippetJob: kotlinx.coroutines.Job? = null
+    private var snippetReturn = 0L
+    private var snippetWasPlaying = false
+
+    /**
+     * Plays just [fromMs]..[toMs] of the loaded episode (a word, as the speaker said it), then
+     * goes back to where playback was and resumes if it was playing.
+     */
+    fun playSnippet(fromMs: Long, toMs: Long) {
+        val c = controller ?: return
+        // Tapping again while a word plays keeps the original place to return to.
+        val back = if (snippetJob != null) snippetReturn else c.currentPosition
+        val wasPlaying = if (snippetJob != null) snippetWasPlaying else c.isPlaying
+        snippetReturn = back
+        snippetWasPlaying = wasPlaying
+        snippetJob?.cancel()
+        val start = (fromMs - 80).coerceAtLeast(0)
+        c.seekTo(start)
+        c.play()
+        val speed = c.playbackParameters.speed.coerceAtLeast(0.25f)
+        snippetJob = scope.launch {
+            delay(((toMs - start + 150) / speed).toLong().coerceIn(200, 4_000))
+            c.pause()
+            c.seekTo(back)
+            if (wasPlaying) c.play()
+            snippetJob = null
+        }
+    }
+
     fun togglePlay() {
         val c = controller ?: return
         if (c.isPlaying) c.pause() else c.play()

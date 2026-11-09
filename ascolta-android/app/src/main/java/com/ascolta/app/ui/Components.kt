@@ -119,10 +119,10 @@ fun MiniPlayer(onOpen: (Long) -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clickable { onOpen(id) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Artwork(state.artworkUrl, 40.dp)
+                Artwork(state.artworkUrl, 36.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(state.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)

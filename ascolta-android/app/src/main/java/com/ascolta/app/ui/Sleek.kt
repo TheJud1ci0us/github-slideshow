@@ -237,11 +237,11 @@ fun FloatingNavBar(items: List<NavItem>, current: String, onSelect: (String) -> 
     Row(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .padding(horizontal = 20.dp, vertical = 6.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            .padding(6.dp),
+            .padding(4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         items.forEach { item ->
@@ -253,10 +253,10 @@ fun FloatingNavBar(items: List<NavItem>, current: String, onSelect: (String) -> 
                     .clip(CircleShape)
                     .background(if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable { onSelect(item.route) }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 5.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(item.icon, contentDescription = null, tint = tint)
+                Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
                 Text(item.label, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }

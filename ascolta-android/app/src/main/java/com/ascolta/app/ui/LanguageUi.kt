@@ -376,7 +376,7 @@ fun PodcastStep(
 ) {
     val graph = LocalContext.current.graph
     val picks by produceState<List<com.ascolta.app.data.Pick>?>(null, language, genres.toList(), band) {
-        value = runCatching { com.ascolta.app.data.Recommendations.picks(graph.directory, language, genres.toList(), band, 30) }
+        value = runCatching { com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, language, graph.settings.nativeLanguage.value, genres.toList(), band, 30) }
             .getOrDefault(emptyList())
     }
     LazyVerticalGrid(

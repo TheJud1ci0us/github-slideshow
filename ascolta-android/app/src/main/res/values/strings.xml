@@ -434,4 +434,8 @@
     <string name="cefr_c2">Near-native</string>
     <string name="discover_for_you">For you</string>
     <string name="discover_categories">Categories</string>
+    <string name="hear_podcast">As said</string>
+    <string name="hear_voice">Clear voice</string>
+    <string name="no_tts_voice">This phone has no voice for %1$s yet.</string>
+    <string name="install_voice">Install a voice</string>
 </resources>

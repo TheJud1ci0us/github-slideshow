@@ -8,7 +8,7 @@ import kotlinx.coroutines.coroutineScope
 import java.util.Locale
 
 /** A suggested podcast with its estimated level. */
-data class Pick(val podcast: DirectoryResult, val level: LevelGuess.Estimate)
+data class Pick(val podcast: DirectoryResult, val level: LevelGuess.Estimate, val isCourse: Boolean = false)
 
 /**
  * Podcast suggestions for a learner: courses for the language and the top podcasts of their
@@ -18,7 +18,9 @@ data class Pick(val podcast: DirectoryResult, val level: LevelGuess.Estimate)
 object Recommendations {
     suspend fun picks(
         directory: PodcastDirectory,
+        feedLanguage: com.ascolta.app.net.FeedLanguage,
         language: String,
+        native: String,
         genres: List<Int>,
         band: LevelBand?,
         limit: Int = 30,
@@ -29,24 +31,42 @@ object Recommendations {
         val themed = wanted.map { g ->
             async { g to runCatching { directory.topByGenre(g, country, 25) }.getOrDefault(emptyList()) }
         }
-        val byGenre = themed.awaitAll()
-        merge(
+        // Local podcasts found by the word "podcast" in the language (for languages whose store
+        // charts are dominated by another language).
+        val local = LanguageCheck.PODCAST_WORD[language]?.let { word ->
+            async { 0 to runCatching { directory.search(word, country) }.getOrDefault(emptyList()) }
+        }
+        val byGenre = themed.awaitAll() + listOfNotNull(local?.await())
+        val candidates = merge(
             language = language,
             courses = courses.await(),
             byGenre = byGenre,
             band = band,
-            limit = limit,
+            limit = limit * 3,
             // Beginners mostly want courses; others mostly real podcasts.
             coursesFirst = band == LevelBand.BEGINNER || wanted.isEmpty(),
         )
+        // Only podcasts really in the language (courses may also be in the learner's own).
+        val declared = feedLanguage.ofAll(candidates.map { it.podcast.feedUrl })
+        verify(candidates, declared, language, native).take(limit)
     }
+
+    /** Keeps the picks in the right language and records each one's declared language (pure). */
+    fun verify(candidates: List<Pick>, declared: Map<String, String?>, language: String, native: String): List<Pick> =
+        candidates.mapNotNull { p ->
+            val lang = declared[p.podcast.feedUrl]
+            if (LanguageCheck.keep(p.podcast.title, p.podcast.summary, lang, language, native, p.isCourse)) {
+                p.copy(podcast = p.podcast.copy(language = lang))
+            } else null
+        }
 
     /** Courses for [language] (Language Learning genre), in its store and the US store. */
     suspend fun courses(directory: PodcastDirectory, language: String, country: String): List<DirectoryResult> = coroutineScope {
         val names = languageNames(language)
         val found = names.flatMap { name -> listOf(country, "US").distinct().map { c -> async { runCatching { directory.searchGenre(name, GENRE_LEARNING, c) }.getOrDefault(emptyList()) } } }
             .awaitAll().flatten().distinctBy { it.feedUrl }
-        found.filter { r -> names.any { n -> "${r.title} ${r.summary.orEmpty()}".contains(n, ignoreCase = true) } }.ifEmpty { found }
+        // Only courses that name this language (not "Learn Spanish" when learning Georgian).
+        found.filter { r -> names.any { n -> "${r.title} ${r.summary.orEmpty()}".contains(n, ignoreCase = true) } }
     }
 
     fun languageNames(language: String): List<String> {
@@ -66,7 +86,7 @@ object Recommendations {
         limit: Int,
         coursesFirst: Boolean,
     ): List<Pick> {
-        val coursePicks = courses.map { Pick(it, LevelGuess.estimate(it.title, it.summary, GENRE_LEARNING, it.genre)) }
+        val coursePicks = courses.map { Pick(it, LevelGuess.estimate(it.title, it.summary, GENRE_LEARNING, it.genre), isCourse = true) }
         // Round-robin across themes so one theme doesn't fill the list.
         val lists = byGenre.map { (g, list) ->
             list.filter { language == "en" || !LevelGuess.looksEnglish("${it.title} ${it.summary.orEmpty()}") }
