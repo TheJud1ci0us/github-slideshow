@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The logo (store/logo-source.png, cropped by tools/logo_from_image.py) over the same green
+     gradient, which only shows in the bleed area launchers keep for animations. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="315" android:startColor="#FFB0E07B" android:endColor="#FF019671" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/ic_launcher_art" android:top="18dp" android:left="18dp" android:right="18dp" android:bottom="18dp" />
+</layer-list>
