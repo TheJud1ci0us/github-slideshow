@@ -17,6 +17,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -146,10 +148,38 @@ class PlayerConnection(
         playingLanguage = episode.podcastId?.let { podcastDao.get(it)?.libraryLanguage } ?: episode.transcriptLanguage
         _state.value = _state.value.copy(episodeId = episode.id, title = episode.title, subtitle = podcastTitle, artworkUrl = artworkUrl)
         c.setMediaItem(item, episode.playbackPositionMs)
+        if (uri.scheme == "file") fileWatch?.cancel() else switchToFileWhenDownloaded(episode.id, item)
         c.setPlaybackParameters(PlaybackParameters(settings.playbackSpeed.value))
         c.prepare()
         c.play()
         lastTickPosition = episode.playbackPositionMs
+    }
+
+    /** Waits for the download of the episode being streamed, to switch to it (see [play]). */
+    private var fileWatch: kotlinx.coroutines.Job? = null
+
+    /**
+     * Hosts such as Acast or Megaphone put different ads in every copy of an episode, so the
+     * streamed copy and the downloaded one (which is the one transcribed) don't line up: the
+     * transcript would run early or late by the difference between the ads. As soon as the
+     * episode being streamed is downloaded, the player switches to the file (same position).
+     */
+    private fun switchToFileWhenDownloaded(episodeId: Long, item: MediaItem) {
+        fileWatch?.cancel()
+        fileWatch = scope.launch {
+            val path = episodeDao.observe(episodeId)
+                .mapNotNull { e -> e?.localPath?.takeIf { File(it).exists() } }
+                .first()
+            val c = controller()
+            if (c.currentMediaItem?.mediaId != episodeId.toString()) return@launch
+            val position = c.currentPosition
+            val playing = c.playWhenReady
+            c.setMediaItem(item.buildUpon().setUri(Uri.fromFile(File(path))).build(), position)
+            c.prepare()
+            c.playWhenReady = playing
+            com.ascolta.app.data.AppLog.i("Player", "Switched #$episodeId to the downloaded file at ${position / 1000}s")
+            android.widget.Toast.makeText(context, context.getString(com.ascolta.app.R.string.switched_to_download), android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private var snippetJob: kotlinx.coroutines.Job? = null

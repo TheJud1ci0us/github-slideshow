@@ -422,4 +422,5 @@
     <string name="show_more">Más</string>
     <string name="show_less">Menos</string>
     <string name="feed_gone">El feed de este pódcast ya no está disponible (error %1$d)</string>
+    <string name="switched_to_download">Ahora suena el episodio descargado, para que la transcripción coincida con lo que oyes</string>
 </resources>

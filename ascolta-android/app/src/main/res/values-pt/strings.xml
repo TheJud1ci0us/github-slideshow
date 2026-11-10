@@ -422,4 +422,5 @@
     <string name="show_more">Mais</string>
     <string name="show_less">Menos</string>
     <string name="feed_gone">O feed deste podcast já não está disponível (erro %1$d)</string>
+    <string name="switched_to_download">Agora a tocar o episódio transferido, para a transcrição corresponder ao que ouve</string>
 </resources>

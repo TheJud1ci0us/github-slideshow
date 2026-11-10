@@ -442,4 +442,5 @@
     <string name="show_more">More</string>
     <string name="show_less">Less</string>
     <string name="feed_gone">This podcast\'s feed is no longer available (error %1$d)</string>
+    <string name="switched_to_download">Now playing the downloaded episode, so the transcript matches what you hear</string>
 </resources>
