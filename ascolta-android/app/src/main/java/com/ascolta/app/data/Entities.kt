@@ -110,6 +110,11 @@ data class VocabEntity(
     @ColumnInfo(defaultValue = "0") val isSentence: Boolean = false,
     /** Clip of the original audio of the sentence (a WAV file in the app's storage). */
     val audioPath: String? = null,
+    /** Where the saved words are in the episode (v0.16), to play them there again. */
+    val startMs: Long? = null,
+    val endMs: Long? = null,
+    /** The learner's own shadowing recording of this card (v0.16). */
+    val myAudioPath: String? = null,
 )
 
 /**

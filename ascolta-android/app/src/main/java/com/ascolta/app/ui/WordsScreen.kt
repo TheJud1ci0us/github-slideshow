@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
@@ -83,6 +84,10 @@ fun WordsScreen(openReview: () -> Unit) {
     val now = remember(words) { System.currentTimeMillis() }
     val due = words.count { it.dueAt <= now }
     var adding by remember { mutableStateOf(false) }
+    var exportMenu by remember { mutableStateOf(false) }
+    // Show all cards, only words, or only sentences.
+    var kind by remember { mutableStateOf(0) }
+    val shownWords = remember(words, kind) { when (kind) { 1 -> words.filter { !it.isSentence }; 2 -> words.filter { it.isSentence }; else -> words } }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -91,18 +96,37 @@ fun WordsScreen(openReview: () -> Unit) {
                 title = { Text(stringResource(R.string.words_title, words.size), style = MaterialTheme.typography.headlineMedium) },
                 actions = {
                     LanguageMenu()
-                    if (words.isNotEmpty()) {
-                        IconButton(onClick = {
-                            scope.launch {
-                                val tsv = graph.repo.exportVocabTsv()
-                                val send = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.export_subject))
-                                    putExtra(Intent.EXTRA_TEXT, tsv)
+                    if (words.isNotEmpty()) Box {
+                        IconButton(onClick = { exportMenu = true }) { Icon(Icons.Filled.IosShare, stringResource(R.string.export)) }
+                        androidx.compose.material3.DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+                            // As text (any flashcard app).
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.export_text)) }, onClick = {
+                                exportMenu = false
+                                scope.launch {
+                                    val tsv = graph.repo.exportVocabTsv()
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.export_subject))
+                                        putExtra(Intent.EXTRA_TEXT, tsv)
+                                    }
+                                    context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
                                 }
-                                context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
-                            }
-                        }) { Icon(Icons.Filled.IosShare, stringResource(R.string.export)) }
+                            })
+                            // For Anki, with the speakers' audio.
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.export_anki)) }, onClick = {
+                                exportMenu = false
+                                scope.launch {
+                                    val zip = graph.repo.exportAnkiZip()
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", zip)
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/zip"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
+                                }
+                            })
+                        }
                     }
                 },
             )
@@ -126,11 +150,22 @@ fun WordsScreen(openReview: () -> Unit) {
                     }
                 }
             }
+            if (words.isNotEmpty()) {
+                // All / Words / Sentences, as plain text tabs.
+                Row(Modifier.padding(horizontal = 8.dp)) {
+                    listOf(R.string.words_all, R.string.words_only_words, R.string.words_only_sentences).forEachIndexed { k, res ->
+                        TextButton(onClick = { kind = k }) {
+                            Text(stringResource(res), style = MaterialTheme.typography.titleSmall,
+                                color = if (kind == k) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
             if (words.isEmpty()) {
                 EmptyHint(stringResource(R.string.words_empty))
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
-                    items(words, key = { it.id }) { w ->
+                    items(shownWords, key = { it.id }) { w ->
                         ListItem(
                             headlineContent = {
                                 val shown = if (w.language == "ja" && jaReady && !w.isSentence) {
@@ -158,6 +193,12 @@ fun WordsScreen(openReview: () -> Unit) {
                                     w.audioPath?.let { clip ->
                                         IconButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }) {
                                             Icon(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.play_clip))
+                                        }
+                                    }
+                                    // The learner's own shadowing recording.
+                                    w.myAudioPath?.takeIf { java.io.File(it).exists() }?.let { mine ->
+                                        IconButton(onClick = { com.ascolta.app.whisper.AudioClip.play(mine) }) {
+                                            Icon(Icons.Filled.Mic, stringResource(R.string.play_mine))
                                         }
                                     }
                                     IconButton(onClick = { scope.launch { graph.repo.deleteWord(w.id) } }) {
@@ -263,6 +304,17 @@ fun ReviewScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var queue by remember { mutableStateOf<List<VocabEntity>?>(null) }
     var flipped by remember { mutableStateOf(false) }
+    var shadowCard by remember { mutableStateOf<VocabEntity?>(null) }
+    shadowCard?.let { c ->
+        ShadowSheet(
+            text = if (c.isSentence) c.word else c.sentence ?: c.word,
+            translation = if (c.isSentence) c.translation else c.sentenceTranslation,
+            language = c.language,
+            loadOriginal = { c.audioPath?.takeIf { java.io.File(it).exists() } },
+            onKeepRecording = { path -> scope.launch { graph.repo.setMyRecording(c, path) } },
+            onDismiss = { shadowCard = null },
+        )
+    }
     var reviewed by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
         queue = graph.repo.dueCardsNow()
@@ -327,8 +379,14 @@ fun ReviewScreen(onBack: () -> Unit) {
             card.audioPath?.let { clip ->
                 // Hear it as the native speaker said it.
                 LaunchedEffect(card.id, flipped) { if (flipped) com.ascolta.app.whisper.AudioClip.play(clip) }
-                TextButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Icon(Icons.AutoMirrored.Filled.VolumeUp, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.play_clip))
+                Row(Modifier.align(Alignment.CenterHorizontally)) {
+                    TextButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }) {
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.play_clip))
+                    }
+                    // Repeat it after the speaker (works offline, even after the episode is deleted).
+                    if (flipped) TextButton(onClick = { shadowCard = card }) {
+                        Icon(Icons.Filled.Mic, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_shadow))
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))

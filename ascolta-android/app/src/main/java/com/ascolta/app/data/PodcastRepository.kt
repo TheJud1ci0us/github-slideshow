@@ -510,10 +510,59 @@ class PodcastRepository(
      * Cuts the original audio of a sentence for a saved word, when the episode's audio is on
      * the phone (streamed episodes have no clip). Returns the clip's path.
      */
-    suspend fun makeClip(episode: EpisodeEntity?, startMs: Long, endMs: Long): String? = withContext(Dispatchers.IO) {
+    suspend fun makeClip(
+        episode: EpisodeEntity?, startMs: Long, endMs: Long,
+        padBeforeMs: Long = com.ascolta.app.whisper.AudioClip.PAD_BEFORE_MS,
+        padAfterMs: Long = com.ascolta.app.whisper.AudioClip.PAD_AFTER_MS,
+        dir: File = File(context.filesDir, "clips"),
+    ): String? = withContext(Dispatchers.IO) {
         val audio = episode?.localPath?.takeIf { File(it).exists() } ?: return@withContext null
-        val out = File(context.filesDir, "clips/${episode.id}-$startMs-${System.nanoTime() % 100000}.wav")
-        if (com.ascolta.app.whisper.AudioClip.extract(audio, startMs, endMs, out)) out.path else null
+        val out = File(dir, "${episode.id}-$startMs-${System.nanoTime() % 100000}.wav")
+        if (com.ascolta.app.whisper.AudioClip.extract(audio, startMs, endMs, out, padBeforeMs, padAfterMs)) out.path else null
+    }
+
+    /** Margins around a selection's words, so no syllable is cut (word times are ±0.1–0.3 s). */
+    private val selectionPadBefore = 150L
+    private val selectionPadAfter = 250L
+
+    /** The speaker's audio for a selection, in the cache (for shadowing before saving). */
+    suspend fun selectionClip(episode: EpisodeEntity?, sel: Selected): String? =
+        makeClip(episode, sel.startMs, sel.endMs, selectionPadBefore, selectionPadAfter, File(context.cacheDir, "shadow"))
+
+    /**
+     * Saves a selection of the transcript as a card: one word → a word card, more → a sentence
+     * card; with its translation, the sentence(s) around it, the speaker's audio for exactly that
+     * part, and its place in the episode. Returns false if already saved. Without the episode
+     * downloaded the card is saved without audio (and the download is started for next time).
+     */
+    suspend fun saveSelection(episode: EpisodeEntity?, sel: Selected, language: String, myAudioPath: String? = null): Boolean {
+        val translation = runCatching { translateWord(sel.text, language) }.getOrDefault("")
+        val clip = makeClip(episode, sel.startMs, sel.endMs, selectionPadBefore, selectionPadAfter)
+        if (clip == null && episode != null && episode.podcastId != null) runCatching { download(episode.id, manual = true) }
+        val added = saveWord(
+            VocabEntity(
+                word = if (sel.single) sel.text.lowercase() else sel.text,
+                translation = translation,
+                sentence = sel.context,
+                sentenceTranslation = sel.contextTranslation,
+                language = language,
+                episodeId = episode?.id,
+                episodeTitle = episode?.title,
+                createdAt = System.currentTimeMillis(),
+                isSentence = !sel.single,
+                audioPath = clip,
+                startMs = sel.startMs,
+                endMs = sel.endMs,
+                myAudioPath = myAudioPath,
+            ),
+        )
+        if (!added) clip?.let { File(it).delete() }
+        return added
+    }
+
+    suspend fun setMyRecording(card: VocabEntity, path: String) {
+        card.myAudioPath?.takeIf { it != path }?.let { File(it).delete() }
+        vocabDao.update(card.copy(myAudioPath = path))
     }
 
     suspend fun totalWords(): Int = vocabDao.countAll()
@@ -591,6 +640,41 @@ class PodcastRepository(
     }
 
     /** Tab-separated export that Anki (and most flashcard apps) can import. */
+    /**
+     * Words and sentences of the current language for Anki, with the speakers' audio: a zip with
+     * cards.txt (front, back, sentence, sentence translation, [sound:…]) and the clips in media/,
+     * plus how to import it. Returns the zip file.
+     */
+    suspend fun exportAnkiZip(): File = withContext(Dispatchers.IO) {
+        val language = settings.learningLanguage.value
+        val cards = vocabDao.all().filter { it.language == language }
+        val dir = File(context.cacheDir, "export").apply { mkdirs() }
+        val zip = File(dir, "lingopod-$language-anki.zip")
+        java.util.zip.ZipOutputStream(zip.outputStream().buffered()).use { out ->
+            val lines = StringBuilder()
+            for (v in cards) {
+                val clip = v.audioPath?.let(::File)?.takeIf { it.exists() }
+                val sound = clip?.let { "lingopod-${v.id}.${it.extension}" }
+                if (clip != null && sound != null) {
+                    out.putNextEntry(java.util.zip.ZipEntry("media/$sound"))
+                    clip.inputStream().use { it.copyTo(out) }
+                    out.closeEntry()
+                }
+                lines.append(
+                    listOf(v.word, v.translation, v.sentence.orEmpty(), v.sentenceTranslation.orEmpty(), sound?.let { "[sound:$it]" }.orEmpty())
+                        .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') },
+                ).append('\n')
+            }
+            out.putNextEntry(java.util.zip.ZipEntry("cards.txt"))
+            out.write(lines.toString().toByteArray())
+            out.closeEntry()
+            out.putNextEntry(java.util.zip.ZipEntry("HOW-TO-IMPORT.txt"))
+            out.write(context.getString(R.string.anki_howto).toByteArray())
+            out.closeEntry()
+        }
+        zip
+    }
+
     suspend fun exportVocabTsv(): String = vocabDao.all().filter { it.language == settings.learningLanguage.value }.joinToString("\n") { v ->
         listOf(v.word, v.translation, v.sentence.orEmpty(), v.sentenceTranslation.orEmpty())
             .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') }

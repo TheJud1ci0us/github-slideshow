@@ -31,7 +31,7 @@ The statistics are processed by TelemetryDeck (TelemetryDeck GmbH, Germany; http
 - Notifications: progress of downloads/transcriptions and new episodes of favourite podcasts.
 - Foreground service / media playback: to keep playing and transcribing in the background.
 - Network access: for the requests above.
-No location, contacts, microphone or camera access.
+No location, contacts or camera access. The microphone is used only when you choose to record yourself (shadowing): the recordings are saved on your phone, can be deleted with the card or by removing the app, and are never sent anywhere. "Check what I said" runs the speech model on the phone.
 
 5. Children
 The app is not directed at children under 13 and collects no personal data from anyone.

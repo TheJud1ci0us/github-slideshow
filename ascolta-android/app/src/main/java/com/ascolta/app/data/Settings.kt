@@ -152,6 +152,9 @@ class Settings(context: Context) {
     val learningLanguages = string("learning_languages", "")
     /** The first-launch language choice has been made. */
     val onboarded = bool("onboarded", false)
+    /** The guided tours were seen (or skipped); "Show the tutorial" in About resets them. */
+    val tourSeen = bool("tour_seen", false)
+    val playerTourSeen = bool("player_tour_seen", false)
 
     fun learningList(): List<String> =
         learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }

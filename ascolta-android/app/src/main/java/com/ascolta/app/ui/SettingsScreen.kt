@@ -264,6 +264,12 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
             }
             else -> {
                 Hint(stringResource(R.string.about_text), Modifier.padding(16.dp))
+                // Show the guided tours again.
+                TextButton(onClick = {
+                    settings.tourSeen.set(false)
+                    settings.playerTourSeen.set(false)
+                    onBack()
+                }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.tour_replay)) }
                 LegalSection()
             }
         }

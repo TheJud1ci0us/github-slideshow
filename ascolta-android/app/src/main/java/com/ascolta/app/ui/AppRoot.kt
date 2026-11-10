@@ -82,6 +82,9 @@ object Routes {
 }
 
 @Composable
+private fun context0() = LocalContext.current
+
+@Composable
 fun AscoltaRoot() {
     // First launch: choose the languages being learned.
     val onboarded by LocalContext.current.graph.settings.onboarded.flow.collectAsState()
@@ -103,6 +106,7 @@ fun AscoltaRoot() {
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
@@ -169,6 +173,17 @@ fun AscoltaRoot() {
                 PlayerScreen(episodeId = entry.arguments!!.getLong("episodeId"), onBack = { nav.popBackStack() })
             }
         }
+    }
+
+    // First-time guided tours: the app's main parts, then (on the first episode) the player.
+    val tourSettings = context0().graph.settings
+    val tourSeen by tourSettings.tourSeen.flow.collectAsState()
+    val playerTourSeen by tourSettings.playerTourSeen.flow.collectAsState()
+    if (!tourSeen && !inPlayer) {
+        TourOverlay(Tour.MAIN) { tourSettings.tourSeen.set(true) }
+    } else if (tourSeen && !playerTourSeen && route.startsWith("player")) {
+        TourOverlay(Tour.PLAYER) { tourSettings.playerTourSeen.set(true) }
+    }
     }
 
     // A link shared from another app (Spotify, Apple Podcasts, a browser…).

@@ -27,6 +27,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.MoreVert
@@ -271,6 +274,29 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     var sleepDialog by remember { mutableStateOf(false) }
     var lookup by remember { mutableStateOf<WordLookup?>(null) }
+    ForgetTourTarget("transcript"); ForgetTourTarget("player_more"); ForgetTourTarget("player_controls")
+    // Selecting part of the transcript (to save with its audio, or to shadow).
+    var selA by remember { mutableStateOf<com.ascolta.app.data.WordPos?>(null) }
+    var selB by remember { mutableStateOf<com.ascolta.app.data.WordPos?>(null) }
+    var shadowing by remember { mutableStateOf<com.ascolta.app.data.Selected?>(null) }
+    val allRanges = remember(segments, timedWords) { segments.mapIndexed { i, s -> wordRanges(s.text, timedWords.getOrNull(i)) } }
+    val selection = remember(selA, selB, segments, timedWords, allRanges) {
+        val a = selA
+        val b = selB
+        if (a == null || b == null || segments.isEmpty()) null
+        else runCatching { com.ascolta.app.data.Selection.of(segments, timedWords, allRanges, a, b) }.getOrNull()
+    }
+    fun selectWord(segmentIndex: Int, word: Int) {
+        val lastWord = (allRanges.getOrNull(segmentIndex)?.size ?: 1) - 1
+        if (word < 0) {
+            // A whole sentence (or extend to it).
+            if (selA == null) { selA = com.ascolta.app.data.WordPos(segmentIndex, 0); selB = com.ascolta.app.data.WordPos(segmentIndex, lastWord.coerceAtLeast(0)) }
+            else selB = com.ascolta.app.data.WordPos(segmentIndex, if (segmentIndex >= selA!!.segment) lastWord.coerceAtLeast(0) else 0)
+        } else if (selA == null) {
+            selA = com.ascolta.app.data.WordPos(segmentIndex, word); selB = selA
+        } else selB = com.ascolta.app.data.WordPos(segmentIndex, word)
+        graph.player.pause()
+    }
 
     androidx.compose.material3.Scaffold(
         topBar = {
@@ -311,7 +337,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                             else Icon(Icons.Filled.Image, stringResource(R.string.show_cover))
                         }
                     }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
+                    IconButton(onClick = { menu = true }, modifier = Modifier.tourTarget("player_more")) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
                     val source = languageName(transcript?.language ?: settings.learningLanguage.value)
                     val target = languageName(nativeLanguage)
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -335,6 +361,16 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                                 ) { settings.japaneseScript.set(s.key) }
                             }
                         }
+                        segments.getOrNull(navIndex)?.let { cur ->
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text(stringResource(R.string.shadow_this)) }, onClick = {
+                                menu = false
+                                graph.player.pause()
+                                selA = null; selB = null
+                                shadowing = com.ascolta.app.data.Selection.of(segments, timedWords, allRanges,
+                                    com.ascolta.app.data.WordPos(navIndex, 0), com.ascolta.app.data.WordPos(navIndex, ((allRanges.getOrNull(navIndex)?.size ?: 1) - 1).coerceAtLeast(0)))
+                            })
+                        }
                         HorizontalDivider()
                         DropdownMenuItem(text = { Text(stringResource(R.string.larger_text)) }, onClick = {
                             settings.transcriptTextScale.set((textScale + 0.15f).coerceAtMost(2f))
@@ -354,7 +390,31 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             )
         },
         bottomBar = {
-            Controls(
+            val sel = selection
+            if (sel != null) SelectionBar(
+                text = sel.text,
+                onSave = {
+                    scope.launch {
+                        val added = graph.repo.saveSelection(ep, sel, transcript?.language ?: settings.learningLanguage.value)
+                        Toast.makeText(context, context.getString(
+                            when {
+                                !added -> R.string.already_saved
+                                ep?.localPath?.let { java.io.File(it).exists() } != true -> R.string.saved_without_audio
+                                sel.single -> R.string.saved_to_words
+                                else -> R.string.sentence_saved
+                            },
+                        ), Toast.LENGTH_SHORT).show()
+                        selA = null; selB = null
+                    }
+                },
+                onShadow = { shadowing = sel },
+                onCopy = {
+                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("LingoPod", sel.text))
+                    selA = null; selB = null
+                },
+                onClose = { selA = null; selB = null },
+            ) else androidx.compose.foundation.layout.Box(Modifier.tourTarget("player_controls")) { Controls(
                 isPlaying = isCurrent && player.isPlaying,
                 buffering = isCurrent && player.isBuffering,
                 position = position,
@@ -382,7 +442,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     val next = SPEEDS.firstOrNull { it > player.speed + 0.01f } ?: SPEEDS.first()
                     graph.player.setSpeed(next)
                 },
-            )
+            ) }
         },
         floatingActionButton = {
             if (!follow && segments.isNotEmpty() && !coverMode) {
@@ -420,7 +480,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
             } else LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().tourTarget("transcript"),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -440,6 +500,22 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                             graph.player.pause()
                             lookup = WordLookup(word, segment)
                         },
+                        selected = run {
+                            val a = selA
+                            val b = selB
+                            if (a == null || b == null) null
+                            else {
+                                val (lo, hi) = if (a <= b) a to b else b to a
+                                if (i < lo.segment || i > hi.segment) null
+                                else {
+                                    val last = (allRanges.getOrNull(i)?.size ?: 1) - 1
+                                    if (allRanges.getOrNull(i).isNullOrEmpty()) -1..-1
+                                    else (if (i == lo.segment) lo.word else 0)..(if (i == hi.segment) hi.word else last)
+                                }
+                            }
+                        },
+                        selecting = selA != null,
+                        onSelect = { w -> selectWord(i, w) },
                     )
                 }
             }
@@ -467,6 +543,18 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 if (active) TextButton(onClick = { graph.player.setSleepTimer(null); sleepDialog = false }) { Text(stringResource(R.string.sleep_off)) }
             },
             dismissButton = { TextButton(onClick = { sleepDialog = false }) { Text(stringResource(R.string.action_close)) } },
+        )
+    }
+
+    shadowing?.let { sel ->
+        val lang = transcript?.language ?: settings.learningLanguage.value
+        ShadowSheet(
+            text = sel.text,
+            translation = sel.contextTranslation,
+            language = lang,
+            loadOriginal = { graph.repo.selectionClip(ep, sel) },
+            onKeepRecording = { path -> scope.launch { graph.repo.saveSelection(ep, sel, lang, myAudioPath = path) } },
+            onDismiss = { shadowing = null; selA = null; selB = null },
         )
     }
 
@@ -635,6 +723,12 @@ private fun SegmentItem(
     textScale: Float,
     onSeek: () -> Unit,
     onWord: (String) -> Unit,
+    /** Words of this sentence in the learner's selection (indices), or null. */
+    selected: IntRange? = null,
+    /** A selection is being made: taps extend it instead of opening the word. */
+    selecting: Boolean = false,
+    /** Long press on a word (index; -1 = the whole sentence), or a tap while [selecting]. */
+    onSelect: (Int) -> Unit = {},
 ) {
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     Column(
@@ -647,7 +741,9 @@ private fun SegmentItem(
             formatTime(segment.startMs),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures { onSeek() } }.padding(bottom = 2.dp),
+            // Tap: play from here. Long press: select the whole sentence (e.g. to shadow it).
+            modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures(onTap = { onSeek() }, onLongPress = { onSelect(-1) }) }
+                .padding(bottom = 2.dp),
         )
         val textStyle = MaterialTheme.typography.bodyLarge.copy(
             fontSize = (18 * textScale).sp,
@@ -660,7 +756,8 @@ private fun SegmentItem(
         } else if (showOriginal) {
             val wordRanges = remember(segment, words) { wordRanges(segment.text, words) }
             val highlight = MaterialTheme.colorScheme.primary
-            val text = remember(segment.text, activeWord, wordRanges, highlight) {
+            val selectColor = MaterialTheme.colorScheme.tertiary
+            val text = remember(segment.text, activeWord, wordRanges, highlight, selected) {
                 buildAnnotatedString {
                     append(segment.text)
                     wordRanges.getOrNull(activeWord)?.let { range ->
@@ -668,6 +765,13 @@ private fun SegmentItem(
                             SpanStyle(background = highlight.copy(alpha = 0.22f), fontWeight = FontWeight.SemiBold),
                             range.first, range.last + 1,
                         )
+                    }
+                    // The learner's selection.
+                    selected?.let { sel ->
+                        val from = if (sel.first < 0 || wordRanges.isEmpty()) 0 else wordRanges.getOrNull(sel.first)?.takeIf { !it.isEmpty() }?.first ?: 0
+                        val to = if (sel.first < 0 || wordRanges.isEmpty()) segment.text.length
+                        else wordRanges.getOrNull(sel.last)?.takeIf { !it.isEmpty() }?.let { it.last + 1 } ?: segment.text.length
+                        if (to > from) addStyle(SpanStyle(background = selectColor.copy(alpha = 0.35f)), from, to)
                     }
                 }
             }
@@ -678,8 +782,13 @@ private fun SegmentItem(
                     lineHeight = (26 * textScale).sp,
                     color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 ),
-                language,
-                onWord,
+                onTap = { offset ->
+                    if (selecting) onSelect(wordIndexAt(wordRanges, offset))
+                    // The dictionary word under the finger (not the whole run of letters, which in
+                    // Japanese or Chinese would be the whole sentence).
+                    else WordSplitter.wordAt(segment.text, offset, language)?.let(onWord)
+                },
+                onLongPress = { offset -> onSelect(wordIndexAt(wordRanges, offset)) },
             )
         }
         if (showTranslation) {
@@ -697,23 +806,29 @@ private fun SegmentItem(
     }
 }
 
-/** Text where tapping a word reports that word. */
+/** Text where a tap or a long press reports the character under the finger. */
 @Composable
-private fun TappableText(text: AnnotatedString, style: TextStyle, language: String?, onWord: (String) -> Unit) {
+private fun TappableText(text: AnnotatedString, style: TextStyle, onTap: (Int) -> Unit, onLongPress: (Int) -> Unit) {
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     Text(
         text,
         style = style,
         onTextLayout = { layout = it },
         modifier = Modifier.pointerInput(text.text) {
-            detectTapGestures { pos ->
-                val l = layout ?: return@detectTapGestures
-                // The dictionary word under the finger (not the whole run of letters, which in
-                // Japanese or Chinese would be the whole sentence).
-                WordSplitter.wordAt(text.text, l.getOffsetForPosition(pos), language)?.let(onWord)
-            }
+            detectTapGestures(
+                onTap = { pos -> layout?.let { onTap(it.getOffsetForPosition(pos)) } },
+                onLongPress = { pos -> layout?.let { onLongPress(it.getOffsetForPosition(pos)) } },
+            )
         },
     )
+}
+
+/** The timed word at character [offset] (or the nearest one before it); -1 without word times. */
+private fun wordIndexAt(ranges: List<IntRange>, offset: Int): Int {
+    if (ranges.isEmpty()) return -1
+    val hit = ranges.indexOfFirst { !it.isEmpty() && offset in it }
+    if (hit >= 0) return hit
+    return ranges.indexOfLast { !it.isEmpty() && it.first <= offset }.coerceAtLeast(0)
 }
 
 /** Keeps a sentence highlighted this long after it ends, then clears it (music, pauses). */
@@ -965,6 +1080,33 @@ private fun Controls(
                 }
                 IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, stringResource(R.string.next_sentence)) }
                 IconButton(onClick = onRepeat) { Icon(Icons.Filled.Replay, stringResource(R.string.repeat_sentence)) }
+            }
+        }
+    }
+}
+
+/** Shown instead of the player controls while part of the transcript is selected. */
+@Composable
+private fun SelectionBar(text: String, onSave: () -> Unit, onShadow: () -> Unit, onCopy: () -> Unit, onClose: () -> Unit) {
+    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "“$text”", style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.action_close)) }
+            }
+            Text(stringResource(R.string.select_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSave, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.BookmarkAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_save))
+                }
+                OutlinedButton(onClick = onShadow, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_shadow))
+                }
+                IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, stringResource(R.string.select_copy)) }
             }
         }
     }

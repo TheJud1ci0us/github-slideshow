@@ -207,7 +207,7 @@ interface ListeningDao {
 
 @Database(
     entities = [PodcastEntity::class, EpisodeEntity::class, VocabEntity::class, ListeningEntry::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -218,7 +218,16 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+
+        /** v0.16: saved selections keep their place in the episode, and the learner's recording. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE vocab ADD COLUMN startMs INTEGER")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN endMs INTEGER")
+                db.execSQL("ALTER TABLE vocab ADD COLUMN myAudioPath TEXT")
+            }
+        }
 
         /** v0.15: listening log for the Statistics screen. */
         val MIGRATION_3_4 = object : Migration(3, 4) {

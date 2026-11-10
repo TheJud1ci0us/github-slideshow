@@ -146,7 +146,8 @@ fun LanguageMenu(modifier: Modifier = Modifier) {
     val list = remember(all, current) { settings.learningList() }
     var open by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
-    Box(modifier) {
+    ForgetTourTarget("language")
+    Box(modifier.tourTarget("language")) {
         androidx.compose.material3.TextButton(onClick = { open = true }) {
             Text(languageName(current), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Icon(androidx.compose.material.icons.Icons.Filled.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

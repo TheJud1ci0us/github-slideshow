@@ -255,6 +255,7 @@ fun FloatingNavBar(items: List<NavItem>, current: String, onSelect: (String) -> 
             Column(
                 Modifier
                     .weight(1f)
+                    .tourTarget("tab_" + item.route.substringBefore('?'))
                     .clip(CircleShape)
                     .background(if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable { onSelect(item.route) }
