@@ -117,6 +117,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
         } } finally {
             leaveQueue()
+            // Any way out that runs this (done, failed, stopped) isn't a crash; a native crash skips it.
+            CrashGuard.clear(applicationContext)
         }
     }
 
@@ -208,6 +210,23 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         // Parakeet only knows 25 European languages: other podcasts use Whisper instead.
         // Each language has its own model (e.g. Parakeet for Italian, SenseVoice for Japanese).
         val model = settings.modelFor(language)
+        // Did the previous attempt crash inside the speech engine (a damaged model file)?
+        val mark = CrashGuard.read(applicationContext)
+        val guardAction = if (mark == null) CrashGuard.Action.CONTINUE
+        else CrashGuard.decide(mark, model.id, episodeId, CrashGuard.lastExitWasCrash(applicationContext))
+        when (guardAction) {
+            CrashGuard.Action.REDOWNLOAD -> {
+                AppLog.w(TAG, "Model ${model.id} crashed the app last time; downloading it again")
+                graph.models.delete(model)
+            }
+            CrashGuard.Action.GIVE_UP -> {
+                AppLog.w(TAG, "Model ${model.id} crashed the app again; giving up on #$episodeId")
+                CrashGuard.clear(applicationContext)
+                throw IllegalStateException(applicationContext.getString(R.string.model_crashed, model.label))
+            }
+            CrashGuard.Action.CONTINUE -> Unit
+        }
+        val crashCount = if (guardAction == CrashGuard.Action.CONTINUE) 0 else CrashGuard.crashes(mark, model.id, episodeId) + 1
         ensureModel(model)
 
         // Parakeet always works on detected speech; for Whisper it's the "skip music and silence" option.
@@ -263,6 +282,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             withContext(NonCancellable + CoreDispatchers.recognition) { e.close() }
             AppLog.i(TAG, "Model released while waiting")
         }
+        // Marked until the first block is done: a native crash in between is noticed next time.
+        var guardArmed = true
+        CrashGuard.arm(applicationContext, model.id, episodeId, crashCount)
         engine()
         try {
             val job = coroutineContext[Job]
@@ -519,6 +541,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 "${if (following) ", following playback at ${player.positionMs / 1000}s" else ""}, $count sentences",
                         )
                         done(Span(blockStartMs, blockStartMs + blockLenMs))
+                        if (guardArmed) {
+                            guardArmed = false
+                            CrashGuard.clear(applicationContext)
+                        }
                         // Speed (× real time) per model, to see what runs well on which phones.
                         com.ascolta.app.data.Analytics.track(
                             "Transcription.speed",

@@ -438,4 +438,7 @@
     <string name="hear_voice">Clear voice</string>
     <string name="no_tts_voice">This phone has no voice for %1$s yet.</string>
     <string name="install_voice">Install a voice</string>
+    <string name="model_crashed">%1$s crashed on this phone while transcribing. Pick another model in Profile → Speech models, or delete and download it again.</string>
+    <string name="show_more">More</string>
+    <string name="show_less">Less</string>
 </resources>

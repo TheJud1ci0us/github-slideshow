@@ -411,4 +411,7 @@
     <string name="hear_voice">Klare Stimme</string>
     <string name="no_tts_voice">Dieses Telefon hat noch keine Stimme für %1$s.</string>
     <string name="install_voice">Stimme installieren</string>
+    <string name="model_crashed">%1$s ist auf diesem Telefon beim Transkribieren abgestürzt. Wähle ein anderes Modell unter Profil → Spracherkennung oder lade es neu herunter.</string>
+    <string name="show_more">Mehr</string>
+    <string name="show_less">Weniger</string>
 </resources>

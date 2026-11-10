@@ -418,4 +418,7 @@
     <string name="hear_voice">Voce chiara</string>
     <string name="no_tts_voice">Questo telefono non ha ancora una voce per %1$s.</string>
     <string name="install_voice">Installa una voce</string>
+    <string name="model_crashed">%1$s si è bloccato su questo telefono durante la trascrizione. Scegli un altro modello in Profilo → Modelli vocali, oppure eliminalo e scaricalo di nuovo.</string>
+    <string name="show_more">Altro</string>
+    <string name="show_less">Meno</string>
 </resources>

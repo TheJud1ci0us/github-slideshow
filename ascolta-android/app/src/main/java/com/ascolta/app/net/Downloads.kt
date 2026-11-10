@@ -55,7 +55,13 @@ suspend fun OkHttpClient.downloadWithBytes(
         if (existing > 0) header("Range", "bytes=$existing-")
     }.build()
 
+    var complete = false
     newCall(request).execute().use { response ->
+        // 416: the partial file already holds every byte (the app stopped just before renaming it).
+        if (response.code == 416 && existing > 0) {
+            complete = true
+            return@use
+        }
         if (!response.isSuccessful) throw IOException("HTTP ${response.code} downloading $url")
         val body = response.body ?: throw IOException("Empty response")
         val resumed = response.code == 206 && existing > 0
@@ -83,7 +89,12 @@ suspend fun OkHttpClient.downloadWithBytes(
                 onProgress(written, total)
             }
         }
+        // A connection that ended early must not pass for a finished file.
+        if (total > 0 && part.length() != total) {
+            throw IOException("Incomplete download: ${part.length()} of $total bytes")
+        }
     }
+    if (complete) onProgress(existing, existing)
     if (dest.exists()) dest.delete()
     if (!part.renameTo(dest)) throw IOException("Could not move download into place")
 }

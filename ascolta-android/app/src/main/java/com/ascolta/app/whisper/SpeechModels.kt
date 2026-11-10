@@ -4,13 +4,19 @@ import android.content.Context
 import android.net.Uri
 import com.ascolta.app.net.downloadWithBytes
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 
 enum class Engine { WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH }
 
-/** A file to download; with [extractTo], it is a zip unpacked into that folder (its top folder stripped). */
+/**
+ * A file to download; with [extractTo], it is a zip unpacked into that folder (its top folder
+ * stripped). [approxBytes] is the file's exact size (checked against Hugging Face): a file of
+ * another size is damaged or incomplete and is downloaded again.
+ */
 data class ModelFile(val url: String, val name: String, val approxBytes: Long, val extractTo: String? = null)
 
 private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
@@ -41,13 +47,13 @@ enum class SpeechModel(
     val gpu: Boolean = false,
 ) {
     TINY("tiny", Engine.WHISPER, "Whisper Tiny", 32,
-        listOf(ModelFile("$WHISPER_HF/ggml-tiny-q5_1.bin", "ggml-tiny-q5_1.bin", 32_000_000))),
+        listOf(ModelFile("$WHISPER_HF/ggml-tiny-q5_1.bin", "ggml-tiny-q5_1.bin", 32_152_673))),
     BASE("base", Engine.WHISPER, "Whisper Base", 60,
         listOf(ModelFile("$WHISPER_HF/ggml-base-q5_1.bin", "ggml-base-q5_1.bin", 59_707_625))),
     SMALL("small", Engine.WHISPER, "Whisper Small", 190,
-        listOf(ModelFile("$WHISPER_HF/ggml-small-q5_1.bin", "ggml-small-q5_1.bin", 190_000_000))),
+        listOf(ModelFile("$WHISPER_HF/ggml-small-q5_1.bin", "ggml-small-q5_1.bin", 190_085_487))),
     TURBO("turbo", Engine.WHISPER, "Whisper Large v3 Turbo", 574,
-        listOf(ModelFile("$WHISPER_HF/ggml-large-v3-turbo-q5_0.bin", "ggml-large-v3-turbo-q5_0.bin", 574_000_000))),
+        listOf(ModelFile("$WHISPER_HF/ggml-large-v3-turbo-q5_0.bin", "ggml-large-v3-turbo-q5_0.bin", 574_041_195))),
     PARAKEET("parakeet-v3", Engine.PARAKEET, "NVIDIA Parakeet v3", 670,
         listOf(
             ModelFile("$PARAKEET_HF/tokens.txt", "parakeet-v3/tokens.txt", 93_939),
@@ -112,6 +118,7 @@ val VAD_MODEL = ModelFile(
 
 class ModelManager(private val context: Context, private val http: OkHttpClient) {
     val dir = File(context.filesDir, "models")
+    private val locks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
 
     fun file(name: String) = File(dir, name)
 
@@ -128,9 +135,10 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
         listOf("parakeet-v3-npu", "parakeet-v3-npu.zip").map(::file).filter { it.exists() }.forEach { it.deleteRecursively() }
     }
 
+    /** Present and complete: exactly the expected size (a damaged file once crashed Parakeet on load). */
     private fun isPresent(f: ModelFile): Boolean =
         if (f.extractTo != null) File(file(f.extractTo), ".complete").exists()
-        else file(f.name).let { it.exists() && it.length() > 0 }
+        else file(f.name).let { it.exists() && it.length() == f.approxBytes }
 
     fun isDownloaded(model: SpeechModel): Boolean = when (model) {
         SpeechModel.CUSTOM -> file("custom.bin").let { it.exists() && it.length() > 0 }
@@ -138,21 +146,43 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
     }
 
     fun vadFile(): File = file(VAD_MODEL.name)
-    fun isVadDownloaded() = vadFile().let { it.exists() && it.length() > 0 }
+    fun isVadDownloaded() = vadFile().let { it.exists() && it.length() == VAD_MODEL.approxBytes }
 
-    suspend fun downloadVad() {
-        if (!isVadDownloaded()) http.downloadWithBytes(VAD_MODEL.url, vadFile()) { _, _ -> }
+    suspend fun downloadVad() = locks.getOrPut("vad") { Mutex() }.withLock {
+        if (!isVadDownloaded()) {
+            vadFile().delete()
+            http.downloadWithBytes(VAD_MODEL.url, vadFile()) { _, _ -> }
+        }
     }
 
     /** Downloads all files of [model]; [onProgress] gets overall bytes done and total. */
     suspend fun download(model: SpeechModel, onProgress: suspend (Long, Long) -> Unit) {
         require(model != SpeechModel.CUSTOM) { "Import a model file in Settings first" }
+        // One download per model at a time: Settings' "Get" and a transcription that needs the
+        // model used to write the same file together, mixing their bytes (a broken model).
+        locks.getOrPut(model.id) { Mutex() }.withLock { downloadLocked(model, onProgress) }
+    }
+
+    private suspend fun downloadLocked(model: SpeechModel, onProgress: suspend (Long, Long) -> Unit) {
         val total = model.files.sumOf { it.approxBytes }
         var done = 0L
         for (f in model.files) {
             if (!isPresent(f)) {
                 val dest = file(f.name)
+                // A complete-looking file of the wrong size is damaged: start it again.
+                if (dest.exists()) {
+                    com.ascolta.app.data.AppLog.w("Models", "${f.name} is ${dest.length()} bytes, expected ${f.approxBytes}: downloading again")
+                    dest.delete()
+                }
+                val part = File(dest.path + ".part")
+                if (part.length() > f.approxBytes) part.delete()
+                if (part.length() > 0) com.ascolta.app.data.AppLog.i("Models", "Resuming ${f.name} at ${part.length() / 1_000_000} / ${f.approxBytes / 1_000_000} MB")
                 http.downloadWithBytes(f.url, dest) { written, _ -> onProgress(done + written, total) }
+                if (f.extractTo == null && dest.length() != f.approxBytes) {
+                    val size = dest.length()
+                    dest.delete()
+                    throw java.io.IOException("${f.name}: downloaded $size bytes, expected ${f.approxBytes}")
+                }
                 f.extractTo?.let { target ->
                     unzip(dest, file(target))
                     dest.delete()

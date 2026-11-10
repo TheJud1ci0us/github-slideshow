@@ -122,6 +122,33 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                             p.author?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
+                    // What the podcast is about (from its feed), four lines with "More" to read it all.
+                    val about = remember(p.description) {
+                        p.description?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim() }?.takeIf { it.isNotEmpty() }
+                    }
+                    if (about != null) {
+                        var expanded by remember { mutableStateOf(false) }
+                        var overflows by remember { mutableStateOf(false) }
+                        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                            Text(
+                                about,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = if (expanded) Int.MAX_VALUE else 4,
+                                overflow = TextOverflow.Ellipsis,
+                                onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+                                modifier = Modifier.clickable(enabled = overflows || expanded) { expanded = !expanded },
+                            )
+                            if (overflows || expanded) {
+                                Text(
+                                    stringResource(if (expanded) R.string.show_less else R.string.show_more),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 4.dp).clickable { expanded = !expanded },
+                                )
+                            }
+                        }
+                    }
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
