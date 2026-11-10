@@ -90,6 +90,7 @@ fun WordsScreen(openReview: () -> Unit) {
             TopAppBar(
                 title = { Text(stringResource(R.string.words_title, words.size), style = MaterialTheme.typography.headlineMedium) },
                 actions = {
+                    LanguageMenu()
                     if (words.isNotEmpty()) {
                         IconButton(onClick = {
                             scope.launch {
@@ -111,7 +112,6 @@ fun WordsScreen(openReview: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            LanguageBar(Modifier.padding(bottom = 4.dp))
             if (words.isNotEmpty()) {
                 // Built-in flashcards: review what's due today.
                 Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {

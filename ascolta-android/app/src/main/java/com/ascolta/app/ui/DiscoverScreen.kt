@@ -253,16 +253,18 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         state = gridState,
         columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
         contentPadding = PaddingValues(bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "header") {
             Column {
-                Text(stringResource(R.string.tab_discover), style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 6.dp))
+                // Title, and the language being learned as a plain menu ("Armenian ▾").
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.tab_discover), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                    LanguageMenu()
+                }
                 // Search the directory of the language being learned (its country's store).
-                LanguageBar(Modifier.padding(bottom = 6.dp))
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -272,46 +274,61 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { search(query) }),
                     shape = androidx.compose.foundation.shape.CircleShape,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 )
-                // Categories: one row of small round-icon chips.
-                androidx.compose.foundation.lazy.LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 10.dp),
-                ) {
-                    items(genres, key = { it.id }) { g ->
-                        FilterChip(
-                            selected = genre == g.id,
-                            onClick = { browse(g.id) },
-                            label = { Text(stringResource(g.nameRes)) },
-                            leadingIcon = { Icon(genreIcon(g.id), null, Modifier.size(18.dp)) },
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                        )
+                // One quiet line of filters: category and level, each a plain menu.
+                var categoryMenu by remember { mutableStateOf(false) }
+                var levelMenu by remember { mutableStateOf(false) }
+                Row(Modifier.padding(horizontal = 8.dp)) {
+                    FilterMenu(
+                        label = genre?.let { g -> GENRES.firstOrNull { it.id == g }?.let { stringResource(it.nameRes) } }
+                            ?: stringResource(R.string.all_categories),
+                        active = genre != null,
+                        onClick = { categoryMenu = true },
+                    )
+                    FilterMenu(
+                        label = band?.label ?: stringResource(R.string.level_all),
+                        active = band != null,
+                        onClick = { levelMenu = true },
+                    )
+                }
+                if (categoryMenu) {
+                    MenuSheet(onDismiss = { categoryMenu = false }) {
+                        MenuSheetItem(stringResource(R.string.all_categories), selected = genre == null) {
+                            categoryMenu = false
+                            // Back to "For you".
+                            genre = null; query = ""; results = emptyList(); pager = null; error = null
+                        }
+                        genres.forEach { g ->
+                            MenuSheetItem(stringResource(g.nameRes), selected = genre == g.id, icon = genreIcon(g.id)) {
+                                categoryMenu = false
+                                browse(g.id)
+                            }
+                        }
+                        val starters = SUGGESTIONS[learning].orEmpty()
+                        if (starters.isNotEmpty()) {
+                            MenuSheetHeading(stringResource(R.string.suggested_searches))
+                            starters.forEach { st ->
+                                MenuSheetItem(st, selected = false, icon = Icons.Filled.Search) {
+                                    categoryMenu = false
+                                    query = st; search(st)
+                                }
+                            }
+                        }
                     }
                 }
-                // Level pills and starter searches in one row.
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterChip(selected = band == null, onClick = { band = null }, label = { Text(stringResource(R.string.level_all)) },
-                        shape = androidx.compose.foundation.shape.CircleShape)
-                    LevelBand.entries.forEach { b ->
-                        FilterChip(
-                            selected = band == b,
-                            onClick = {
-                                band = if (band == b) null else b
+                if (levelMenu) {
+                    MenuSheet(onDismiss = { levelMenu = false }) {
+                        MenuSheetItem(stringResource(R.string.level_all), selected = band == null) { levelMenu = false; band = null }
+                        LevelBand.entries.forEach { b ->
+                            MenuSheetItem(b.label, selected = band == b) {
+                                levelMenu = false
+                                band = b
                                 // Nothing on screen yet: a level opens the shows for learners at that level.
-                                if (band != null && band != LevelBand.ADVANCED && results.isEmpty() && query.isBlank()) browse(GENRE_LEARNING)
-                                com.ascolta.app.data.Analytics.track("Discover.levelFilter", mapOf("band" to (band?.name ?: "all")))
-                            },
-                            label = { Text(b.label) },
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                        )
-                    }
-                    SUGGESTIONS[learning].orEmpty().forEach { s ->
-                        AssistChip(onClick = { query = s; search(s) }, label = { Text(s) }, shape = androidx.compose.foundation.shape.CircleShape)
+                                if (b != LevelBand.ADVANCED && results.isEmpty() && query.isBlank()) browse(GENRE_LEARNING)
+                                com.ascolta.app.data.Analytics.track("Discover.levelFilter", mapOf("band" to b.name))
+                            }
+                        }
                     }
                 }
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
@@ -342,12 +359,13 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 }
                 else -> items(picks.size, key = { picks[it].feedUrl }) { i ->
                     val r = picks[i]
-                    Box(Modifier.padding(start = if (i % 3 == 0) 16.dp else 0.dp, end = if (i % 3 == 2) 16.dp else 0.dp)) {
-                        SelectTile(
-                            label = r.title,
-                            selected = r.feedUrl in subscribed,
+                    Box(Modifier.padding(start = if (i % 3 == 0) 10.dp else 0.dp, end = if (i % 3 == 2) 10.dp else 0.dp)) {
+                        CoverTile(
                             imageUrl = r.artworkUrl,
+                            title = r.title,
                             onClick = { followAndOpen(r) },
+                            checked = r.feedUrl in subscribed,
+                            showTitle = true,
                         )
                     }
                 }

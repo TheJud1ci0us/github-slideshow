@@ -28,6 +28,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -167,17 +168,23 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                 Hint(stringResource(R.string.speech_intro))
                 val languageModels by settings.languageModels.flow.collectAsState()
                 val current = remember(languageModels, modelId, learning) { settings.modelFor(learning) }
-                // Models for this language first, the others (greyed out) after.
-                SpeechModel.entries.sortedBy { if (it.supports(learning)) 0 else 1 }.forEach { model ->
-                    if (model != SpeechModel.CUSTOM || graph.models.isDownloaded(model)) {
-                        ModelRow(
-                            model, selected = model == current, learning = learning, refreshKey = refreshKey,
-                            onSelect = { settings.setModelFor(learning, model) }, onChanged = { refreshKey++ },
-                        )
-                    }
+                // Three choices for this language, lightest to best.
+                val tiers = remember(learning) { SpeechModel.tiers(learning) }
+                val tierNames = listOf(R.string.tier_light, R.string.tier_balanced, R.string.tier_best)
+                tiers.forEachIndexed { i, model ->
+                    ModelRow(
+                        model, selected = model == current, learning = learning, refreshKey = refreshKey,
+                        onSelect = { settings.setModelFor(learning, model) }, onChanged = { refreshKey++ },
+                        tier = stringResource(tierNames[i]),
+                    )
                 }
-                TextButton(onClick = { importModel.launch(arrayOf("*/*")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                    Text(stringResource(R.string.import_model))
+                // A model chosen earlier that isn't one of the three stays usable until another is picked.
+                if (current !in tiers) {
+                    ModelRow(
+                        current, selected = true, learning = learning, refreshKey = refreshKey,
+                        onSelect = {}, onChanged = { refreshKey++ },
+                        tier = stringResource(R.string.tier_current),
+                    )
                 }
                 // Benchmark of the model chosen above.
                 SpeedTestRow()
@@ -468,6 +475,8 @@ private fun ModelRow(
     refreshKey: Int,
     onSelect: () -> Unit,
     onChanged: () -> Unit,
+    /** "Light" / "Balanced" / "Best": shown as the title, the model's name below it. */
+    tier: String? = null,
 ) {
     val context = LocalContext.current
     val graph = context.graph
@@ -488,12 +497,20 @@ private fun ModelRow(
         leadingContent = { RadioButton(selected = selected, onClick = onSelect, enabled = enabled) },
         headlineContent = {
             Text(
-                if (model.approxSizeMb > 0) "${model.label} · ${model.approxSizeMb} MB" else model.label,
+                tier ?: if (model.approxSizeMb > 0) "${model.label} · ${model.approxSizeMb} MB" else model.label,
                 color = if (enabled) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                style = if (tier != null) MaterialTheme.typography.titleMedium else LocalTextStyle.current,
             )
         },
         supportingContent = {
             Column {
+                if (tier != null) {
+                    Text(
+                        if (model.approxSizeMb > 0) "${model.label} · ${model.approxSizeMb} MB" else model.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(stringResource(model.descriptionRes()))
                 if (!supported) {
                     Text(stringResource(R.string.model_not_for_language, languageName(learning)), color = MaterialTheme.colorScheme.error)

@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +17,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -262,4 +266,128 @@ fun FloatingNavBar(items: List<NavItem>, current: String, onSelect: (String) -> 
             }
         }
     }
+}
+
+/**
+ * A podcast cover: square, slightly rounded, as big as its column. Optional corner marks: the
+ * number of new episodes, a ✓ when followed or picked, a ★ for favourites; optional one-line
+ * title under it. A long press shows the full name.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun CoverTile(
+    imageUrl: String?,
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    badge: Int = 0,
+    checked: Boolean = false,
+    favourite: Boolean = false,
+    showTitle: Boolean = false,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { 140.dp.roundToPx() }
+    Column(modifier) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { android.widget.Toast.makeText(context, title, android.widget.Toast.LENGTH_SHORT).show() },
+                ),
+        ) {
+            // The name, shown until (or instead of) the picture.
+            Text(
+                title, style = MaterialTheme.typography.labelMedium, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center).padding(8.dp),
+            )
+            if (imageUrl != null) {
+                coil3.compose.AsyncImage(
+                    model = com.ascolta.app.net.Artwork.sized(imageUrl, px), contentDescription = title,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
+            when {
+                checked -> Box(
+                    Modifier.align(Alignment.TopEnd).padding(5.dp).size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Filled.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+                badge > 0 -> Text(
+                    if (badge > 99) "99+" else badge.toString(),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(bottomStart = 8.dp))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                )
+            }
+            if (favourite) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Filled.Star, null,
+                    tint = androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp)
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape).padding(2.dp),
+                )
+            }
+        }
+        if (showTitle) {
+            Text(
+                title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 2.dp),
+            )
+        }
+    }
+}
+
+/** A filter as plain text with a small arrow ("All categories ▾"); in the accent colour when set. */
+@Composable
+fun FilterMenu(label: String, active: Boolean, onClick: () -> Unit) {
+    val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    TextButton(onClick = onClick) {
+        Text(label, style = MaterialTheme.typography.titleSmall, color = color)
+        Icon(androidx.compose.material.icons.Icons.Filled.ArrowDropDown, null, tint = color)
+    }
+}
+
+/** A bottom sheet listing choices (for [FilterMenu]). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun MenuSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth().verticalScrollable().padding(bottom = 24.dp),
+        ) { content() }
+    }
+}
+
+@Composable
+private fun Modifier.verticalScrollable(): Modifier =
+    this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
+
+/** A choice in a [MenuSheet]: optional icon, name, and a check when selected. */
+@Composable
+fun MenuSheetItem(text: String, selected: Boolean, icon: ImageVector? = null, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(16.dp))
+        }
+        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f),
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        if (selected) Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+fun MenuSheetHeading(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 4.dp))
 }

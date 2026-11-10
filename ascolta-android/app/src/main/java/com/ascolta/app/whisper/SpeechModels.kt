@@ -128,6 +128,18 @@ enum class SpeechModel(
             else -> BASE
         }
 
+        /**
+         * The three choices offered for a language, lightest first: Light, Balanced, Best.
+         * (Other models stay usable if already chosen, but aren't offered.)
+         */
+        fun tiers(language: String): List<SpeechModel> = when {
+            language == "ja" -> listOf(SENSEVOICE, REAZONSPEECH, KOTOBA)
+            language in setOf("zh", "ko") -> listOf(BASE, SENSEVOICE, TURBO)
+            language in PARAKEET_LANGUAGES -> listOf(BASE, SMALL, PARAKEET)
+            language in OMNILINGUAL_FIRST -> listOf(BASE, SMALL, OMNILINGUAL)
+            else -> listOf(BASE, SMALL, TURBO)
+        }
+
         /** The NPU model was removed: anyone who had chosen it gets Parakeet on the CPU. */
         fun byId(id: String): SpeechModel = entries.firstOrNull { it.id == id }
             ?: if (id.startsWith("parakeet")) PARAKEET else BASE

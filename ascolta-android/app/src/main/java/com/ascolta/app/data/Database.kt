@@ -6,6 +6,7 @@ import androidx.room.Database
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
@@ -19,7 +20,8 @@ interface PodcastDao {
         """
         SELECT p.*,
           (SELECT COUNT(*) FROM episodes e WHERE e.podcastId = p.id) AS episodeCount,
-          (SELECT COUNT(*) FROM episodes e WHERE e.podcastId = p.id AND e.transcriptState = 3) AS transcribedCount
+          (SELECT COUNT(*) FROM episodes e WHERE e.podcastId = p.id AND e.transcriptState = 3) AS transcribedCount,
+          (SELECT COUNT(*) FROM episodes e WHERE e.podcastId = p.id AND e.lastPlayedAt = 0 AND e.pubDate >= p.subscribedAt) AS newCount
         FROM podcasts p WHERE p.libraryLanguage = :language
         ORDER BY p.favourite DESC, p.title COLLATE NOCASE
         """,
@@ -176,19 +178,57 @@ interface VocabDao {
     suspend fun delete(id: Long)
 }
 
+@Dao
+interface ListeningDao {
+    @Query("INSERT OR IGNORE INTO listening (day, episodeId, podcastId, language, ms) VALUES (:day, :episodeId, :podcastId, :language, 0)")
+    suspend fun ensure(day: Int, episodeId: Long, podcastId: Long, language: String)
+
+    @Query("UPDATE listening SET ms = ms + :ms WHERE day = :day AND episodeId = :episodeId")
+    suspend fun add(day: Int, episodeId: Long, ms: Long)
+
+    @Transaction
+    suspend fun record(day: Int, episodeId: Long, podcastId: Long, language: String, ms: Long) {
+        ensure(day, episodeId, podcastId, language)
+        add(day, episodeId, ms)
+    }
+
+    @Query("SELECT day, SUM(ms) AS ms, COUNT(*) AS episodes FROM listening WHERE ms > 0 GROUP BY day ORDER BY day")
+    fun observeDays(): Flow<List<DayTotal>>
+
+    @Query(
+        """
+        SELECT l.podcastId AS podcastId, SUM(l.ms) AS ms, p.title AS title, p.imageUrl AS imageUrl
+        FROM listening l LEFT JOIN podcasts p ON p.id = l.podcastId
+        WHERE l.ms > 0 GROUP BY l.podcastId ORDER BY ms DESC
+        """,
+    )
+    fun observePodcasts(): Flow<List<PodcastTotal>>
+}
+
 @Database(
-    entities = [PodcastEntity::class, EpisodeEntity::class, VocabEntity::class],
-    version = 3,
+    entities = [PodcastEntity::class, EpisodeEntity::class, VocabEntity::class, ListeningEntry::class],
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun podcastDao(): PodcastDao
     abstract fun episodeDao(): EpisodeDao
     abstract fun vocabDao(): VocabDao
+    abstract fun listeningDao(): ListeningDao
 
     companion object {
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+
+        /** v0.15: listening log for the Statistics screen. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `listening` (`day` INTEGER NOT NULL, `episodeId` INTEGER NOT NULL, " +
+                        "`podcastId` INTEGER NOT NULL, `language` TEXT NOT NULL, `ms` INTEGER NOT NULL, PRIMARY KEY(`day`, `episodeId`))",
+                )
+            }
+        }
 
         /** v0.7: audio clips of saved words. */
         val MIGRATION_2_3 = object : Migration(2, 3) {

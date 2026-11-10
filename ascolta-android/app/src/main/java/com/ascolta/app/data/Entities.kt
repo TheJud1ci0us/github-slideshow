@@ -86,6 +86,8 @@ data class PodcastWithStats(
     @Embedded val podcast: PodcastEntity,
     val episodeCount: Int,
     val transcribedCount: Int,
+    /** Episodes published since following and not played yet (the number on the cover). */
+    val newCount: Int = 0,
 )
 
 @Entity(tableName = "vocab")
@@ -109,3 +111,23 @@ data class VocabEntity(
     /** Clip of the original audio of the sentence (a WAV file in the app's storage). */
     val audioPath: String? = null,
 )
+
+/**
+ * Listening log: time spent on each episode per day (local calendar day, as epoch days),
+ * for the Statistics screen. Started in v0.15; earlier listening only counts in the totals.
+ */
+@Entity(tableName = "listening", primaryKeys = ["day", "episodeId"])
+data class ListeningEntry(
+    val day: Int,
+    val episodeId: Long,
+    /** 0 for audio files added by hand. */
+    val podcastId: Long,
+    val language: String,
+    val ms: Long,
+)
+
+/** One day's total (Statistics). */
+data class DayTotal(val day: Int, val ms: Long, val episodes: Int)
+
+/** Time spent on one podcast (Statistics). */
+data class PodcastTotal(val podcastId: Long, val ms: Long, val title: String?, val imageUrl: String?)

@@ -113,6 +113,8 @@ fun LibraryScreen(
                 title = { Text(stringResource(R.string.tab_home), style = MaterialTheme.typography.headlineMedium) },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
+                    // Switch between the languages being learned; each has its own library.
+                    LanguageMenu()
                     IconButton(
                         enabled = !refreshing,
                         onClick = {
@@ -168,8 +170,6 @@ fun LibraryScreen(
     ) { padding ->
         val list = podcasts
         Column(Modifier.fillMaxSize().padding(padding)) {
-        // Switch between the languages being learned; each has its own library.
-        LanguageBar(Modifier.padding(bottom = 4.dp))
         if (list != null && list.isEmpty() && importedCount == 0) {
             EmptyLibrary(
                 Modifier,
@@ -235,28 +235,22 @@ fun LibraryScreen(
     }
 }
 
-/** Three podcasts side by side: square rounded artwork, title, ★ for favourites. */
+/**
+ * Three covers side by side, almost edge to edge: the cover is the label (a long press shows
+ * the name), with the number of new episodes in the corner and ★ for favourites.
+ */
 @Composable
 private fun PodcastGridRow(row: List<com.ascolta.app.data.PodcastWithStats>, openPodcast: (Long?) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         row.forEach { p ->
-            Column(Modifier.weight(1f).clickable { openPodcast(p.podcast.id) }) {
-                Box {
-                    coil3.compose.AsyncImage(
-                        // A third of the screen wide: a ~400-pixel copy.
-                        model = com.ascolta.app.net.Artwork.sized(p.podcast.imageUrl, 400), contentDescription = p.podcast.title,
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large)
-                            .background(MaterialTheme.colorScheme.surfaceContainer),
-                    )
-                    if (p.podcast.favourite) {
-                        Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(18.dp))
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(p.podcast.title, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
+            CoverTile(
+                imageUrl = p.podcast.imageUrl,
+                title = p.podcast.title,
+                onClick = { openPodcast(p.podcast.id) },
+                badge = p.newCount,
+                favourite = p.podcast.favourite,
+                modifier = Modifier.weight(1f),
+            )
         }
         repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
     }

@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -121,6 +123,50 @@ fun LanguageBar(modifier: Modifier = Modifier) {
         }
     }
 
+    if (picking) {
+        LanguagePickerDialog(
+            title = stringResource(R.string.languages_learning),
+            initial = list,
+            multi = true,
+            onDone = { settings.setLearningList(it); picking = false },
+            onDismiss = { picking = false },
+        )
+    }
+}
+
+/**
+ * The language being learned as plain text with a small arrow ("Armenian ▾"), for a screen's
+ * title row: tapping it lists your languages to switch, and "Edit languages".
+ */
+@Composable
+fun LanguageMenu(modifier: Modifier = Modifier) {
+    val settings = LocalContext.current.graph.settings
+    val current by settings.learningLanguage.flow.collectAsState()
+    val all by settings.learningLanguages.flow.collectAsState()
+    val list = remember(all, current) { settings.learningList() }
+    var open by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+    Box(modifier) {
+        androidx.compose.material3.TextButton(onClick = { open = true }) {
+            Text(languageName(current), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Icon(androidx.compose.material.icons.Icons.Filled.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            list.forEach { code ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(flagAndName(code)) },
+                    trailingIcon = { if (code == current) Icon(androidx.compose.material.icons.Icons.Filled.Check, null) },
+                    onClick = { settings.switchLanguage(code); open = false },
+                )
+            }
+            androidx.compose.material3.HorizontalDivider()
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text(stringResource(R.string.languages_edit)) },
+                leadingIcon = { Icon(Icons.Filled.Add, null) },
+                onClick = { open = false; picking = true },
+            )
+        }
+    }
     if (picking) {
         LanguagePickerDialog(
             title = stringResource(R.string.languages_learning),
@@ -402,7 +448,7 @@ fun PodcastStep(
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -419,10 +465,11 @@ fun PodcastStep(
             }
             else -> gridItems(list, key = { it.podcast.feedUrl }) { pick ->
                 val on = pick.podcast.feedUrl in chosen
-                SelectTile(
-                    label = pick.podcast.title,
-                    selected = on,
+                CoverTile(
                     imageUrl = pick.podcast.artworkUrl,
+                    title = pick.podcast.title,
+                    checked = on,
+                    showTitle = true,
                     onClick = {
                         if (on) chosen.remove(pick.podcast.feedUrl)
                         else {

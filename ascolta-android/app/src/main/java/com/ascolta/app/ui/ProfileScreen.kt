@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
@@ -99,7 +100,7 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
             SettingsRow(Icons.Outlined.Category, stringResource(R.string.profile_personalize), subtitle = stringResource(R.string.profile_personalize_text)) {
                 openPersonalize()
             }
-            SettingsRow(Icons.Outlined.EmojiEvents, stringResource(R.string.profile_badges_milestones)) { openProgress() }
+            SettingsRow(Icons.Outlined.BarChart, stringResource(R.string.stats_title)) { openProgress() }
         }
         SectionCard(stringResource(R.string.profile_app_section)) {
             SettingsRow(Icons.Outlined.Subtitles, stringResource(R.string.section_display)) { openSettings("display") }

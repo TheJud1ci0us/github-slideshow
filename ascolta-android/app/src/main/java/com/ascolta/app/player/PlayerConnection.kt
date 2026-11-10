@@ -60,6 +60,30 @@ class PlayerConnection(
     @Volatile private var playingLanguage: String? = null
     private var lastTickWall = 0L
     private val episodeDao = db.episodeDao()
+    private val listeningDao = db.listeningDao()
+
+    /** Listening log (Statistics): time per (day, episode) not yet written, written every 30 s and on pause. */
+    private data class LogKey(val day: Int, val episodeId: Long, val podcastId: Long, val language: String)
+    private val pendingLog = HashMap<LogKey, Long>()
+    private var lastLogWrite = 0L
+    private var playingPodcastId = 0L
+
+    private fun logListening(ms: Long, language: String) {
+        val id = _state.value.episodeId ?: return
+        val key = LogKey(java.time.LocalDate.now().toEpochDay().toInt(), id, playingPodcastId, language)
+        pendingLog[key] = (pendingLog[key] ?: 0L) + ms
+        if (System.currentTimeMillis() - lastLogWrite > 30_000) writeLog()
+    }
+
+    private fun writeLog() {
+        lastLogWrite = System.currentTimeMillis()
+        if (pendingLog.isEmpty()) return
+        val batch = pendingLog.toMap()
+        pendingLog.clear()
+        scope.launch(Dispatchers.IO) {
+            batch.forEach { (k, ms) -> runCatching { listeningDao.record(k.day, k.episodeId, k.podcastId, k.language, ms) } }
+        }
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var controller: MediaController? = null
 
@@ -104,6 +128,7 @@ class PlayerConnection(
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
                     saveCurrentPosition()
                     progress.flush()
+                    writeLog()
                 }
             }
         })
@@ -145,6 +170,7 @@ class PlayerConnection(
             )
             .build()
         sentenceEnds = LongArray(0)
+        playingPodcastId = episode.podcastId ?: 0L
         playingLanguage = episode.podcastId?.let { podcastDao.get(it)?.libraryLanguage } ?: episode.transcriptLanguage
         _state.value = _state.value.copy(episodeId = episode.id, title = episode.title, subtitle = podcastTitle, artworkUrl = artworkUrl)
         c.setMediaItem(item, episode.playbackPositionMs)
@@ -260,7 +286,12 @@ class PlayerConnection(
                 val wall = System.currentTimeMillis()
                 if (c != null && c.isPlaying) {
                     // Listening time ("auditory milestones"), real time, per language.
-                    if (lastTickWall > 0) progress.addListening(playingLanguage ?: settings.learningLanguage.value, (wall - lastTickWall).coerceIn(0, 1_000))
+                    if (lastTickWall > 0) {
+                        val language = playingLanguage ?: settings.learningLanguage.value
+                        val ms = (wall - lastTickWall).coerceIn(0, 1_000)
+                        progress.addListening(language, ms)
+                        logListening(ms, language)
+                    }
                     val position = c.currentPosition
                     checkAutoPause(c, position)
                     checkSleep(c, position)
