@@ -1,6 +1,7 @@
 package com.ascolta.app.net
 
 import android.net.Uri
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 
@@ -31,6 +32,28 @@ sealed interface LinkResolution {
  * It returns each show's public RSS feed, which is what the app subscribes to.
  */
 class PodcastDirectory(private val http: OkHttpClient) {
+    /**
+     * Apple allows about 20 requests a minute: answers are kept for an hour and at most four
+     * requests run at once, so browsing themes and levels doesn't get the app refused.
+     */
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
+    private val gate = kotlinx.coroutines.sync.Semaphore(4)
+
+    private suspend fun get(url: String): String {
+        cache[url]?.takeIf { System.currentTimeMillis() - it.first < 3_600_000 }?.let { return it.second }
+        val body = gate.withPermit {
+            try {
+                http.fetchString(url)
+            } catch (e: java.io.IOException) {
+                // 403 here means "too many requests": wait a little and try once more.
+                if (e.message?.startsWith("HTTP 403") != true) throw e
+                kotlinx.coroutines.delay(4_000)
+                http.fetchString(url)
+            }
+        }
+        cache[url] = System.currentTimeMillis() to body
+        return body
+    }
 
     suspend fun search(term: String, country: String?, limit: Int = 40): List<DirectoryResult> {
         val url = Uri.parse("https://itunes.apple.com/search").buildUpon()
@@ -40,7 +63,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
             .appendQueryParameter("term", term)
             .apply { if (country != null) appendQueryParameter("country", country) }
             .build().toString()
-        return parseResults(http.fetchString(url))
+        return parseResults(get(url))
     }
 
     /**
@@ -56,7 +79,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
             .appendQueryParameter("term", term)
             .apply { if (country != null) appendQueryParameter("country", country) }
             .build().toString()
-        return parseResults(http.fetchString(url))
+        return parseResults(get(url))
     }
 
     /**
@@ -65,7 +88,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
      */
     suspend fun topByGenre(genreId: Int, country: String, limit: Int = 50): List<DirectoryResult> {
         val chart = JSONObject(
-            http.fetchString("https://itunes.apple.com/${country.lowercase()}/rss/toppodcasts/limit=$limit/genre=$genreId/json"),
+            get("https://itunes.apple.com/${country.lowercase()}/rss/toppodcasts/limit=$limit/genre=$genreId/json"),
         ).optJSONObject("feed")?.optJSONArray("entry") ?: return emptyList()
         val entries = (0 until chart.length()).mapNotNull { i ->
             val e = chart.getJSONObject(i)
@@ -75,7 +98,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
         }
         if (entries.isEmpty()) return emptyList()
         val summaries = entries.toMap()
-        val body = http.fetchString(
+        val body = get(
             "https://itunes.apple.com/lookup?entity=podcast&country=${country.lowercase()}&id=" + entries.joinToString(",") { it.first },
         )
         val found = JSONObject(body).optJSONArray("results") ?: return emptyList()
@@ -91,7 +114,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
     }
 
     suspend fun lookup(appleId: String): DirectoryResult? {
-        val body = http.fetchString("https://itunes.apple.com/lookup?entity=podcast&id=$appleId")
+        val body = get("https://itunes.apple.com/lookup?entity=podcast&id=$appleId")
         return parseResults(body).firstOrNull()
     }
 
@@ -136,7 +159,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
         }
 
         if ("spotify.com" in host || "spotify.link" in host) {
-            val html = runCatching { http.fetchString(url) }.getOrNull()
+            val html = runCatching { get(url) }.getOrNull()
                 ?: return LinkResolution.Unsupported("Couldn't open the Spotify link.")
             val ogTitle = metaContent(html, "og:title")
             val ogDescription = metaContent(html, "og:description")
@@ -152,7 +175,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
         }
 
         // Treat anything else as a feed, or a page that links to one.
-        val body = runCatching { http.fetchString(url) }.getOrElse {
+        val body = runCatching { get(url) }.getOrElse {
             return LinkResolution.Unsupported("Couldn't open that link: ${it.message}")
         }
         val head = body.take(2000).lowercase()

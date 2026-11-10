@@ -421,4 +421,5 @@
     <string name="model_crashed">%1$s falhou neste telefone ao transcrever. Escolha outro modelo em Perfil → Modelos de voz, ou apague-o e transfira-o novamente.</string>
     <string name="show_more">Mais</string>
     <string name="show_less">Menos</string>
+    <string name="feed_gone">O feed deste podcast já não está disponível (erro %1$d)</string>
 </resources>

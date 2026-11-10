@@ -421,4 +421,5 @@
     <string name="model_crashed">%1$s a planté sur ce téléphone pendant la transcription. Choisissez un autre modèle dans Profil → Modèles vocaux, ou supprimez-le et retéléchargez-le.</string>
     <string name="show_more">Plus</string>
     <string name="show_less">Moins</string>
+    <string name="feed_gone">Le flux de ce podcast n\'est plus disponible (erreur %1$d)</string>
 </resources>

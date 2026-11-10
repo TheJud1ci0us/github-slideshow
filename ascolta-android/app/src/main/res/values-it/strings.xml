@@ -421,4 +421,5 @@
     <string name="model_crashed">%1$s si è bloccato su questo telefono durante la trascrizione. Scegli un altro modello in Profilo → Modelli vocali, oppure eliminalo e scaricalo di nuovo.</string>
     <string name="show_more">Altro</string>
     <string name="show_less">Meno</string>
+    <string name="feed_gone">Il feed di questo podcast non è più disponibile (errore %1$d)</string>
 </resources>

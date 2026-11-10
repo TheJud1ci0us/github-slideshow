@@ -50,7 +50,7 @@ object Recommendations {
         )
         // Only podcasts really in the language (courses may also be in the learner's own).
         val declared = feedLanguage.ofAll(candidates.map { it.podcast.feedUrl })
-        verify(candidates, declared, language, native).take(limit)
+        verify(candidates, declared, language, native, feedLanguage::isDead).take(limit)
     }
 
     /**
@@ -78,22 +78,81 @@ object Recommendations {
         results.filter { genreId in it.genreIds }
 
     /** Keeps the picks in the right language and records each one's declared language (pure). */
-    fun verify(candidates: List<Pick>, declared: Map<String, String?>, language: String, native: String): List<Pick> =
+    fun verify(
+        candidates: List<Pick>,
+        declared: Map<String, String?>,
+        language: String,
+        native: String,
+        isDead: (String) -> Boolean = { false },
+    ): List<Pick> =
         candidates.mapNotNull { p ->
+            if (isDead(p.podcast.feedUrl)) return@mapNotNull null // the feed no longer works
             val lang = declared[p.podcast.feedUrl]
             if (LanguageCheck.keep(p.podcast.title, p.podcast.summary, lang, language, native, p.isCourse)) {
                 p.copy(podcast = p.podcast.copy(language = lang))
             } else null
         }
 
-    /** Courses for [language] (Language Learning genre), in its store and the US store. */
+    /**
+     * Podcasts for learners of [language] (beginner and intermediate): courses, slow and easy
+     * shows, stories for learners. Found by learner phrases in English in the US store ("learn
+     * Italian", "slow Italian"…) and in the language itself in its own store ("italiano facile",
+     * "やさしい日本語"…). Shows must name the language and look made for learners.
+     */
     suspend fun courses(directory: PodcastDirectory, language: String, country: String): List<DirectoryResult> = coroutineScope {
         val names = languageNames(language)
-        val found = names.flatMap { name -> listOf(country, "US").distinct().map { c -> async { runCatching { directory.searchGenre(name, GENRE_LEARNING, c) }.getOrDefault(emptyList()) } } }
+        val queries = learnerQueries(language, country)
+        val found = queries.map { (term, store) -> async { runCatching { directory.search(term, store, 100) }.getOrDefault(emptyList()) } }
             .awaitAll().flatten().distinctBy { it.feedUrl }
-        // Only courses that name this language (not "Learn Spanish" when learning Georgian).
-        found.filter { r -> names.any { n -> "${r.title} ${r.summary.orEmpty()}".contains(n, ignoreCase = true) } }
+        found.filter { r -> forLearners(r, names) }
     }
+
+    /** The searches made for [language]'s learner shows: (term, store) pairs (pure). */
+    fun learnerQueries(language: String, country: String): List<Pair<String, String>> {
+        val names = languageNames(language)
+        val english = names.last()
+        val inEnglish = listOf("learn $english", "$english for beginners", "easy $english", "slow $english", "intermediate $english")
+            .map { it to "US" }
+        val inLanguage = (LEARNER_TERMS[language].orEmpty() + names.first()).distinct().map { it to country }
+        return (inEnglish + inLanguage).distinct()
+    }
+
+    /**
+     * A show for learners of the language named in [names] (pure): it names the language (not
+     * "Learn Spanish" when learning Georgian) and looks like lessons, or is estimated below C1.
+     */
+    fun forLearners(r: DirectoryResult, names: List<String>): Boolean {
+        val text = "${r.title} ${r.summary.orEmpty()}"
+        if (names.none { n -> text.contains(n, ignoreCase = true) }) return false
+        return LevelGuess.looksLikeCourse(text) ||
+            LevelGuess.estimate(r.title, r.summary, r.genreIds.firstOrNull(), r.genre).band != LevelBand.ADVANCED
+    }
+
+    /**
+     * Learner phrases in each language (what shows for learners call themselves): "easy",
+     * "slow", "for foreigners", "beginner", "intermediate", "learn".
+     */
+    private val LEARNER_TERMS = mapOf(
+        "it" to listOf("italiano facile", "italiano lento", "italiano per stranieri", "imparare l'italiano", "italiano intermedio"),
+        "fr" to listOf("français facile", "français lent", "apprendre le français", "français langue étrangère", "français intermédiaire"),
+        "es" to listOf("español fácil", "español lento", "aprender español", "español para extranjeros", "español intermedio"),
+        "de" to listOf("einfaches Deutsch", "langsam gesprochen", "Deutsch lernen", "Deutsch für Anfänger", "Deutsch B1"),
+        "pt" to listOf("português fácil", "aprender português", "português para estrangeiros", "português intermediário"),
+        "nl" to listOf("makkelijk Nederlands", "Nederlands leren", "Nederlands voor beginners"),
+        "ja" to listOf("やさしい日本語", "日本語 初級", "日本語 中級", "日本語学習", "にほんご"),
+        "zh" to listOf("慢速中文", "中文 初级", "学中文", "汉语 中级"),
+        "ko" to listOf("한국어 초급", "한국어 배우기", "쉬운 한국어", "한국어 중급"),
+        "ru" to listOf("русский язык для иностранцев", "русский для начинающих", "учим русский", "медленный русский"),
+        "uk" to listOf("українська для початківців", "вивчати українську", "українська мова для іноземців"),
+        "tr" to listOf("kolay Türkçe", "Türkçe öğren", "yabancılar için Türkçe"),
+        "pl" to listOf("polski dla obcokrajowców", "nauka polskiego", "łatwy polski"),
+        "sv" to listOf("lätt svenska", "lär dig svenska", "svenska för nybörjare"),
+        "el" to listOf("εύκολα ελληνικά", "μάθε ελληνικά"),
+        "ar" to listOf("تعلم العربية", "عربي سهل"),
+        "he" to listOf("עברית קלה", "ללמוד עברית"),
+        "hi" to listOf("हिंदी सीखें", "आसान हिंदी"),
+        "ka" to listOf("ქართული ენა", "ქართულის სწავლა"),
+    )
 
     fun languageNames(language: String): List<String> {
         val locale = Locale.forLanguageTag(language)
@@ -170,7 +229,7 @@ class MoreLikeThis(
                 if (batch.isEmpty()) break
                 val declared = feedLanguage.ofAll(batch.map { it.feedUrl })
                 val picks = batch.map { Pick(it, LevelGuess.estimate(it.title, it.summary, g, it.genre)) }
-                val kept = Recommendations.verify(picks, declared, language, native)
+                val kept = Recommendations.verify(picks, declared, language, native, feedLanguage::isDead)
                 // Put back what wasn't needed this time, for the next tap.
                 val take = kept.take(count - out.size)
                 out += take

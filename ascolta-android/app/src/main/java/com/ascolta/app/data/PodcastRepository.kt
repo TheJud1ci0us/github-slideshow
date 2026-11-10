@@ -85,6 +85,8 @@ class PodcastRepository(
 
     suspend fun fetchFeed(url: String): ParsedFeed = withContext(Dispatchers.IO) {
         http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            // Gone or refused: say so plainly (Apple keeps listing some dead feeds).
+            if (response.code in 400..499) throw IOException(context.getString(R.string.feed_gone, response.code))
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             RssParser.parse(response.body!!.byteStream())
         }

@@ -414,4 +414,5 @@
     <string name="model_crashed">%1$s ist auf diesem Telefon beim Transkribieren abgestürzt. Wähle ein anderes Modell unter Profil → Spracherkennung oder lade es neu herunter.</string>
     <string name="show_more">Mehr</string>
     <string name="show_less">Weniger</string>
+    <string name="feed_gone">Der Feed dieses Podcasts ist nicht mehr verfügbar (Fehler %1$d)</string>
 </resources>

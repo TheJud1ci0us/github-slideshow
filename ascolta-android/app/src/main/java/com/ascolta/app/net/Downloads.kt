@@ -11,7 +11,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object Http {
-    const val USER_AGENT = "Ascolta/0.1 (Android podcast player)"
+    const val USER_AGENT = "LingoPod/0.12 (Android podcast player)"
 
     fun client(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)

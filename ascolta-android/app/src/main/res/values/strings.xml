@@ -441,4 +441,5 @@
     <string name="model_crashed">%1$s crashed on this phone while transcribing. Pick another model in Profile → Speech models, or delete and download it again.</string>
     <string name="show_more">More</string>
     <string name="show_less">Less</string>
+    <string name="feed_gone">This podcast\'s feed is no longer available (error %1$d)</string>
 </resources>

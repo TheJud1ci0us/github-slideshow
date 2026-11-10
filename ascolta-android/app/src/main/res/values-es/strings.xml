@@ -421,4 +421,5 @@
     <string name="model_crashed">%1$s se cerró en este teléfono al transcribir. Elige otro modelo en Perfil → Modelos de voz, o bórralo y descárgalo de nuevo.</string>
     <string name="show_more">Más</string>
     <string name="show_less">Menos</string>
+    <string name="feed_gone">El feed de este pódcast ya no está disponible (error %1$d)</string>
 </resources>

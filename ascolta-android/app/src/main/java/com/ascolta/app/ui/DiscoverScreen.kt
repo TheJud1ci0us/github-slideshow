@@ -1,6 +1,7 @@
 package com.ascolta.app.ui
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -113,6 +114,24 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
 
     val country = LANGUAGES.firstOrNull { it.code == learning }?.country
 
+    /**
+     * Opens a podcast from the suggestions or results, following it first if needed. A feed
+     * that can't be read says so right away (in a toast, since the header may be scrolled away).
+     */
+    fun followAndOpen(r: DirectoryResult) {
+        if (subscribing[r.feedUrl] == true) return
+        subscribing[r.feedUrl] = true
+        scope.launch {
+            runCatching { graph.repo.subscribe(r.feedUrl) }
+                .onSuccess { openPodcast(it) }
+                .onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    android.widget.Toast.makeText(context, context.getString(R.string.feed_failed, it.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+                }
+            subscribing[r.feedUrl] = false
+        }
+    }
+
     fun search(term: String) {
         if (term.isBlank()) return
         genre = null
@@ -130,12 +149,13 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             val native = settings.nativeLanguage.value
             val course = genreId == GENRE_LEARNING
             // The theme's chart plus shows found by the theme's own name, all filed under the theme.
-            val found = if (course) com.ascolta.app.data.Recommendations.courses(graph.directory, lang, country ?: "US")
+            val found = if (course) com.ascolta.app.data.Recommendations.courses(graph.directory, lang, country ?: "US").take(80)
             else com.ascolta.app.data.Recommendations.themed(graph.directory, genreId, lang, country ?: "US").take(60)
             // Only podcasts really in the language: the store of a small language is often
             // mostly in a neighbouring one (e.g. Russian in Georgia's).
             val declared = graph.feedLanguage.ofAll(found.map { it.feedUrl })
-            found.filter { com.ascolta.app.data.LanguageCheck.keep(it.title, it.summary, declared[it.feedUrl], lang, native, course) }
+            found.filter { !graph.feedLanguage.isDead(it.feedUrl) }
+                .filter { com.ascolta.app.data.LanguageCheck.keep(it.title, it.summary, declared[it.feedUrl], lang, native, course) }
                 .map { it.copy(language = declared[it.feedUrl]) }
         }
     }
@@ -157,8 +177,6 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     val estimates = remember(results, genre) {
         results.associate { it.feedUrl to LevelGuess.estimate(it.title, it.summary, genre, it.genre) }
     }
-    val atLevel = results.filter { band == null || estimates[it.feedUrl]?.band == band }
-    val shown = atLevel.ifEmpty { results }
     val genres = remember(interestsPref) {
         val mine = settings.interestList()
         GENRES.sortedBy { g -> if (g.id == GENRE_LEARNING) -1 else mine.indexOf(g.id).let { if (it < 0) 100 else it } }
@@ -168,6 +186,10 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     val resultLanguages by produceState<Map<String, String?>>(emptyMap(), results) {
         value = if (genre == null && results.isNotEmpty()) graph.feedLanguage.ofAll(results.take(40).map { it.feedUrl }) else emptyMap()
     }
+    // Feeds found not to work are hidden (re-evaluated once their check is done).
+    val working = remember(results, resultLanguages) { results.filter { !graph.feedLanguage.isDead(it.feedUrl) } }
+    val atLevel = working.filter { band == null || estimates[it.feedUrl]?.band == band }
+    val shown = atLevel.ifEmpty { working }
 
     // One scrolling grid: the header scrolls away, so results get the whole screen.
     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -222,6 +244,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                             selected = band == b,
                             onClick = {
                                 band = if (band == b) null else b
+                                // Nothing on screen yet: a level opens the shows for learners at that level.
+                                if (band != null && band != LevelBand.ADVANCED && results.isEmpty() && query.isBlank()) browse(GENRE_LEARNING)
                                 com.ascolta.app.data.Analytics.track("Discover.levelFilter", mapOf("band" to (band?.name ?: "all")))
                             },
                             label = { Text(b.label) },
@@ -265,13 +289,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                             label = r.title,
                             selected = r.feedUrl in subscribed,
                             imageUrl = r.artworkUrl,
-                            onClick = {
-                                scope.launch {
-                                    runCatching { graph.repo.subscribe(r.feedUrl) }
-                                        .onSuccess { if (r.feedUrl in subscribed) openPodcast(it) }
-                                        .onFailure { error = context.getString(R.string.feed_failed, it.message ?: "") }
-                                }
-                            },
+                            onClick = { followAndOpen(r) },
                         )
                     }
                 }
@@ -283,6 +301,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             val level = estimates[r.feedUrl]
             val lang = r.language ?: resultLanguages[r.feedUrl]
             ListItem(
+                // Tapping the row opens the podcast (following it, as there's no preview yet).
+                modifier = Modifier.clickable { followAndOpen(r) },
                 headlineContent = { Text(r.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 supportingContent = {
                     Column {
@@ -303,9 +323,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 trailingContent = {
                     when {
                         subscribing[r.feedUrl] == true -> SmallSpinner()
-                        isSubscribed -> TextButton(onClick = {
-                            scope.launch { openPodcast(graph.repo.subscribe(r.feedUrl)) }
-                        }) { Icon(Icons.Filled.Check, null); Text(stringResource(R.string.action_open)) }
+                        isSubscribed -> TextButton(onClick = { followAndOpen(r) }) { Icon(Icons.Filled.Check, null); Text(stringResource(R.string.action_open)) }
                         else -> FilledTonalButton(onClick = {
                             subscribing[r.feedUrl] = true
                             scope.launch {

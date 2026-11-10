@@ -100,7 +100,7 @@ object LevelGuess {
     /** Looks like a course or lessons for learners (not just a show that mentions a language). */
     fun looksLikeCourse(text: String): Boolean {
         val lower = text.lowercase()
-        return learner.any { lower.contains(it) } || explicit.containsMatchIn(text)
+        return learner.any { lower.contains(it) } || beginner.any { lower.contains(it) } || explicit.containsMatchIn(text)
     }
 
     private val englishWords = setOf("the", "and", "of", "to", "you", "with", "your", "is", "for", "this", "that", "we", "our", "about", "every", "from")
