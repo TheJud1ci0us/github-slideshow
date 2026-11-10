@@ -117,6 +117,10 @@ interface EpisodeDao {
     @Query("UPDATE episodes SET downloadState = :state, downloadProgress = :progress, error = :error WHERE id = :id")
     suspend fun setDownload(id: Long, state: Int, progress: Float, error: String? = null)
 
+    /** Fills in an episode's length when the feed didn't give one (read from the downloaded file). */
+    @Query("UPDATE episodes SET durationSec = :seconds WHERE id = :id AND durationSec <= 0")
+    suspend fun fillDuration(id: Long, seconds: Long)
+
     @Query("UPDATE episodes SET localPath = :path, downloadState = :state, downloadProgress = 1, downloadedAt = :at WHERE id = :id")
     suspend fun setLocalPath(id: Long, path: String?, state: Int, at: Long = System.currentTimeMillis())
 

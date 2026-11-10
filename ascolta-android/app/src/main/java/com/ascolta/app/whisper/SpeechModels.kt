@@ -182,6 +182,12 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
         else -> model.files.all(::isPresent)
     }
 
+    /** Bytes still to download for [model] (exact: the sizes are checked). */
+    fun missingBytes(model: SpeechModel): Long = model.files.filter { !isPresent(it) }.sumOf { it.approxBytes }
+
+    /** Bytes still to download for the voice-detection model (0 when present). */
+    fun vadMissingBytes(): Long = if (isVadDownloaded()) 0 else VAD_MODEL.approxBytes
+
     fun vadFile(): File = file(VAD_MODEL.name)
     fun isVadDownloaded() = vadFile().let { it.exists() && it.length() == VAD_MODEL.approxBytes }
 

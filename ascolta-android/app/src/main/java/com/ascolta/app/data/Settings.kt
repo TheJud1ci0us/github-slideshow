@@ -153,6 +153,8 @@ class Settings(context: Context) {
     /** The first-launch language choice has been made. */
     val onboarded = bool("onboarded", false)
     /** The guided tours were seen (or skipped); "Show the tutorial" in About resets them. */
+    /** Ask before downloading on mobile data (with the size); off = "Don't ask again". */
+    val askOnMobileData = bool("ask_on_mobile_data", true)
     val tourSeen = bool("tour_seen", false)
     val playerTourSeen = bool("player_tour_seen", false)
 

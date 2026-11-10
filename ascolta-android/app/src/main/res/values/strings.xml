@@ -518,8 +518,8 @@
     <string name="tour_stats_text">Profile → Statistics shows your listening time, streaks, records and podcasts.</string>
     <string name="tour_transcript_title">The transcript</string>
     <string name="tour_transcript_text">Tap a word for its meaning and to hear it. Long-press a word to select a phrase: save it with its audio, or shadow it. Long-press a sentence\'s time to select the whole sentence.</string>
-    <string name="tour_more_title">The ⋯ menu</string>
-    <string name="tour_more_text">Text size, translation under each sentence (double subtitles), word highlighting, pause after each sentence, Japanese furigana or romaji, and Shadow this sentence.</string>
+    <string name="tour_more_title">Display options</string>
+    <string name="tour_more_text">Text size, translation under each sentence (double subtitles), word highlighting, furigana or romaji, and shadowing a sentence.</string>
     <string name="tour_controls_title">Controls</string>
     <string name="tour_controls_text">Previous / next sentence, repeat the sentence, and speed. The picture button switches between the cover and the transcript.</string>
     <string name="tour_skip">Skip</string>
@@ -531,4 +531,15 @@
     <string name="play_mine">My recording</string>
     <string name="export_text">As text (any flashcard app)</string>
     <string name="export_anki">For Anki, with audio (.zip)</string>
+    <string name="length_unknown">Length unknown: download the episode to move through it</string>
+    <string name="size_about">about</string>
+    <string name="data_warning_title">Download %1$s on mobile data?</string>
+    <string name="data_warning_text">You\'re not on Wi-Fi. This download uses your mobile data allowance, and your operator may charge extra depending on your plan.</string>
+    <string name="data_warning_dont_ask">Don\'t ask again</string>
+    <string name="data_warning_now">Download now</string>
+    <string name="data_warning_wifi">Wait for Wi-Fi</string>
+    <string name="voice_detection">Voice detection</string>
+    <string name="translation_model_named">Translation model (%1$s)</string>
+    <string name="ask_mobile_title">Ask before using mobile data</string>
+    <string name="ask_mobile_text">Shows the size of a download and lets you wait for Wi-Fi</string>
 </resources>

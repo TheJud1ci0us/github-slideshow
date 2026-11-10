@@ -58,6 +58,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 setProgress(workDataOf(WorkScheduler.KEY_PROGRESS to fraction))
             }
             dao.setLocalPath(id, dest.path, DownloadState.DONE)
+            // The feed may not say how long the episode is: read it from the file (the timeline needs it).
+            com.ascolta.app.data.AudioLength.of(dest.path)?.let { dao.fillDuration(id, it / 1000) }
             AppLog.i(TAG, "Downloaded #$id (${dest.length() / 1_000_000} MB)")
             if (dao.get(id)?.transcriptState == TranscriptState.QUEUED) {
                 // A transcription was waiting for this download.

@@ -43,6 +43,32 @@ class TranslationService(
 
     fun isSupported(source: String, target: String) = route(source, target) != null
 
+    /**
+     * What translating [source] → [target] still needs to download: (name, bytes, exact?).
+     * Helsinki models have exact sizes; Google's are about 30 MB per language.
+     */
+    suspend fun missingDownloads(source: String, target: String): List<Triple<String, Long, Boolean>> {
+        val hops = route(source, target) ?: return emptyList()
+        val out = mutableListOf<Triple<String, Long, Boolean>>()
+        val downloaded = runCatching {
+            RemoteModelManager.getInstance().getDownloadedModels(TranslateRemoteModel::class.java).await().map { it.language }.toSet()
+        }.getOrDefault(emptySet())
+        for (h in hops) {
+            if (h.opus) {
+                val bytes = opus!!.missingBytes(h.source, h.target)
+                if (bytes > 0) out += Triple("${h.source} → ${h.target}", bytes, true)
+            } else {
+                for (lang in listOf(h.source, h.target).distinct()) {
+                    val tag = TranslateLanguage.fromLanguageTag(lang) ?: continue
+                    if (tag != TranslateLanguage.ENGLISH && tag !in downloaded && out.none { it.first == lang }) {
+                        out += Triple(lang, 30_000_000L, false)
+                    }
+                }
+            }
+        }
+        return out
+    }
+
     private suspend fun translatorFor(source: String, target: String): Translator = mutex.withLock {
         val key = source to target
         translator?.takeIf { pair == key }?.let { return it }

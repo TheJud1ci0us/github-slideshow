@@ -168,7 +168,20 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     }
 
     val position = if (isCurrent) player.positionMs else ep?.playbackPositionMs ?: 0
-    val duration = if (isCurrent && player.durationMs > 0) player.durationMs else (ep?.durationSec ?: 0) * 1000
+    // The length: player, feed, downloaded file (read once, then saved), or the transcript's end.
+    val fileMs by produceState<Long?>(null, ep?.localPath, ep?.durationSec) {
+        if (ep == null || ep.durationSec > 0) return@produceState
+        // The downloaded file, or else the stream itself (its first bytes give the length).
+        val path = ep.localPath?.takeIf { java.io.File(it).exists() } ?: ep.audioUrl ?: return@produceState
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.ascolta.app.data.AudioLength.of(path) }
+        value?.let { ms -> graph.db.episodeDao().fillDuration(ep.id, ms / 1000) }
+    }
+    val duration = com.ascolta.app.data.AudioLength.best(
+        playerMs = if (isCurrent) player.durationMs else 0,
+        feedSec = ep?.durationSec ?: 0,
+        fileMs = fileMs,
+        transcriptEndMs = segments.lastOrNull()?.endMs,
+    )
     // Sentence at (or just before) the playback position; used for navigation and scrolling.
     val navIndex = segments.indexAt(position)
     // Highlighted sentence: none during music or long silences after a sentence has ended.
@@ -627,6 +640,11 @@ private fun CheckItem(label: String, checked: Boolean, onChange: (Boolean) -> Un
 private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating: Boolean) {
     val graph = LocalContext.current.graph
     val scope = rememberCoroutineScope()
+    val dataWarning = rememberDataWarning()
+    fun transcribe() = dataWarning.run(
+        needs = { graph.repo.downloadNeeds(ep.id, transcribe = true) },
+        onWifi = { scope.launch { graph.repo.transcribe(ep.id, wifiOnly = true) } },
+    ) { scope.launch { graph.repo.transcribe(ep.id) } }
     val partial = transcript?.segments?.isNotEmpty() == true
     when (ep.transcriptState) {
         // One compact line, so the transcript keeps most of the screen.
@@ -677,7 +695,7 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            Button(onClick = { scope.launch { graph.repo.transcribe(ep.id) } }) {
+            Button(onClick = { transcribe() }) {
                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.action_continue))
             }
@@ -689,7 +707,7 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            Button(onClick = { scope.launch { graph.repo.transcribe(ep.id) } }) {
+            Button(onClick = { transcribe() }) {
                 Text(stringResource(R.string.ep_create_transcript))
             }
         }
@@ -1060,6 +1078,11 @@ private fun Controls(
                 },
                 enabled = duration > 0,
             )
+            if (duration <= 0) {
+                // Length unknown (no duration in the feed, and not downloaded): say why the bar can't move.
+                Text(stringResource(R.string.length_unknown), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Row(Modifier.fillMaxWidth()) {
                 Text(formatTime(dragging?.let { (it * duration).toLong() } ?: position), style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.weight(1f))

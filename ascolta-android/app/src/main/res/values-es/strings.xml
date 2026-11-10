@@ -498,8 +498,8 @@
     <string name="tour_stats_text">Perfil → Estadísticas muestra tu tiempo de escucha, rachas, récords y pódcasts.</string>
     <string name="tour_transcript_title">La transcripción</string>
     <string name="tour_transcript_text">Toca una palabra para ver su significado y oírla. Mantén pulsada una palabra para seleccionar un fragmento: guárdalo con su audio o haz shadowing. Mantén pulsada la hora de una frase para seleccionarla entera.</string>
-    <string name="tour_more_title">El menú ⋯</string>
-    <string name="tour_more_text">Tamaño del texto, traducción bajo cada frase (subtítulos dobles), resaltado de palabras, pausa tras cada frase, furigana o romaji para el japonés, y Shadowing de esta frase.</string>
+    <string name="tour_more_title">Opciones de visualización</string>
+    <string name="tour_more_text">Tamaño del texto, traducción bajo cada frase (subtítulos dobles), resaltado de palabras, furigana o romaji, y shadowing de una frase.</string>
     <string name="tour_controls_title">Controles</string>
     <string name="tour_controls_text">Frase anterior / siguiente, repetir la frase y velocidad. El botón de imagen cambia entre la portada y la transcripción.</string>
     <string name="tour_skip">Saltar</string>
@@ -511,4 +511,15 @@
     <string name="play_mine">Mi grabación</string>
     <string name="export_text">Como texto (cualquier app de tarjetas)</string>
     <string name="export_anki">Para Anki, con audio (.zip)</string>
+    <string name="length_unknown">Duración desconocida: descarga el episodio para moverte por él</string>
+    <string name="size_about">unos</string>
+    <string name="data_warning_title">¿Descargar %1$s con datos móviles?</string>
+    <string name="data_warning_text">No estás en Wi-Fi. Esta descarga usa tus datos móviles y tu operador podría cobrar más según tu tarifa.</string>
+    <string name="data_warning_dont_ask">No volver a preguntar</string>
+    <string name="data_warning_now">Descargar ahora</string>
+    <string name="data_warning_wifi">Esperar al Wi-Fi</string>
+    <string name="voice_detection">Detección de voz</string>
+    <string name="translation_model_named">Modelo de traducción (%1$s)</string>
+    <string name="ask_mobile_title">Preguntar antes de usar datos móviles</string>
+    <string name="ask_mobile_text">Muestra el tamaño de una descarga y permite esperar al Wi-Fi</string>
 </resources>

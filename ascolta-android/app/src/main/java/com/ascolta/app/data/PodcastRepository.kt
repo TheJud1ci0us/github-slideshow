@@ -263,13 +263,13 @@ class PodcastRepository(
 
     // ---- Downloads & transcription ------------------------------------------
 
-    suspend fun download(episodeId: Long, manual: Boolean = true) {
+    suspend fun download(episodeId: Long, manual: Boolean = true, wifiOnly: Boolean = false) {
         val episode = episodeDao.get(episodeId) ?: return
         if (episode.downloadState in listOf(DownloadState.QUEUED, DownloadState.DOWNLOADING, DownloadState.DONE)) return
         episodeDao.setDownload(episodeId, DownloadState.QUEUED, 0f)
         // Downloading doesn't start a transcription: that's chosen per episode (Transcribe button)
         // unless automatic transcription is switched on in Settings.
-        WorkScheduler.download(context, episodeId, transcribeAfter = settings.autoTranscribe.value, manual = manual)
+        WorkScheduler.download(context, episodeId, transcribeAfter = settings.autoTranscribe.value, manual = manual, wifiOnly = wifiOnly)
         if (manual && WorkScheduler.blockedByNetworkMode(context)) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 android.widget.Toast.makeText(context, context.getString(R.string.waiting_for_wifi), android.widget.Toast.LENGTH_LONG).show()
@@ -282,7 +282,7 @@ class PodcastRepository(
      * episode being transcribed or waiting is stopped first (its progress is kept, so
      * "Continue" resumes it) and this one starts right away instead of waiting its turn.
      */
-    suspend fun transcribe(episodeId: Long, manual: Boolean = true, takeOver: Boolean = manual) {
+    suspend fun transcribe(episodeId: Long, manual: Boolean = true, takeOver: Boolean = manual, wifiOnly: Boolean = false) {
         Analytics.track("Transcription.requested", mapOf("manual" to manual.toString()))
         val episode = episodeDao.get(episodeId) ?: return
         // Already waiting its turn: a Transcribe press moves it to the front.
@@ -298,8 +298,11 @@ class PodcastRepository(
             ?: episode.transcriptLanguage
             ?: settings.learningLanguage.value
         episodeDao.setTranscriptLanguage(episodeId, language)
-        episodeDao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, context.getString(R.string.status_waiting))
-        WorkScheduler.transcribe(context, episodeId, manual)
+        episodeDao.setTranscript(
+            episodeId, TranscriptState.QUEUED, episode.transcriptProgress,
+            context.getString(if (wifiOnly) R.string.waiting_for_wifi else R.string.status_waiting),
+        )
+        WorkScheduler.transcribe(context, episodeId, manual, wifiOnly = wifiOnly)
     }
 
     /** Stops every other queued or running transcription (their progress is kept). */
@@ -336,6 +339,37 @@ class PodcastRepository(
         } else {
             transcribe(episodeId, manual = true, takeOver = false)
         }
+    }
+
+    /**
+     * What a tap will download (for the mobile-data warning): the episode's audio when it isn't
+     * downloaded, and, for a transcription, the speech model, the voice-detection model and the
+     * translation models that are still missing.
+     */
+    suspend fun downloadNeeds(episodeId: Long, transcribe: Boolean): List<DownloadCost.Item> {
+        val episode = episodeDao.get(episodeId) ?: return emptyList()
+        val out = mutableListOf<DownloadCost.Item>()
+        if (episode.localPath?.let { File(it).exists() } != true) {
+            val exact = episode.audioUrl?.let { DownloadCost.remoteSize(http, it) }
+            out += if (exact != null) DownloadCost.Item(episode.title, exact, true)
+            else DownloadCost.Item(episode.title, DownloadCost.estimate(episode.durationSec), false)
+        }
+        if (transcribe) {
+            val podcast = podcastDao.get(episode.podcastId ?: -1)
+            val language = podcast?.libraryLanguage ?: episode.transcriptLanguage ?: settings.learningLanguage.value
+            val model = settings.modelFor(language)
+            val models = (context.applicationContext as com.ascolta.app.AscoltaApp).graph.models
+            models.missingBytes(model).takeIf { it > 0 }?.let { out += DownloadCost.Item(model.label, it, true) }
+            if (model.engine != com.ascolta.app.whisper.Engine.WHISPER || settings.skipNonSpeech.value) {
+                models.vadMissingBytes().takeIf { it > 0 }?.let { out += DownloadCost.Item(context.getString(R.string.voice_detection), it, true) }
+            }
+            if (settings.translate.value) {
+                translation.missingDownloads(language, settings.nativeLanguage.value).forEach { (name, bytes, exact) ->
+                    out += DownloadCost.Item(context.getString(R.string.translation_model_named, name), bytes, exact)
+                }
+            }
+        }
+        return out
     }
 
     /**

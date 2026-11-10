@@ -4,7 +4,7 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@color/window_dark</item>
     </style>
-    <color name="ic_launcher_background">#FFF6F1EA</color>
+    <color name="ic_launcher_background">#FF0A0B0B</color>
     <!-- Dark mode only: no white flash while the app starts. -->
     <color name="window_dark">#FF1A1110</color>
 </resources>

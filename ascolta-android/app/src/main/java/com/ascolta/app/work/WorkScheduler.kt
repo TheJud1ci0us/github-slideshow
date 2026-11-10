@@ -61,14 +61,14 @@ object WorkScheduler {
             .enqueueUniquePeriodicWork(REFRESH_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
-    fun download(context: Context, episodeId: Long, transcribeAfter: Boolean, manual: Boolean) {
+    fun download(context: Context, episodeId: Long, transcribeAfter: Boolean, manual: Boolean, wifiOnly: Boolean = false) {
         // The network mode applies to every download, including ones started by hand
         // (in Wi-Fi mode they wait for Wi-Fi).
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setInputData(workDataOf(KEY_EPISODE_ID to episodeId, KEY_TRANSCRIBE_AFTER to transcribeAfter))
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(allowedNetwork(context))
+                    .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else allowedNetwork(context))
                     .build(),
             )
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -85,11 +85,14 @@ object WorkScheduler {
      * Each episode has its own job; TranscribeWorker makes them take turns, since
      * speech recognition uses most of the CPU and a lot of memory.
      */
-    fun transcribe(context: Context, episodeId: Long, manual: Boolean, replace: Boolean = false) {
+    /** [wifiOnly]: the job (and the downloads it needs) waits for Wi-Fi. */
+    fun transcribe(context: Context, episodeId: Long, manual: Boolean, replace: Boolean = false, wifiOnly: Boolean = false) {
         val chargingOnly = context.graph.settings.chargingOnly.value && !manual
         val request = OneTimeWorkRequestBuilder<TranscribeWorker>()
             .setInputData(workDataOf(KEY_EPISODE_ID to episodeId))
-            .setConstraints(Constraints.Builder().setRequiresCharging(chargingOnly).build())
+            .setConstraints(Constraints.Builder().setRequiresCharging(chargingOnly).apply {
+                if (wifiOnly) setRequiredNetworkType(NetworkType.UNMETERED)
+            }.build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
@@ -114,10 +117,10 @@ object WorkScheduler {
                 .any { !it.state.isFinished }
         }
 
-    fun downloadModel(context: Context, model: SpeechModel) {
+    fun downloadModel(context: Context, model: SpeechModel, wifiOnly: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
             .setInputData(workDataOf(KEY_MODEL_ID to model.id))
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(allowedNetwork(context)).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else allowedNetwork(context)).build())
             .build()
         WorkManager.getInstance(context)
             .enqueueUniqueWork(modelWorkName(model), ExistingWorkPolicy.KEEP, request)

@@ -214,6 +214,8 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
 
 @Composable
 private fun EpisodeRow(ep: EpisodeEntity, onOpen: () -> Unit) {
+    // Downloads on mobile data: say the size and offer Wi-Fi first.
+    val dataWarning = rememberDataWarning()
     val graph = LocalContext.current.graph
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -252,7 +254,10 @@ private fun EpisodeRow(ep: EpisodeEntity, onOpen: () -> Unit) {
                     })
                 } else if (ep.downloadState != DownloadState.DONE && ep.audioUrl != null) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.ep_download)) }, onClick = {
-                        menu = false; scope.launch { graph.repo.download(ep.id) }
+                        menu = false
+                        dataWarning.run(needs = { graph.repo.downloadNeeds(ep.id, transcribe = false) }, onWifi = { scope.launch { graph.repo.download(ep.id, wifiOnly = true) } }) {
+                            scope.launch { graph.repo.download(ep.id) }
+                        }
                     })
                 }
                 if (transcribing) {
@@ -263,7 +268,10 @@ private fun EpisodeRow(ep: EpisodeEntity, onOpen: () -> Unit) {
                 if (ep.transcriptState == TranscriptState.NONE || ep.transcriptState == TranscriptState.FAILED) {
                     val label = if (ep.transcriptProgress > 0f) R.string.ep_continue_transcript else R.string.ep_create_transcript
                     DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = {
-                        menu = false; scope.launch { graph.repo.transcribe(ep.id) }
+                        menu = false
+                        dataWarning.run(needs = { graph.repo.downloadNeeds(ep.id, transcribe = true) }, onWifi = { scope.launch { graph.repo.transcribe(ep.id, wifiOnly = true) } }) {
+                            scope.launch { graph.repo.transcribe(ep.id) }
+                        }
                     })
                 }
                 if (ep.transcriptState == TranscriptState.DONE) {

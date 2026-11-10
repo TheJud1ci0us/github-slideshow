@@ -39,6 +39,13 @@ class OpusModels(private val context: Context, private val http: OkHttpClient) {
 
     private fun dir(key: String) = File(context.filesDir, "opus/$key")
 
+    /** Bytes still to download for this pair (exact). */
+    fun missingBytes(source: String, target: String): Long {
+        val key = "$source-$target"
+        val (_, files) = pairs[key] ?: return 0
+        return files.filter { f -> File(dir(key), f.path.substringAfterLast('/')).length() != f.bytes }.sumOf { it.bytes }
+    }
+
     fun isDownloaded(source: String, target: String): Boolean {
         val key = "$source-$target"
         val (_, files) = pairs[key] ?: return false

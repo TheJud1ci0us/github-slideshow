@@ -1,5 +1,6 @@
 package com.ascolta.app.ui
 
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -88,6 +89,16 @@ fun ForgetTourTarget(id: String) {
 fun TourOverlay(steps: List<Tour.Step>, onDone: () -> Unit) {
     var index by remember { mutableIntStateOf(0) }
     val step = steps.getOrNull(index) ?: return
+    // The arrow's gentle back-and-forth nudge toward the control.
+    val nudge by androidx.compose.animation.core.rememberInfiniteTransition(label = "tour").animateFloat(
+        initialValue = 0f, targetValue = 1f, label = "nudge",
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(800, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+    )
+    var cardBounds by remember { androidx.compose.runtime.mutableStateOf<Rect?>(null) }
+    val arrowColor = MaterialTheme.colorScheme.primary
     val rect = step.target?.let { Tour.targets[it] }
     val density = LocalDensity.current
     val pad = with(density) { 8.dp.toPx() }
@@ -110,18 +121,58 @@ fun TourOverlay(steps: List<Tour.Step>, onDone: () -> Unit) {
                 )
             }
         }
+        // A thin curved arrow from the card to the control.
+        val card = cardBounds
+        if (rect != null && card != null) {
+            Canvas(Modifier.fillMaxSize()) {
+                val targetAbove = rect.center.y < card.top
+                val start = Offset(card.center.x, if (targetAbove) card.top else card.bottom)
+                val gap = 10.dp.toPx() + nudge * 6.dp.toPx()
+                val end = Offset(
+                    rect.center.x,
+                    if (targetAbove) rect.bottom + pad + gap else rect.top - pad - gap,
+                )
+                // Bend sideways for a hand-drawn feel.
+                val control = Offset((start.x + end.x) / 2 + (end.y - start.y) * 0.25f, (start.y + end.y) / 2)
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(start.x, start.y)
+                    quadraticTo(control.x, control.y, end.x, end.y)
+                }
+                val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawPath(path, arrowColor, style = stroke)
+                // Arrow head along the curve's last direction.
+                val dx = end.x - control.x
+                val dy = end.y - control.y
+                val len = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                val ux = dx / len
+                val uy = dy / len
+                val head = 11.dp.toPx()
+                fun wing(angle: Double): Offset {
+                    val c = kotlin.math.cos(angle).toFloat()
+                    val sn = kotlin.math.sin(angle).toFloat()
+                    return Offset(end.x - head * (ux * c - uy * sn), end.y - head * (ux * sn + uy * c))
+                }
+                drawPath(
+                    androidx.compose.ui.graphics.Path().apply {
+                        moveTo(wing(0.5).x, wing(0.5).y); lineTo(end.x, end.y); lineTo(wing(-0.5).x, wing(-0.5).y)
+                    },
+                    arrowColor, style = stroke,
+                )
+            }
+        }
         val screenH = with(density) { maxHeight.toPx() }
         // The card goes below the control, or above it when the control is low on the screen.
         val below = rect == null || rect.bottom < screenH * 0.55f
         val cardModifier = when {
             rect == null -> Modifier.align(Alignment.Center)
-            below -> Modifier.offset { IntOffset(0, (rect.bottom + pad * 2).toInt()) }
-            else -> Modifier.align(Alignment.BottomCenter).offset { IntOffset(0, -(screenH - rect.top + pad * 2).toInt()) }
+            below -> Modifier.offset { IntOffset(0, (rect.bottom + pad * 10).toInt()) }
+            else -> Modifier.align(Alignment.BottomCenter).offset { IntOffset(0, -(screenH - rect.top + pad * 10).toInt()) }
         }
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = cardModifier.statusBarsPadding().navigationBarsPadding().padding(horizontal = 20.dp).fillMaxWidth(),
+            modifier = cardModifier.statusBarsPadding().navigationBarsPadding().padding(horizontal = 20.dp).fillMaxWidth()
+                .onGloballyPositioned { cardBounds = it.boundsInRoot() },
         ) {
             Column(Modifier.padding(20.dp)) {
                 Text("${index + 1} / ${steps.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)

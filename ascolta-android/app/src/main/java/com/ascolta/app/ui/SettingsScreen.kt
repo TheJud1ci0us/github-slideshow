@@ -222,6 +222,8 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
             "downloads" -> {
                 Section(stringResource(R.string.section_network))
                 NetworkModeRows(settings.wifiOnly)
+                // Ask before downloading on mobile data, showing the size.
+                SwitchRow(stringResource(R.string.ask_mobile_title), stringResource(R.string.ask_mobile_text), settings.askOnMobileData)
 
                 Section(stringResource(R.string.section_auto))
                 SwitchRow(stringResource(R.string.auto_new_title), stringResource(R.string.auto_new_text), settings.autoDownloadNew)
@@ -418,6 +420,8 @@ private fun LanguagePicker(label: String, value: String, onChange: (String) -> U
 
 @Composable
 private fun TranslationModelRow(source: String, target: String) {
+    val dataWarning = rememberDataWarning()
+    val context = LocalContext.current
     val graph = LocalContext.current.graph
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -445,13 +449,19 @@ private fun TranslationModelRow(source: String, target: String) {
         trailingContent = {
             if (supported && downloaded == false && !busy) {
                 OutlinedButton(onClick = {
-                    busy = true
-                    error = null
-                    scope.launch {
-                        runCatching { graph.repo.ensureTranslationModel(source, target) }
-                            .onFailure { error = it.message }
-                        busy = false
-                        key++
+                    dataWarning.run(needs = {
+                        graph.translation.missingDownloads(source, target).map { (n, b, e) ->
+                            com.ascolta.app.data.DownloadCost.Item(context.getString(R.string.translation_model_named, n), b, e)
+                        }
+                    }) {
+                        busy = true
+                        error = null
+                        scope.launch {
+                            runCatching { graph.repo.ensureTranslationModel(source, target) }
+                                .onFailure { error = it.message }
+                            busy = false
+                            key++
+                        }
                     }
                 }) { Text(stringResource(R.string.action_download)) }
             }
@@ -484,6 +494,7 @@ private fun ModelRow(
     /** "Light" / "Balanced" / "Best": shown as the title, the model's name below it. */
     tier: String? = null,
 ) {
+    val dataWarning = rememberDataWarning()
     val context = LocalContext.current
     val graph = context.graph
     val work by remember(model) {
@@ -553,9 +564,15 @@ private fun ModelRow(
                         Text(stringResource(R.string.action_delete))
                     }
                     model != SpeechModel.CUSTOM -> TextButton(enabled = enabled, onClick = {
-                        WorkScheduler.downloadModel(context, model)
-                        if (WorkScheduler.blockedByNetworkMode(context)) {
-                            Toast.makeText(context, context.getString(R.string.waiting_for_wifi), Toast.LENGTH_LONG).show()
+                        // On mobile data: the exact size first, with the option to wait for Wi-Fi.
+                        dataWarning.run(
+                            needs = { listOf(com.ascolta.app.data.DownloadCost.Item(model.label, graph.models.missingBytes(model), true)) },
+                            onWifi = { WorkScheduler.downloadModel(context, model, wifiOnly = true) },
+                        ) {
+                            WorkScheduler.downloadModel(context, model)
+                            if (WorkScheduler.blockedByNetworkMode(context)) {
+                                Toast.makeText(context, context.getString(R.string.waiting_for_wifi), Toast.LENGTH_LONG).show()
+                            }
                         }
                     }) {
                         Text(stringResource(R.string.action_get))

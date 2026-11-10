@@ -491,8 +491,8 @@
     <string name="tour_stats_text">Profil → Statistik zeigt Hörzeit, Serien, Rekorde und Podcasts.</string>
     <string name="tour_transcript_title">Das Transkript</string>
     <string name="tour_transcript_text">Tippe auf ein Wort für seine Bedeutung und Aussprache. Halte ein Wort gedrückt, um einen Abschnitt auszuwählen: mit Audio speichern oder nachsprechen. Halte die Zeit eines Satzes gedrückt, um den ganzen Satz zu wählen.</string>
-    <string name="tour_more_title">Das ⋯-Menü</string>
-    <string name="tour_more_text">Textgröße, Übersetzung unter jedem Satz (doppelte Untertitel), Wortmarkierung, Pause nach jedem Satz, Furigana oder Romaji für Japanisch und Diesen Satz nachsprechen.</string>
+    <string name="tour_more_title">Anzeigeoptionen</string>
+    <string name="tour_more_text">Textgröße, Übersetzung unter jedem Satz (doppelte Untertitel), Wortmarkierung, Furigana oder Romaji und einen Satz nachsprechen.</string>
     <string name="tour_controls_title">Steuerung</string>
     <string name="tour_controls_text">Vorheriger / nächster Satz, Satz wiederholen und Geschwindigkeit. Die Bild-Taste wechselt zwischen Cover und Transkript.</string>
     <string name="tour_skip">Überspringen</string>
@@ -504,4 +504,15 @@
     <string name="play_mine">Meine Aufnahme</string>
     <string name="export_text">Als Text (jede Lernkarten-App)</string>
     <string name="export_anki">Für Anki, mit Audio (.zip)</string>
+    <string name="length_unknown">Länge unbekannt: lade die Folge herunter, um darin zu springen</string>
+    <string name="size_about">etwa</string>
+    <string name="data_warning_title">%1$s über mobile Daten herunterladen?</string>
+    <string name="data_warning_text">Du bist nicht im WLAN. Dieser Download nutzt dein mobiles Datenvolumen, und je nach Tarif können zusätzliche Kosten entstehen.</string>
+    <string name="data_warning_dont_ask">Nicht mehr fragen</string>
+    <string name="data_warning_now">Jetzt herunterladen</string>
+    <string name="data_warning_wifi">Auf WLAN warten</string>
+    <string name="voice_detection">Spracherkennung (Stimme)</string>
+    <string name="translation_model_named">Übersetzungsmodell (%1$s)</string>
+    <string name="ask_mobile_title">Vor mobilen Daten fragen</string>
+    <string name="ask_mobile_text">Zeigt die Größe eines Downloads und bietet an, auf WLAN zu warten</string>
 </resources>
