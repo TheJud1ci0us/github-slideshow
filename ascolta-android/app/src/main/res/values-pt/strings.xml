@@ -279,7 +279,7 @@
     <string name="card_sentence">Frase</string>
     <string name="card_front">Em %1$s</string>
     <string name="card_back">Significado</string>
-    <string name="card_back_hint">Deixe vazio para traduzir automaticamente</string>
+    <string name="card_back_hint">Preencha qualquer um; o outro é traduzido</string>
     <string name="card_added">Cartão adicionado</string>
     <string name="cards_review_title">Revisão · %1$d / %2$d</string>
     <string name="cards_done">Pronto por agora: %1$d cartões revisados</string>

@@ -416,8 +416,11 @@ class PodcastRepository(
         translation.ensureModel(source, target, requireWifi = false)
     }
 
-    suspend fun translateWord(text: String, source: String): String {
-        val target = settings.nativeLanguage.value
+    suspend fun translateWord(text: String, source: String): String =
+        translateText(text, source, settings.nativeLanguage.value)
+
+    /** Translates [text] from [source] into [target], downloading the model if needed. */
+    suspend fun translateText(text: String, source: String, target: String): String {
         return withTimeoutOrNull(60_000L) {
             ensureTranslationModel(source, target)
             translation.translate(text, source, target)
@@ -461,9 +464,14 @@ class PodcastRepository(
      */
     suspend fun addCard(front: String, back: String?, isSentence: Boolean): Boolean {
         val language = settings.learningLanguage.value
-        val text = front.trim()
+        val given = back?.trim()?.takeIf { it.isNotEmpty() }
+        // Either side may be typed: an empty front is translated from the learner's language.
+        val text = front.trim().ifEmpty {
+            given ?: return false
+            runCatching { translateText(given, settings.nativeLanguage.value, language) }.getOrDefault("").trim()
+        }
         if (text.isEmpty()) return false
-        val translationText = back?.trim()?.takeIf { it.isNotEmpty() }
+        val translationText = given
             ?: runCatching { translateWord(text, language) }.getOrDefault("")
         return saveWord(
             VocabEntity(

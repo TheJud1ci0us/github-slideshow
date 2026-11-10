@@ -275,7 +275,7 @@
     <string name="card_sentence">Satz</string>
     <string name="card_front">Auf %1$s</string>
     <string name="card_back">Bedeutung</string>
-    <string name="card_back_hint">Leer lassen für automatische Übersetzung</string>
+    <string name="card_back_hint">Ein Feld ausfüllen, das andere wird übersetzt</string>
     <string name="card_added">Karte hinzugefügt</string>
     <string name="cards_review_title">Wiederholen · %1$d / %2$d</string>
     <string name="cards_done">Fertig für jetzt: %1$d Karten wiederholt</string>

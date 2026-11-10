@@ -302,7 +302,7 @@
     <string name="card_sentence">Sentence</string>
     <string name="card_front">In %1$s</string>
     <string name="card_back">Meaning</string>
-    <string name="card_back_hint">Leave empty to translate automatically</string>
+    <string name="card_back_hint">Fill either box; the other is translated</string>
     <string name="card_added">Card added</string>
     <string name="cards_review_title">Review · %1$d / %2$d</string>
     <string name="cards_done">Done for now: %1$d cards reviewed</string>

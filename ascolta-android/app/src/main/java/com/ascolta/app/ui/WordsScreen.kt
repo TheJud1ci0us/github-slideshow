@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -142,11 +143,8 @@ fun WordsScreen(openReview: () -> Unit) {
                                     if (w.isSentence) {
                                         Text(w.translation, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic)
                                     } else {
+                                        // The sentence's translation is on the back of the flashcard.
                                         w.sentence?.let { Text(highlightWord(it, w.word), style = MaterialTheme.typography.bodySmall) }
-                                        w.sentenceTranslation?.let {
-                                            Text(it, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
                                     }
                                 }
                             },
@@ -185,10 +183,34 @@ private fun AddCardDialog(onDismiss: () -> Unit) {
     val graph = context.graph
     val scope = rememberCoroutineScope()
     val language by graph.settings.learningLanguage.flow.collectAsState()
+    val native by graph.settings.nativeLanguage.flow.collectAsState()
     var front by remember { mutableStateOf("") }
     var back by remember { mutableStateOf("") }
     var sentence by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var translating by remember { mutableStateOf(false) }
+    // Fills the other box with the translation of this one, so it can be checked before adding.
+    fun translate(text: String, from: String, to: String, into: (String) -> Unit) {
+        translating = true
+        scope.launch {
+            runCatching { graph.repo.translateText(text.trim(), from, to) }
+                .onSuccess { into(it.trim()) }
+                .onFailure {
+                    Toast.makeText(context, context.getString(R.string.translation_unavailable, it.message ?: ""), Toast.LENGTH_LONG).show()
+                }
+            translating = false
+        }
+    }
+    @Composable
+    fun translateButton(text: String, from: String, to: String, into: (String) -> Unit) {
+        if (translating) {
+            androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        } else {
+            IconButton(enabled = text.isNotBlank() && !busy, onClick = { translate(text, from, to, into) }) {
+                Icon(androidx.compose.material.icons.Icons.Filled.Translate, stringResource(R.string.translating))
+            }
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.card_add_title, flagAndName(language))) },
@@ -203,20 +225,22 @@ private fun AddCardDialog(onDismiss: () -> Unit) {
                 }
                 OutlinedTextField(
                     value = front, onValueChange = { front = it },
-                    label = { Text(stringResource(R.string.card_front, languageName(language))) },
+                    label = { Text(flagAndName(language)) },
+                    trailingIcon = { translateButton(front, language, native) { back = it } },
                     singleLine = !sentence, modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = back, onValueChange = { back = it },
-                    label = { Text(stringResource(R.string.card_back)) },
+                    label = { Text(flagAndName(native)) },
+                    trailingIcon = { translateButton(back, native, language) { front = it } },
                     supportingText = { Text(stringResource(R.string.card_back_hint)) },
                     singleLine = !sentence, modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
-            TextButton(enabled = front.isNotBlank() && !busy, onClick = {
+            TextButton(enabled = (front.isNotBlank() || back.isNotBlank()) && !busy && !translating, onClick = {
                 busy = true
                 scope.launch {
                     val added = graph.repo.addCard(front, back, sentence)
