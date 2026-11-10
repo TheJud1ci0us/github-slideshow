@@ -93,7 +93,11 @@ class PodcastRepository(
     }
 
     /** Subscribes to a feed and returns the podcast id. */
-    suspend fun subscribe(feedUrl: String, downloadLatest: Boolean = true): Long {
+    /**
+     * [artworkUrl]: the directory's copy of the cover (Apple's, which comes in any size, so
+     * thumbnails stay small); the feed's own picture is used otherwise.
+     */
+    suspend fun subscribe(feedUrl: String, downloadLatest: Boolean = true, artworkUrl: String? = null): Long {
         podcastDao.getByFeedUrl(feedUrl)?.let { return it.id }
         val feed = fetchFeed(feedUrl)
         val now = System.currentTimeMillis()
@@ -103,7 +107,7 @@ class PodcastRepository(
                 title = feed.title,
                 author = feed.author,
                 description = feed.description,
-                imageUrl = feed.imageUrl,
+                imageUrl = artworkUrl?.takeIf { com.ascolta.app.net.Artwork.resizable(it) } ?: feed.imageUrl,
                 language = feed.language,
                 libraryLanguage = libraryLanguageFor(feed.language),
                 autoDownload = settings.autoDownloadNew.value,
@@ -121,6 +125,21 @@ class PodcastRepository(
             episodeDao.latest(podcastId)?.let { download(it.id, manual = false) }
         }
         return podcastId
+    }
+
+    /**
+     * Podcasts followed before covers were taken from Apple (or added by link) still point to
+     * the feed's full-size picture: find Apple's resizable copy once, by name, matching the
+     * feed address. Tried once per podcast.
+     */
+    suspend fun backfillArtwork(directory: com.ascolta.app.net.PodcastDirectory) {
+        val prefs = context.getSharedPreferences("artwork_backfill", android.content.Context.MODE_PRIVATE)
+        for (p in podcastDao.all()) {
+            if (com.ascolta.app.net.Artwork.resizable(p.imageUrl) || prefs.getBoolean(p.feedUrl, false)) continue
+            prefs.edit().putBoolean(p.feedUrl, true).apply()
+            val hit = runCatching { directory.search(p.title, null, 25) }.getOrNull()?.firstOrNull { it.feedUrl == p.feedUrl } ?: continue
+            hit.artworkUrl?.takeIf { com.ascolta.app.net.Artwork.resizable(it) }?.let { podcastDao.update(p.copy(imageUrl = it)) }
+        }
     }
 
     suspend fun unsubscribe(podcastId: Long) {
@@ -152,7 +171,8 @@ class PodcastRepository(
             podcast.copy(
                 title = feed.title,
                 author = feed.author ?: podcast.author,
-                imageUrl = feed.imageUrl ?: podcast.imageUrl,
+                // Keep Apple's resizable copy of the cover; otherwise follow the feed.
+                imageUrl = if (com.ascolta.app.net.Artwork.resizable(podcast.imageUrl)) podcast.imageUrl else feed.imageUrl ?: podcast.imageUrl,
                 lastRefreshedAt = System.currentTimeMillis(),
             ),
         )

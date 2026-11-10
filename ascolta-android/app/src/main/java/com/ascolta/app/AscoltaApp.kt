@@ -66,6 +66,8 @@ class AscoltaApp : Application() {
             runCatching { graph.models.removeRetiredModels() }
             runCatching { graph.repo.assignLibraryLanguages() }.onFailure { AppLog.w("App", "Library languages", it) }
             runCatching { graph.repo.deleteOldDownloads() }.onFailure { AppLog.w("App", "Old downloads", it) }
+            // Small cover copies for podcasts followed before (saves data on every thumbnail).
+            runCatching { graph.repo.backfillArtwork(graph.directory) }.onFailure { AppLog.w("App", "Artwork", it) }
         }
     }
 }

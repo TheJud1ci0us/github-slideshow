@@ -69,8 +69,10 @@ fun Artwork(url: String?, size: Dp, modifier: Modifier = Modifier) {
             modifier = Modifier.size(size / 2),
         )
         if (url != null) {
+            // A small copy for a small picture (saves data); full size isn't needed here.
+            val px = with(androidx.compose.ui.platform.LocalDensity.current) { size.roundToPx() }
             AsyncImage(
-                model = url,
+                model = com.ascolta.app.net.Artwork.sized(url, px),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(size),

@@ -179,7 +179,8 @@ fun SelectTile(
             ) {
                 when {
                     imageUrl != null -> coil3.compose.AsyncImage(
-                        model = imageUrl, contentDescription = null,
+                        // 64 dp circle: a ~200-pixel copy is plenty.
+                        model = com.ascolta.app.net.Artwork.sized(imageUrl, with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.roundToPx() }), contentDescription = null,
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         modifier = Modifier.size(64.dp).clip(CircleShape),
                     )

@@ -130,7 +130,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         if (subscribing[r.feedUrl] == true) return
         subscribing[r.feedUrl] = true
         scope.launch {
-            runCatching { graph.repo.subscribe(r.feedUrl) }
+            runCatching { graph.repo.subscribe(r.feedUrl, artworkUrl = r.artworkUrl) }
                 .onSuccess { openPodcast(it) }
                 .onFailure {
                     if (it is kotlinx.coroutines.CancellationException) throw it
@@ -144,11 +144,21 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         if (term.isBlank()) return
         genre = null
         com.ascolta.app.data.Analytics.track("Discover.searched", mapOf("language" to learning)) // never the search text
-        // This store first, then the US one (more shows), up to 200 each, a page at a time.
         val store = country
+        val lang = learning
+        // A search for a theme ("news podcast", "समाचार"): first the most listened shows of that
+        // theme in the language's country, kept only if they are in the language (not English).
+        val themeNames = GENRES.associate { it.id to context.getString(it.nameRes) }
+        val theme = com.ascolta.app.data.Recommendations.genreFor(term, themeNames)
+        val inLanguage = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, false)
+        val top = theme?.let { g ->
+            com.ascolta.app.data.Recommendations.themeSources(graph.directory, g, lang, store ?: "US").take(2)
+                .map { src -> suspend { inLanguage(src().take(50)) } }
+        }.orEmpty()
+        // Then the search itself: this store first, then the US one (more shows), up to 200 each.
         load(com.ascolta.app.data.PodcastPager(
-            listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }),
-            check = { it }, // any language: the tag says which
+            top + listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }),
+            check = { it }, // the search results are shown in any language; the tag says which
             pageSize = 30,
         ))
     }
@@ -384,7 +394,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                         else -> FilledTonalButton(onClick = {
                             subscribing[r.feedUrl] = true
                             scope.launch {
-                                runCatching { graph.repo.subscribe(r.feedUrl) }
+                                runCatching { graph.repo.subscribe(r.feedUrl, artworkUrl = r.artworkUrl) }
                                     .onFailure { error = context.getString(R.string.feed_failed, it.message ?: "") }
                                 subscribing[r.feedUrl] = false
                             }

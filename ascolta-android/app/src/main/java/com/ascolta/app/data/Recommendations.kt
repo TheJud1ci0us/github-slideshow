@@ -61,6 +61,44 @@ object Recommendations {
             .take(limit - found.size)
     }
 
+    /**
+     * The theme a typed search asks for ("news podcast", "notizie", "समाचार" → News), so its
+     * chart in the learner's country can come first. [extraNames]: the themes' names in the
+     * app's language. Null when the search isn't about a theme.
+     */
+    fun genreFor(query: String, extraNames: Map<Int, String> = emptyMap()): Int? {
+        val q = query.lowercase().trim()
+        if (q.isEmpty()) return null
+        val words = q.split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
+        fun hit(k: String): Boolean {
+            val key = k.lowercase()
+            // Words in Latin letters must match a whole word; other alphabets anywhere in the text.
+            return if (key.all { it.code < 0x250 || !it.isLetter() }) key in words || (key.contains(' ') && q.contains(key)) else q.contains(key)
+        }
+        extraNames.entries.firstOrNull { (_, name) -> hit(name) }?.let { return it.key }
+        return THEME_WORDS.entries.firstOrNull { (_, keys) -> keys.any(::hit) }?.key
+    }
+
+    /** Words for each theme in many languages (Apple genre id → words). */
+    private val THEME_WORDS: Map<Int, List<String>> = linkedMapOf(
+        1488 to listOf("true crime", "crime", "crimine", "crimen", "krimi", "अपराध", "جنایی", "криминал", "犯罪", "범죄", "suç"),
+        1489 to listOf("news", "notizie", "nouvelles", "actualités", "actualite", "noticias", "nachrichten", "notícias", "nieuws", "समाचार", "ख़बर", "खबर", "خبر", "اخبار", "новости", "ニュース", "뉴스", "新闻", "haber", "haberler", "wiadomości", "ახალი ამბები", "լուրեր"),
+        1533 to listOf("science", "scienza", "scienze", "ciencia", "ciencias", "wissenschaft", "ciência", "wetenschap", "विज्ञान", "علم", "علمی", "наука", "科学", "과학", "bilim", "nauka", "მეცნიერება", "գիտություն"),
+        1487 to listOf("history", "storia", "histoire", "historia", "geschichte", "história", "geschiedenis", "इतिहास", "تاریخ", "история", "歴史", "역사", "历史", "tarih", "ისტორია", "պատմություն"),
+        1303 to listOf("comedy", "commedia", "comédie", "comedia", "humor", "humour", "humorismo", "कॉमेडी", "کمدی", "طنز", "комедия", "юмор", "お笑い", "코미디", "喜剧", "komedi"),
+        1545 to listOf("sport", "sports", "deportes", "deporte", "esporte", "esportes", "खेल", "ورزش", "ورزشی", "спорт", "スポーツ", "스포츠", "体育", "spor"),
+        1321 to listOf("business", "economia", "économie", "economía", "wirtschaft", "economie", "बिज़नेस", "व्यापार", "کسب و کار", "اقتصاد", "бизнес", "экономика", "ビジネス", "비즈니스", "商业", "iş", "ekonomi"),
+        1512 to listOf("health", "salute", "santé", "salud", "gesundheit", "saúde", "gezondheid", "स्वास्थ्य", "سلامت", "здоровье", "健康", "건강", "sağlık"),
+        1305 to listOf("kids", "children", "bambini", "enfants", "niños", "kinder", "crianças", "बच्चों", "कहानियां बच्चों", "کودک", "کودکان", "дети", "детей", "子ども", "子供", "어린이", "儿童", "çocuk"),
+        1309 to listOf("film", "films", "movie", "movies", "cinema", "cinéma", "cine", "kino", "फ़िल्म", "फिल्म", "سینما", "فیلم", "кино", "映画", "영화", "电影", "sinema"),
+        1310 to listOf("music", "musica", "musique", "música", "musik", "muziek", "संगीत", "موسیقی", "музыка", "音楽", "음악", "音乐", "müzik"),
+        1318 to listOf("tech", "technology", "tecnologia", "technologie", "tecnología", "techniek", "टेक", "तकनीक", "تکنولوژی", "فناوری", "технологии", "テクノロジー", "기술", "科技", "teknoloji"),
+        1483 to listOf("fiction", "stories", "story", "storie", "racconti", "histoires", "contes", "cuentos", "geschichten", "kahani", "कहानी", "कहानियां", "कहानियाँ", "داستان", "рассказы", "сказки", "物語", "이야기", "故事", "hikaye"),
+        1301 to listOf("art", "arts", "arte", "kunst", "कला", "هنر", "искусство", "アート", "예술", "艺术", "sanat"),
+        1324 to listOf("society", "culture", "società", "cultura", "société", "sociedad", "gesellschaft", "kultur", "समाज", "संस्कृति", "جامعه", "فرهنگ", "общество", "культура", "社会", "文化", "사회", "문화", "kültür"),
+        1304 to listOf("education", "educazione", "éducation", "educación", "bildung", "educação", "शिक्षा", "آموزش", "образование", "教育", "교육", "eğitim"),
+    )
+
     // ---- Sources for endless lists (PodcastPager) ----------------------------
 
     /** The language's names to search for: its own ("हिंदी", "فارسی") and in English ("Hindi"). */

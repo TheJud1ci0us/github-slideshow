@@ -243,7 +243,8 @@ private fun PodcastGridRow(row: List<com.ascolta.app.data.PodcastWithStats>, ope
             Column(Modifier.weight(1f).clickable { openPodcast(p.podcast.id) }) {
                 Box {
                     coil3.compose.AsyncImage(
-                        model = p.podcast.imageUrl, contentDescription = p.podcast.title,
+                        // A third of the screen wide: a ~400-pixel copy.
+                        model = com.ascolta.app.net.Artwork.sized(p.podcast.imageUrl, 400), contentDescription = p.podcast.title,
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.large)
                             .background(MaterialTheme.colorScheme.surfaceContainer),
