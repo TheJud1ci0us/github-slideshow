@@ -14,6 +14,8 @@ data class DirectoryResult(
     val summary: String? = null,
     /** Language the feed declares (filled in when checked). */
     val language: String? = null,
+    /** Apple's genre ids: the main one first, then its parents and others (e.g. 1534 Natural Sciences, 26, 1533 Science). */
+    val genreIds: List<Int> = emptyList(),
 )
 
 /** What a pasted link turned out to be. */
@@ -30,11 +32,11 @@ sealed interface LinkResolution {
  */
 class PodcastDirectory(private val http: OkHttpClient) {
 
-    suspend fun search(term: String, country: String?): List<DirectoryResult> {
+    suspend fun search(term: String, country: String?, limit: Int = 40): List<DirectoryResult> {
         val url = Uri.parse("https://itunes.apple.com/search").buildUpon()
             .appendQueryParameter("media", "podcast")
             .appendQueryParameter("entity", "podcast")
-            .appendQueryParameter("limit", "40")
+            .appendQueryParameter("limit", limit.toString())
             .appendQueryParameter("term", term)
             .apply { if (country != null) appendQueryParameter("country", country) }
             .build().toString()
@@ -43,6 +45,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
 
     /**
      * Searches within one Apple genre (e.g. 1498 = Language Learning) in a country's store.
+     * Note: Apple's search ignores genreId (checked November 2026); callers filter on [DirectoryResult.genreIds].
      */
     suspend fun searchGenre(term: String, genreId: Int, country: String?): List<DirectoryResult> {
         val url = Uri.parse("https://itunes.apple.com/search").buildUpon()
@@ -106,6 +109,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
             feedUrl = feed,
             artworkUrl = o.optString("artworkUrl600").ifBlank { o.optString("artworkUrl100") }.ifBlank { null },
             genre = o.optString("primaryGenreName").takeIf { it.isNotBlank() },
+            genreIds = o.optJSONArray("genreIds")?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).toIntOrNull() } }.orEmpty(),
         )
     }
 

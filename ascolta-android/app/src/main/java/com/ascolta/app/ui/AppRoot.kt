@@ -64,6 +64,17 @@ private fun tabOf(route: String): String = when {
     else -> route.substringBefore('?')
 }
 
+/** The main page of a tab (not a page opened from it, like a podcast). */
+private fun isTabRoot(route: String?): Boolean =
+    route == "library" || route == "words" || route == "profile" || route?.startsWith("discover") == true
+
+/**
+ * The tab the current screen was opened from: the last tab page on the back stack (a podcast
+ * opened from Discover belongs to Discover).
+ */
+private fun NavHostController.currentTab(): String? =
+    currentBackStack.value.lastOrNull { isTabRoot(it.destination.route) }?.destination?.route?.let(::tabOf)
+
 object Routes {
     fun podcast(id: Long?) = "podcast/${id ?: -1}"
     fun player(episodeId: Long) = "player/$episodeId"
@@ -100,7 +111,7 @@ fun AscoltaRoot() {
                     MiniPlayer(onOpen = { id -> nav.navigate(Routes.player(id)) })
                     FloatingNavBar(
                         items = TABS.map { NavItem(it.route, stringResource(it.label), it.icon) },
-                        current = tabOf(route),
+                        current = remember(backStack) { nav.currentTab() } ?: tabOf(route),
                         onSelect = { nav.navigateToTab(it) },
                     )
                 }
@@ -217,11 +228,22 @@ fun AscoltaRoot() {
     }
 }
 
+/**
+ * A tab always opens its main page: pages opened inside the current tab (a podcast, a setting)
+ * are closed first, so tapping Discover while on a podcast found in Discover goes back to
+ * Discover, and switching tabs never brings back an old podcast page. Each tab's main page
+ * keeps its place (e.g. Discover's search).
+ */
 private fun NavHostController.navigateToTab(route: String) {
-    // Home always goes back to the Home screen itself, dropping whatever was opened from it.
-    if (route == "library") {
-        // saveState keeps the other tab's place (e.g. Discover's search) for when you go back to it.
-        if (!popBackStack("library", inclusive = false, saveState = true)) {
+    val target = tabOf(route)
+    // Close the pages opened from the current tab, back to its main page.
+    currentBackStack.value.lastOrNull { isTabRoot(it.destination.route) }?.let { root ->
+        popBackStack(root.destination.id, inclusive = false)
+    }
+    if (currentTab() == target && !route.contains('?')) return
+    if (target == "library") {
+        // Home is the first page: going back to it keeps the other tab's main page for later.
+        if (!popBackStack(graph.findStartDestination().id, inclusive = false, saveState = true)) {
             navigate("library") { popUpTo(0); launchSingleTop = true }
         }
         return

@@ -129,22 +129,14 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             val lang = learning
             val native = settings.nativeLanguage.value
             val course = genreId == GENRE_LEARNING
+            // The theme's chart plus shows found by the theme's own name, all filed under the theme.
             val found = if (course) com.ascolta.app.data.Recommendations.courses(graph.directory, lang, country ?: "US")
-            else graph.directory.topByGenre(genreId, country ?: "US")
+            else com.ascolta.app.data.Recommendations.themed(graph.directory, genreId, lang, country ?: "US").take(60)
             // Only podcasts really in the language: the store of a small language is often
             // mostly in a neighbouring one (e.g. Russian in Georgia's).
             val declared = graph.feedLanguage.ofAll(found.map { it.feedUrl })
-            val kept = found.filter { com.ascolta.app.data.LanguageCheck.keep(it.title, it.summary, declared[it.feedUrl], lang, native, course) }
+            found.filter { com.ascolta.app.data.LanguageCheck.keep(it.title, it.summary, declared[it.feedUrl], lang, native, course) }
                 .map { it.copy(language = declared[it.feedUrl]) }
-            // Too few in this language's charts: add local podcasts found by the word "podcast".
-            val word = com.ascolta.app.data.LanguageCheck.PODCAST_WORD[lang]
-            if (!course && kept.size < 8 && word != null) {
-                val local = runCatching { graph.directory.search(word, country ?: "US") }.getOrDefault(emptyList())
-                    .filter { l -> kept.none { it.feedUrl == l.feedUrl } }
-                val localLang = graph.feedLanguage.ofAll(local.map { it.feedUrl })
-                kept + local.filter { com.ascolta.app.data.LanguageCheck.keep(it.title, it.summary, localLang[it.feedUrl], lang, native, false) }
-                    .map { it.copy(language = localLang[it.feedUrl]) }
-            } else kept
         }
     }
 

@@ -71,6 +71,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.ascolta.app.data.LANGUAGES
@@ -375,10 +376,29 @@ fun PodcastStep(
     footer: (@Composable () -> Unit)? = null,
 ) {
     val graph = LocalContext.current.graph
-    val picks by produceState<List<com.ascolta.app.data.Pick>?>(null, language, genres.toList(), band) {
-        value = runCatching { com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, language, graph.settings.nativeLanguage.value, genres.toList(), band, 30) }
+    val scope = rememberCoroutineScope()
+    // The suggestions shown; each podcast picked brings a few more like it, right after it.
+    val shown = remember(language, genres.toList(), band) { mutableStateListOf<com.ascolta.app.data.Pick>() }
+    var loaded by remember(language, genres.toList(), band) { mutableStateOf(false) }
+    LaunchedEffect(language, genres.toList(), band) {
+        val first = runCatching { com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, language, graph.settings.nativeLanguage.value, genres.toList(), band, 30) }
             .getOrDefault(emptyList())
+        shown.clear()
+        shown.addAll(first)
+        loaded = true
     }
+    val moreLikeThis = remember(language) {
+        com.ascolta.app.data.MoreLikeThis(graph.directory, graph.feedLanguage, language, graph.settings.nativeLanguage.value)
+    }
+    fun addSimilar(pick: com.ascolta.app.data.Pick) {
+        scope.launch {
+            val more = runCatching { moreLikeThis.next(pick.podcast, shown.map { it.podcast.feedUrl }.toSet()) }.getOrDefault(emptyList())
+                .filter { m -> shown.none { it.podcast.feedUrl == m.podcast.feedUrl } }
+            val at = shown.indexOfFirst { it.podcast.feedUrl == pick.podcast.feedUrl }
+            if (at >= 0) shown.addAll(at + 1, more) else shown.addAll(more)
+        }
+    }
+    val picks: List<com.ascolta.app.data.Pick>? = if (loaded) shown else null
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
@@ -403,7 +423,14 @@ fun PodcastStep(
                     label = pick.podcast.title,
                     selected = on,
                     imageUrl = pick.podcast.artworkUrl,
-                    onClick = { if (on) chosen.remove(pick.podcast.feedUrl) else chosen.add(pick.podcast.feedUrl) },
+                    onClick = {
+                        if (on) chosen.remove(pick.podcast.feedUrl)
+                        else {
+                            chosen.add(pick.podcast.feedUrl)
+                            addSimilar(pick)
+                        }
+                    },
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
