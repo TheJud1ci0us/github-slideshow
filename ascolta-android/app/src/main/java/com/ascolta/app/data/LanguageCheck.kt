@@ -12,6 +12,7 @@ object LanguageCheck {
         val code = declared?.trim()?.lowercase()?.takeWhile { it.isLetter() }?.take(3)?.takeIf { it.length >= 2 } ?: return null
         return when (code) {
             "ge", "geo", "kat" -> "ka"
+            "arm", "hye" -> "hy"
             "iw" -> "he"
             "in" -> "id"
             "nb", "nn", "nob" -> "no"
@@ -29,15 +30,25 @@ object LanguageCheck {
      * charts in Georgia hold no Georgian podcast; a search for პოდკასტი finds many).
      */
     val PODCAST_WORD = mapOf(
-        "ka" to "პოდკასტი", "ru" to "подкаст", "uk" to "подкаст", "be" to "падкаст", "bg" to "подкаст", "mk" to "подкаст",
+        "ka" to "პოდკასტი", "hy" to "փոդքասթ", "ru" to "подкаст", "uk" to "подкаст", "be" to "падкаст", "bg" to "подкаст", "mk" to "подкаст",
         "el" to "podcast", "he" to "פודקאסט", "ar" to "بودكاست", "fa" to "پادکست", "ur" to "پوڈکاسٹ",
         "hi" to "पॉडकास्ट", "mr" to "पॉडकास्ट", "bn" to "পডকাস্ট", "gu" to "પોડકાસ્ટ", "kn" to "ಪಾಡ್‌ಕಾಸ್ಟ್",
         "ta" to "பாட்காஸ்ட்", "te" to "పాడ్‌కాస్ట్", "th" to "พอดแคสต์", "ja" to "ポッドキャスト", "ko" to "팟캐스트", "zh" to "播客",
     )
 
+    /** The language's own name(s), e.g. "हिंदी", "فارسی", "español". */
+    fun ownNames(language: String): List<String> {
+        val locale = java.util.Locale.forLanguageTag(language)
+        return (listOf(locale.getDisplayLanguage(locale)) + OWN_NAMES[language].orEmpty()).filter { it.length >= 2 }.distinct()
+    }
+
+    /** Common spellings of a language's own name that Java's list doesn't give (it has हिन्दी). */
+    private val OWN_NAMES = mapOf("hi" to listOf("हिंदी", "हिन्दी"), "fa" to listOf("فارسی"), "hy" to listOf("հայերեն"))
+
     /** Unicode scripts that identify a language (or a small group) by its alphabet. */
     private val scripts: Map<String, Set<Character.UnicodeScript>> = buildMap {
         put("ka", setOf(Character.UnicodeScript.GEORGIAN))
+        put("hy", setOf(Character.UnicodeScript.ARMENIAN))
         put("el", setOf(Character.UnicodeScript.GREEK))
         put("he", setOf(Character.UnicodeScript.HEBREW))
         for (l in listOf("ar", "fa", "ur")) put(l, setOf(Character.UnicodeScript.ARABIC))
@@ -67,6 +78,36 @@ object LanguageCheck {
     }
 
     /**
+     * The feed's declared language, unless it is evidently wrong. Many hosting tools fill in
+     * "en" by default, so Farsi or Hindi shows often claim to be English: an "en" whose
+     * title and description are written in [target]'s own alphabet (or, for a Latin-alphabet
+     * target, don't look English at all) isn't believed. Returns null when not believed.
+     */
+    fun trusted(declared: String?, text: String, target: String): String? {
+        val lang = normalize(declared) ?: return null
+        if (lang != "en" || target == "en") return lang
+        val ownAlphabet = target in scripts && scriptMatches(text, target)
+        // "… in Hindi", "podcast en español": named, and (for Latin-alphabet languages) not English-looking.
+        val named = mentionsLanguage(text, target) && (target in scripts || !LevelGuess.looksEnglish(text))
+        return if (ownAlphabet || named) null else lang
+    }
+
+    /**
+     * True if [text] says it is in [language]: its own name anywhere ("हिंदी", "español"), or
+     * its English name in a phrase like "in Hindi", "Hindi podcast", "(Hindi)" or "| Hindi"
+     * (not just any mention: "The Georgian Impact Podcast" is in English).
+     */
+    fun mentionsLanguage(text: String, language: String): Boolean {
+        val locale = java.util.Locale.forLanguageTag(language)
+        val own = (listOf(locale.getDisplayLanguage(locale)) + OWN_NAMES[language].orEmpty())
+            .filter { it.length >= 3 && !it.equals(locale.getDisplayLanguage(java.util.Locale.ENGLISH), ignoreCase = true) }
+        if (own.any { text.contains(it, ignoreCase = true) }) return true
+        val english = Regex.escape(locale.getDisplayLanguage(java.util.Locale.ENGLISH).takeIf { it.length >= 3 } ?: return false)
+        return Regex("""(?i)(\bin\s+$english\b|\b$english\s+(podcast|stories|news|kahani|samachar)|\(\s*$english\s*\)|[|–-]\s*$english\b)""")
+            .containsMatchIn(text)
+    }
+
+    /**
      * Keep a suggestion? [declared] is the feed's own language (null if unknown). Podcasts must
      * be in [target]; courses ([isCourse]) may also be in the learner's own language [native].
      */
@@ -75,9 +116,14 @@ object LanguageCheck {
         // A course in the learner's own language must really be a course (not "The Georgian
         // Impact Podcast | AI"); one in the target language is fine either way.
         val allowed = if (isCourse && LevelGuess.looksLikeCourse(text)) setOf(target, native) else setOf(target)
-        val lang = normalize(declared)
+        val lang = trusted(declared, text, target)
         if (lang != null) return lang in allowed
         // No declared language: judge by the alphabet (and drop English shows for other languages).
-        return allowed.any { l -> scriptMatches(text, l) && (l == "en" || !LevelGuess.looksEnglish(text)) }
+        return allowed.any { l ->
+            // Shows in Hindi, Farsi… often have Latin-letter titles that name the language
+            // ("Horror Stories in Hindi"): those count as well as titles in the language's alphabet.
+            (scriptMatches(text, l) && (l == "en" || !LevelGuess.looksEnglish(text))) ||
+                (l in scripts && mentionsLanguage(text, l))
+        }
     }
 }

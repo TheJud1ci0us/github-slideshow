@@ -1,6 +1,7 @@
 package com.ascolta.app.ui
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -98,14 +99,21 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     val myBand = remember(learning, levelsPref) { LevelBand.of(settings.levelFor(learning)) }
     var band by remember(learning, levelsPref) { mutableStateOf(myBand) }
     var loadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // Endless lists: the pager behind the results shown, and whether a page is loading.
+    var pager by remember { mutableStateOf<com.ascolta.app.data.PodcastPager?>(null) }
+    var loadingMore by remember { mutableStateOf(false) }
 
-    fun load(block: suspend () -> List<DirectoryResult>) {
+    /** Shows the first page of [newPager]; more pages load as the list is scrolled. */
+    fun load(newPager: com.ascolta.app.data.PodcastPager) {
         focus.clearFocus()
         loadJob?.cancel()
+        pager = newPager
+        results = emptyList()
         loading = true
+        loadingMore = false
         error = null
         loadJob = scope.launch {
-            runCatching { block() }
+            runCatching { newPager.next() }
                 .onSuccess { results = it; if (it.isEmpty()) error = context.getString(R.string.no_results) }
                 .onFailure { if (it !is kotlinx.coroutines.CancellationException) error = context.getString(R.string.search_failed, it.message ?: "") }
             loading = false
@@ -136,7 +144,13 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         if (term.isBlank()) return
         genre = null
         com.ascolta.app.data.Analytics.track("Discover.searched", mapOf("language" to learning)) // never the search text
-        load { graph.directory.search(term, country) }
+        // This store first, then the US one (more shows), up to 200 each, a page at a time.
+        val store = country
+        load(com.ascolta.app.data.PodcastPager(
+            listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }),
+            check = { it }, // any language: the tag says which
+            pageSize = 30,
+        ))
     }
 
     /** Podcasts of a theme in the learning language's store; for learners, courses in that language. */
@@ -144,20 +158,17 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         genre = genreId
         com.ascolta.app.data.Analytics.track("Discover.themeBrowsed", mapOf("genre" to genreId.toString(), "language" to learning))
         query = ""
-        load {
-            val lang = learning
-            val native = settings.nativeLanguage.value
-            val course = genreId == GENRE_LEARNING
-            // The theme's chart plus shows found by the theme's own name, all filed under the theme.
-            val found = if (course) com.ascolta.app.data.Recommendations.courses(graph.directory, lang, country ?: "US").take(80)
-            else com.ascolta.app.data.Recommendations.themed(graph.directory, genreId, lang, country ?: "US").take(60)
-            // Only podcasts really in the language: the store of a small language is often
-            // mostly in a neighbouring one (e.g. Russian in Georgia's).
-            val declared = graph.feedLanguage.ofAll(found.map { it.feedUrl })
-            found.filter { !graph.feedLanguage.isDead(it.feedUrl) }
-                .filter { com.ascolta.app.data.LanguageCheck.keep(it.title, it.summary, declared[it.feedUrl], lang, native, course) }
-                .map { it.copy(language = declared[it.feedUrl]) }
-        }
+        val lang = learning
+        val course = genreId == GENRE_LEARNING
+        val store = country ?: "US"
+        // The theme's chart, then shows found by the theme's own name, then backup searches by
+        // the language's name; for learners, the learner searches. Only podcasts really in the
+        // language (the store of a small language is often mostly in a neighbouring one).
+        load(com.ascolta.app.data.PodcastPager(
+            if (course) com.ascolta.app.data.Recommendations.learnerSources(graph.directory, lang, store)
+            else com.ascolta.app.data.Recommendations.themeSources(graph.directory, genreId, lang, store),
+            check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course),
+        ))
     }
 
     LaunchedEffect(initialQuery) {
@@ -168,10 +179,26 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     }
     // Nothing searched yet: suggestions for this learner (courses for beginners, else a favourite theme).
     // "For you": suggestions for the language, favourite themes and level (shown before any search).
-    val forYou by produceState<List<com.ascolta.app.data.Pick>?>(null, learning, interestsPref, levelsPref) {
-        value = runCatching {
-            com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, learning, settings.nativeLanguage.value, settings.interestList(), myBand, 20)
-        }.getOrDefault(emptyList())
+    // The suggestions first, then (as you scroll) the favourite themes, shows for learners and
+    // the backup searches, endlessly until the store runs out.
+    val forYouItems = remember(learning, interestsPref, levelsPref) { androidx.compose.runtime.mutableStateListOf<DirectoryResult>() }
+    var forYouLoaded by remember(learning, interestsPref, levelsPref) { mutableStateOf(false) }
+    val forYouPager = remember(learning, interestsPref, levelsPref) {
+        val lang = learning
+        val native = settings.nativeLanguage.value
+        val store = country ?: "US"
+        val picks = suspend {
+            com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, lang, native, settings.interestList(), myBand, 20).map { it.podcast }
+        }
+        com.ascolta.app.data.PodcastPager(
+            listOf(picks) + com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList()),
+            check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true),
+            pageSize = 18,
+        )
+    }
+    LaunchedEffect(forYouPager) {
+        forYouItems.addAll(runCatching { forYouPager.next() }.getOrDefault(emptyList()))
+        forYouLoaded = true
     }
 
     val estimates = remember(results, genre) {
@@ -184,15 +211,36 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
 
     // Language each search result's feed declares, shown when it isn't the language learned.
     val resultLanguages by produceState<Map<String, String?>>(emptyMap(), results) {
-        value = if (genre == null && results.isNotEmpty()) graph.feedLanguage.ofAll(results.take(40).map { it.feedUrl }) else emptyMap()
+        value = if (genre == null && results.isNotEmpty()) graph.feedLanguage.ofAll(results.map { it.feedUrl }) else emptyMap()
     }
     // Feeds found not to work are hidden (re-evaluated once their check is done).
     val working = remember(results, resultLanguages) { results.filter { !graph.feedLanguage.isDead(it.feedUrl) } }
     val atLevel = working.filter { band == null || estimates[it.feedUrl]?.band == band }
     val shown = atLevel.ifEmpty { working }
 
+    // Endless scrolling: within 6 items of the end, the next page of whichever list is shown loads.
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val nearEnd by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val info = gridState.layoutInfo
+            info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 6
+        }
+    }
+    val showingForYou = results.isEmpty() && !loading && error == null
+    val activePager = if (showingForYou) forYouPager.takeIf { forYouLoaded } else pager.takeIf { !loading }
+    LaunchedEffect(nearEnd, activePager, results.size, forYouItems.size) {
+        val p = activePager ?: return@LaunchedEffect
+        if (!nearEnd || loadingMore || p.exhausted) return@LaunchedEffect
+        loadingMore = true
+        val more = runCatching { p.next() }.getOrDefault(emptyList())
+        if (p === forYouPager) forYouItems.addAll(more.filter { m -> forYouItems.none { it.feedUrl == m.feedUrl } })
+        else if (p === pager) results = (results + more).distinctBy { it.feedUrl }
+        loadingMore = false
+    }
+
     // One scrolling grid: the header scrolls away, so results get the whole screen.
     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+        state = gridState,
         columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
         contentPadding = PaddingValues(bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -269,21 +317,21 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             }
         }
 
-        if (results.isEmpty() && !loading && error == null) {
+        if (showingForYou) {
             // Before any search: suggestions for this learner. Tap to follow (or open).
             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "for-you") {
                 Text(stringResource(R.string.discover_for_you), style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(start = 20.dp, top = 6.dp))
             }
-            val picks = forYou
+            val picks = forYouItems
             when {
-                picks == null -> item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) }
+                !forYouLoaded -> item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) }
                 picks.isEmpty() -> item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                     Text(stringResource(R.string.discover_intro), style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))
                 }
-                else -> items(picks.size, key = { picks[it].podcast.feedUrl }) { i ->
-                    val r = picks[i].podcast
+                else -> items(picks.size, key = { picks[it].feedUrl }) { i ->
+                    val r = picks[i]
                     Box(Modifier.padding(start = if (i % 3 == 0) 16.dp else 0.dp, end = if (i % 3 == 2) 16.dp else 0.dp)) {
                         SelectTile(
                             label = r.title,
@@ -299,7 +347,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         items(shown.distinctBy { it.feedUrl }, key = { it.feedUrl }, span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { r ->
             val isSubscribed = r.feedUrl in subscribed
             val level = estimates[r.feedUrl]
-            val lang = r.language ?: resultLanguages[r.feedUrl]
+            // The feed's language, unless it's evidently wrong (Farsi shows declaring "en").
+            val lang = com.ascolta.app.data.LanguageCheck.trusted(r.language ?: resultLanguages[r.feedUrl], "${r.title} ${r.summary.orEmpty()}", learning)
             ListItem(
                 // Tapping the row opens the podcast (following it, as there's no preview yet).
                 modifier = Modifier.clickable { followAndOpen(r) },
@@ -314,7 +363,15 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                             }
                             // Another language than the one learned: say so.
                             if (lang != null && lang != learning) {
-                                Text(flagAndName(lang), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                // Small neutral tag ("EN"), on the same line as the level.
+                                Text(
+                                    lang.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp),
+                                )
                             }
                         }
                     }
@@ -335,6 +392,30 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                     }
                 },
             )
+        }
+
+        // Bottom of the endless list: loading the next page, or the end of what was found.
+        val listShown = if (showingForYou) forYouItems.isNotEmpty() else shown.isNotEmpty()
+        if (listShown) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "list-end") {
+            when {
+                loadingMore -> Row(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SmallSpinner()
+                    Text(stringResource(R.string.discover_loading_more), Modifier.padding(start = 8.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                activePager?.exhausted == true -> Text(
+                    stringResource(R.string.discover_end),
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                else -> Box(Modifier.size(1.dp))
+            }
         }
     }
 }

@@ -46,6 +46,7 @@ val LANGUAGES = listOf(
     Language("hi", "Hindi", "IN"),
     Language("hr", "Croatian", "HR"),
     Language("ht", "Haitian Creole", "US", "HT"),
+    Language("hy", "Armenian", "AM"),
     Language("hu", "Hungarian", "HU"),
     Language("id", "Indonesian", "ID"),
     Language("is", "Icelandic", "IS"),

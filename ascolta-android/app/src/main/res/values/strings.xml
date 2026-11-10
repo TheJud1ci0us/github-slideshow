@@ -443,4 +443,8 @@
     <string name="show_less">Less</string>
     <string name="feed_gone">This podcast\'s feed is no longer available (error %1$d)</string>
     <string name="switched_to_download">Now playing the downloaded episode, so the transcript matches what you hear</string>
+    <string name="model_desc_omnilingual">Meta Omnilingual: 1,600 languages, including Armenian. Better than Whisper Base for Farsi, Hindi, Georgian and other languages. No punctuation: sentences are cut at pauses.</string>
+    <string name="no_offline_translation">No offline translation for %1$s yet: the transcript is shown without translation</string>
+    <string name="discover_loading_more">Loading more podcasts…</string>
+    <string name="discover_end">That\'s everything for now</string>
 </resources>

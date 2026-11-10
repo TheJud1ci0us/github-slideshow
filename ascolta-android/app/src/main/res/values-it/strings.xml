@@ -423,4 +423,8 @@
     <string name="show_less">Meno</string>
     <string name="feed_gone">Il feed di questo podcast non è più disponibile (errore %1$d)</string>
     <string name="switched_to_download">Ora suona l\'episodio scaricato, così la trascrizione corrisponde a ciò che senti</string>
+    <string name="model_desc_omnilingual">Meta Omnilingual: 1.600 lingue, armeno compreso. Migliore di Whisper Base per persiano, hindi, georgiano e altre. Senza punteggiatura: le frasi sono divise alle pause.</string>
+    <string name="no_offline_translation">Ancora nessuna traduzione offline per %1$s: la trascrizione è mostrata senza traduzione</string>
+    <string name="discover_loading_more">Caricamento di altri podcast…</string>
+    <string name="discover_end">Per ora è tutto</string>
 </resources>

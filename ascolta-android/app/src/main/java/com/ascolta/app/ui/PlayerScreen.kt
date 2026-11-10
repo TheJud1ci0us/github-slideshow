@@ -188,7 +188,14 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     // Streaming over mobile data in Wi-Fi only mode needs the listener's OK first.
     var confirmStream by remember { mutableStateOf<(() -> Unit)?>(null) }
     fun startPlayback(e: EpisodeEntity) {
-        val start = { scope.launch { graph.player.play(e, podcast?.title, e.imageUrl ?: podcast?.imageUrl) }; Unit }
+        val start = {
+            scope.launch {
+                graph.player.play(e, podcast?.title, e.imageUrl ?: podcast?.imageUrl)
+                // The episode being listened to gets the transcription first.
+                runCatching { graph.repo.prioritize(e.id) }
+            }
+            Unit
+        }
         val local = e.localPath?.let { java.io.File(it).exists() } == true
         if (!local && WorkScheduler.blockedByNetworkMode(context)) confirmStream = start else start()
     }

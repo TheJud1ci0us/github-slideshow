@@ -45,6 +45,7 @@ the phone.
   bar). Defaults: Parakeet v3 for its 25 European languages, **SenseVoice Small** for Japanese,
   Chinese and Korean (one pass, very light), Whisper otherwise. Japanese can also use
   **ReazonSpeech v2** (small, trained on 35,000 h of Japanese) or **Kotoba-Whisper v2**.
+- **Meta Omnilingual** (365 MB, 1,600 languages, Apache 2.0): Armenian, and better than Whisper Base for Farsi, Hindi, Georgian and others. No punctuation (sentences are cut at pauses). Armenian has no offline translation (ML Kit), so it is transcript only.
 - **Graphics chip (experimental)**: whisper.cpp's OpenCL backend (Adreno-tuned kernels) is
   built as a plug-in using the phone's own OpenCL driver; with the switch on, the uncompressed
   "Whisper Base/Small · GPU" models run on the GPU (CPU fallback for anything it can't run).

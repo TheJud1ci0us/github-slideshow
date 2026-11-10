@@ -10,7 +10,15 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 
-enum class Engine { WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH }
+enum class Engine {
+    WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH, OMNILINGUAL;
+
+    /**
+     * Models that write no punctuation: their speech is cut at short pauses (250 ms) into
+     * pieces of at most 12 s, each one a sentence.
+     */
+    val cutsAtPauses: Boolean get() = this == REAZONSPEECH || this == OMNILINGUAL
+}
 
 /**
  * A file to download; with [extractTo], it is a zip unpacked into that folder (its top folder
@@ -23,7 +31,11 @@ private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/res
 private const val SENSEVOICE_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main"
 private const val REAZON_HF = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/main"
 private const val KOTOBA_HF = "https://huggingface.co/kotoba-tech/kotoba-whisper-v2.0-ggml/resolve/main"
+private const val OMNILINGUAL_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-omnilingual-asr-1600-languages-300M-ctc-int8-2025-11-12/resolve/main"
 private const val PARAKEET_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main"
+
+/** Languages for which Omnilingual is suggested over Whisper Base. */
+val OMNILINGUAL_FIRST = setOf("hy", "fa", "hi", "ur", "ka", "bn", "mr", "gu", "kn", "ta", "te", "be", "mk", "is", "cy", "sw", "af", "ht")
 
 /** Languages NVIDIA Parakeet TDT 0.6B v3 understands (25 European languages). */
 val PARAKEET_LANGUAGES = setOf(
@@ -81,6 +93,17 @@ enum class SpeechModel(
         ),
         languages = setOf("ja"),
     ),
+    /**
+     * Meta Omnilingual ASR (300M, CTC): 1,600 languages, including Armenian. Better than
+     * Whisper Base for languages Parakeet and SenseVoice don't cover (Farsi, Hindi, Georgian…).
+     * Writes no punctuation. Apache 2.0.
+     */
+    OMNILINGUAL("omnilingual", Engine.OMNILINGUAL, "Meta Omnilingual (1,600 languages)", 365,
+        listOf(
+            ModelFile("$OMNILINGUAL_HF/tokens.txt", "omnilingual/tokens.txt", 86_423),
+            ModelFile("$OMNILINGUAL_HF/model.int8.onnx", "omnilingual/model.int8.onnx", 365_352_120),
+        ),
+    ),
     /** Kotoba-Whisper v2: Whisper large-v3 distilled for Japanese (accuracy close to large-v3). */
     KOTOBA("kotoba-v2", Engine.WHISPER, "Kotoba-Whisper v2 (Japanese)", 538,
         listOf(ModelFile("$KOTOBA_HF/ggml-kotoba-whisper-v2.0-q5_0.bin", "ggml-kotoba-whisper-v2.0-q5_0.bin", 537_819_875)),
@@ -100,6 +123,8 @@ enum class SpeechModel(
         fun recommended(language: String): SpeechModel = when {
             language in PARAKEET_LANGUAGES -> PARAKEET
             language in setOf("ja", "zh", "ko") -> SENSEVOICE
+            // Whisper Base is weak in these; Armenian is only in Omnilingual's range of good ones.
+            language in OMNILINGUAL_FIRST -> OMNILINGUAL
             else -> BASE
         }
 

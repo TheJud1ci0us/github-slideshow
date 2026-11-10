@@ -5,6 +5,7 @@ import com.ascolta.app.data.AppLog
 import com.ascolta.app.data.Word
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineOmnilingualAsrCtcModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
@@ -49,7 +50,7 @@ interface SpeechEngine : Closeable {
         fun load(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine =
             when (model.engine) {
                 Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
-                Engine.PARAKEET, Engine.SENSEVOICE, Engine.REAZONSPEECH -> SherpaEngine(model, models.primaryPath(model), options)
+                Engine.PARAKEET, Engine.SENSEVOICE, Engine.REAZONSPEECH, Engine.OMNILINGUAL -> SherpaEngine(model, models.primaryPath(model), options)
             }
 
     }
@@ -151,6 +152,11 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 numThreads = options.threads,
                 modelType = "transducer",
             )
+            Engine.OMNILINGUAL -> OfflineModelConfig(
+                omnilingual = OfflineOmnilingualAsrCtcModelConfig(model = File(modelDir, "model.int8.onnx").path),
+                tokens = File(modelDir, "tokens.txt").path,
+                numThreads = options.threads,
+            )
             else -> OfflineModelConfig(
                 transducer = OfflineTransducerModelConfig(
                     encoder = File(modelDir, "encoder.int8.onnx").path,
@@ -185,7 +191,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         aborted = false
         val regions = speech ?: listOf(0L to samples.size / 16L)
         // ReazonSpeech drops words on long input (it was trained on short utterances).
-        val pieces = SpeechAlignment.splitLong(regions, if (engine == Engine.REAZONSPEECH) REAZON_MAX_PIECE_MS else MAX_PIECE_MS)
+        val pieces = SpeechAlignment.splitLong(regions, if (engine.cutsAtPauses) REAZON_MAX_PIECE_MS else MAX_PIECE_MS)
         pieces.forEachIndexed { i, (startMs, endMs) ->
             if (aborted) return false
             onProgress(i * 100 / pieces.size.coerceAtLeast(1))
@@ -386,7 +392,7 @@ object SpeechAlignment {
         else -> false
     }
 
-    private val SENTENCE_END = Regex("""[.!?…。！？]["»”’)」』]*$""")
+    private val SENTENCE_END = Regex("""[.!?…。！？؟۔।॥։՞]["»”’)」』]*$""")
     /** Engines without punctuation (e.g. ReazonSpeech): a pause this long ends a sentence. */
     private const val PAUSE_SPLIT_MS = 700L
 

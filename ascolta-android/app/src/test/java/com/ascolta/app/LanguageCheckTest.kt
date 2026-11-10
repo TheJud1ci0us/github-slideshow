@@ -47,4 +47,17 @@ class LanguageCheckTest {
         assertTrue(LanguageCheck.scriptMatches("Il Post", "it"))
         assertFalse(LanguageCheck.scriptMatches("Новости дня", "it"))
     }
+
+    /** Feeds that wrongly declare English (a common default in hosting tools). */
+    @Test
+    fun aWrongEnglishDeclarationIsNotBelieved() {
+        assertTrue(keep("پادکست فارسی", "en", target = "fa"))
+        assertTrue(keep("Gumnam Saya – Horror Stories in Hindi", "en", target = "hi"))
+        assertTrue(keep("Osho Hindi Podcast", null, target = "hi"))
+        assertTrue(keep("Podcast en español para todos", "en", target = "es"))
+        assertFalse(keep("Global News Podcast", "en", target = "fa"))
+        assertFalse(keep("The Georgian Impact Podcast | AI, ML & More", "en")) // English, just mentions Georgian
+        assertEquals("en", LanguageCheck.trusted("en", "The Daily", "es"))
+        assertEquals(null, LanguageCheck.trusted("en", "پادکست فارسی", "fa"))
+    }
 }

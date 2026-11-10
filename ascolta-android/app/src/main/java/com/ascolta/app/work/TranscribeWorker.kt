@@ -350,7 +350,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             reader.read(span.startMs, span.endMs - span.startMs) { !ctx.isActive }
                         }
                         var samples = decoded
-                        var speech = vadPath?.let { SpeechDetection.detect(it, samples, fine = model.engine == Engine.REAZONSPEECH) }
+                        var speech = vadPath?.let { SpeechDetection.detect(it, samples, fine = model.engine.cutsAtPauses) }
                         val lengthMs = samples.size / 16L
                         val startMs = firstSample / 16
                         val endOfFile = startMs + lengthMs >= totalMs - 1_000 || lengthMs < span.endMs - span.startMs - 1_000

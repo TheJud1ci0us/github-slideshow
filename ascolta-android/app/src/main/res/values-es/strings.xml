@@ -423,4 +423,8 @@
     <string name="show_less">Menos</string>
     <string name="feed_gone">El feed de este pódcast ya no está disponible (error %1$d)</string>
     <string name="switched_to_download">Ahora suena el episodio descargado, para que la transcripción coincida con lo que oyes</string>
+    <string name="model_desc_omnilingual">Meta Omnilingual: 1.600 idiomas, incluido el armenio. Mejor que Whisper Base para persa, hindi, georgiano y otros. Sin puntuación: las frases se cortan en las pausas.</string>
+    <string name="no_offline_translation">Aún no hay traducción sin conexión para %1$s: la transcripción se muestra sin traducir</string>
+    <string name="discover_loading_more">Cargando más pódcasts…</string>
+    <string name="discover_end">Eso es todo por ahora</string>
 </resources>

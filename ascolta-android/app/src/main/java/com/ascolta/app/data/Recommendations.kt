@@ -50,7 +50,87 @@ object Recommendations {
         )
         // Only podcasts really in the language (courses may also be in the learner's own).
         val declared = feedLanguage.ofAll(candidates.map { it.podcast.feedUrl })
-        verify(candidates, declared, language, native, feedLanguage::isDead).take(limit)
+        val found = verify(candidates, declared, language, native, feedLanguage::isDead).take(limit)
+        if (found.size >= limit / 2) return@coroutineScope found
+        // Backup: few found the main way (Hindi shows mostly have Latin-letter titles that the
+        // charts don't surface), so search the store for the language's own name.
+        val more = backupSources(directory, language, country).map { src -> async { runCatching { src() }.getOrDefault(emptyList()) } }
+            .awaitAll().flatten().distinctBy { it.feedUrl }.filter { r -> found.none { it.podcast.feedUrl == r.feedUrl } }.take(60)
+        val extra = more.map { Pick(it, LevelGuess.estimate(it.title, it.summary, it.genreIds.firstOrNull(), it.genre)) }
+        found + verify(extra, feedLanguage.ofAll(extra.map { it.podcast.feedUrl }), language, native, feedLanguage::isDead)
+            .take(limit - found.size)
+    }
+
+    // ---- Sources for endless lists (PodcastPager) ----------------------------
+
+    /** The language's names to search for: its own ("हिंदी", "فارسی") and in English ("Hindi"). */
+    fun searchNames(language: String): List<String> =
+        (LanguageCheck.ownNames(language) + languageNames(language)).distinct()
+
+    /**
+     * Backup searches: the language's names in its store and the US store, optionally limited
+     * to shows passing [keep] (e.g. a theme).
+     */
+    fun backupSources(
+        directory: PodcastDirectory,
+        language: String,
+        country: String,
+        keep: (DirectoryResult) -> Boolean = { true },
+    ): List<suspend () -> List<DirectoryResult>> =
+        searchNames(language).flatMap { name ->
+            listOf(country, "US").distinct().map { store -> suspend { directory.search(name, store, 200).filter(keep) } }
+        }
+
+    /** A theme: its chart, then shows found by the theme's name and the word "podcast", then the backup searches. */
+    fun themeSources(directory: PodcastDirectory, genreId: Int, language: String, country: String): List<suspend () -> List<DirectoryResult>> {
+        val chart = suspend { directory.topByGenre(genreId, country, 200) }
+        val byName = suspend {
+            genreName(directory.topByGenre(genreId, country, 200), genreId)
+                ?.let { inTheme(directory.search(it, country, 200), genreId) }.orEmpty()
+        }
+        val byWord = suspend {
+            LanguageCheck.PODCAST_WORD[language]?.let { inTheme(directory.search(it, country, 200), genreId) }.orEmpty()
+        }
+        return listOf(chart, byName, byWord) + backupSources(directory, language, country) { genreId in it.genreIds }
+    }
+
+    /** Shows for learners: one source per learner search ("slow Italian", "italiano facile"…), then the backup. */
+    fun learnerSources(directory: PodcastDirectory, language: String, country: String): List<suspend () -> List<DirectoryResult>> {
+        val names = languageNames(language)
+        return learnerQueries(language, country).map { (term, store) ->
+            suspend { directory.search(term, store, 100).filter { forLearners(it, names) } }
+        }
+    }
+
+    /**
+     * "For you": the favourite themes (charts first, round the themes), then shows for learners,
+     * then the backup searches by the language's name and the word "podcast".
+     */
+    fun forYouSources(directory: PodcastDirectory, language: String, country: String, genres: List<Int>): List<suspend () -> List<DirectoryResult>> {
+        val themes = genres.filter { it != GENRE_LEARNING }.ifEmpty { listOf(1324, 1489) } // Society & Culture, News
+        val perTheme = themes.map { themeSources(directory, it, language, country).take(3) }
+        val interleaved = (0 until 3).flatMap { i -> perTheme.mapNotNull { it.getOrNull(i) } }
+        val word = LanguageCheck.PODCAST_WORD[language]?.let { w -> listOf(suspend { directory.search(w, country, 200) }) }.orEmpty()
+        return interleaved + learnerSources(directory, language, country) + backupSources(directory, language, country) + word
+    }
+
+    /** The page check: feed still working and in the language (courses may be in the learner's own). */
+    fun languageCheck(
+        feedLanguage: com.ascolta.app.net.FeedLanguage,
+        language: String,
+        native: String,
+        isCourse: Boolean,
+    ): suspend (List<DirectoryResult>) -> List<DirectoryResult> = { batch ->
+        val declared = feedLanguage.ofAll(batch.map { it.feedUrl })
+        batch.filter { !feedLanguage.isDead(it.feedUrl) }
+            .filter { LanguageCheck.keep(it.title, it.summary, declared[it.feedUrl], language, native, isCourse) }
+            .map { it.copy(language = declared[it.feedUrl]) }
+    }
+
+    /** For typed searches: only feeds that still work (any language; the tag says which). */
+    fun workingCheck(feedLanguage: com.ascolta.app.net.FeedLanguage): suspend (List<DirectoryResult>) -> List<DirectoryResult> = { batch ->
+        val declared = feedLanguage.ofAll(batch.map { it.feedUrl })
+        batch.filter { !feedLanguage.isDead(it.feedUrl) }.map { it.copy(language = declared[it.feedUrl]) }
     }
 
     /**

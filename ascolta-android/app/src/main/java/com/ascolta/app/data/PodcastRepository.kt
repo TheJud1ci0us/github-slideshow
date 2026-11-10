@@ -265,16 +265,13 @@ class PodcastRepository(
     suspend fun transcribe(episodeId: Long, manual: Boolean = true, takeOver: Boolean = manual) {
         Analytics.track("Transcription.requested", mapOf("manual" to manual.toString()))
         val episode = episodeDao.get(episodeId) ?: return
-        if (episode.transcriptState in listOf(TranscriptState.QUEUED, TranscriptState.RUNNING, TranscriptState.DONE)) return
-        if (takeOver) {
-            val others = episodeDao.activeList().filter {
-                it.id != episodeId && (it.transcriptState == TranscriptState.QUEUED || it.transcriptState == TranscriptState.RUNNING)
-            }
-            for (other in others) {
-                AppLog.i("Repo", "Switching transcription #${other.id} → #$episodeId")
-                stopTranscription(other.id)
-            }
+        // Already waiting its turn: a Transcribe press moves it to the front.
+        if (episode.transcriptState == TranscriptState.QUEUED && takeOver) {
+            prioritize(episodeId)
+            return
         }
+        if (episode.transcriptState in listOf(TranscriptState.QUEUED, TranscriptState.RUNNING, TranscriptState.DONE)) return
+        if (takeOver) stopOthers(episodeId)
         val podcast = podcastDao.get(episode.podcastId ?: -1)
         val language = podcast?.libraryLanguage
             ?: podcast?.language?.lowercase()?.take(2)?.takeIf { lang -> LANGUAGES.any { it.code == lang } && lang != settings.nativeLanguage.value }
@@ -283,6 +280,42 @@ class PodcastRepository(
         episodeDao.setTranscriptLanguage(episodeId, language)
         episodeDao.setTranscript(episodeId, TranscriptState.QUEUED, episode.transcriptProgress, context.getString(R.string.status_waiting))
         WorkScheduler.transcribe(context, episodeId, manual)
+    }
+
+    /** Stops every other queued or running transcription (their progress is kept). */
+    private suspend fun stopOthers(episodeId: Long) {
+        val others = episodeDao.activeList().filter {
+            it.id != episodeId && (it.transcriptState == TranscriptState.QUEUED || it.transcriptState == TranscriptState.RUNNING)
+        }
+        for (other in others) {
+            AppLog.i("Repo", "Switching transcription #${other.id} → #$episodeId")
+            stopTranscription(other.id)
+        }
+    }
+
+    /**
+     * The episode being listened to comes first: if its transcription is waiting or was stopped
+     * part-way while another episode is being transcribed, that one is stopped (keeping its
+     * progress) and this one starts now. Does nothing if this episode has no transcription
+     * under way or nothing else is running.
+     */
+    suspend fun prioritize(episodeId: Long) {
+        val episode = episodeDao.get(episodeId) ?: return
+        val waiting = episode.transcriptState == TranscriptState.QUEUED
+        val partial = episode.transcriptState == TranscriptState.NONE && episode.transcriptProgress > 0f
+        if (!waiting && !partial) return
+        val othersRunning = episodeDao.activeList().any {
+            it.id != episodeId && (it.transcriptState == TranscriptState.QUEUED || it.transcriptState == TranscriptState.RUNNING)
+        }
+        if (!othersRunning) return
+        AppLog.i("Repo", "Playing #$episodeId: its transcription goes first")
+        stopOthers(episodeId)
+        if (waiting) {
+            // Requeue at once (REPLACE) rather than waiting for the others' jobs to let go.
+            WorkScheduler.transcribe(context, episodeId, manual = true, replace = true)
+        } else {
+            transcribe(episodeId, manual = true, takeOver = false)
+        }
     }
 
     /**
@@ -423,6 +456,11 @@ class PodcastRepository(
 
     /** Translates [text] from [source] into [target], downloading the model if needed. */
     suspend fun translateText(text: String, source: String, target: String): String {
+        // Google's offline translator doesn't know every language (e.g. Armenian).
+        if (!translation.isSupported(source, target)) {
+            val missing = if (translation.isSupported(source, "en")) target else source
+            throw IOException(context.getString(R.string.no_offline_translation, languageName(missing)))
+        }
         return withTimeoutOrNull(60_000L) {
             ensureTranslationModel(source, target)
             translation.translate(text, source, target)
