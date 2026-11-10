@@ -218,6 +218,14 @@ fun AscoltaRoot() {
 }
 
 private fun NavHostController.navigateToTab(route: String) {
+    // Home always goes back to the Home screen itself, dropping whatever was opened from it.
+    if (route == "library") {
+        // saveState keeps the other tab's place (e.g. Discover's search) for when you go back to it.
+        if (!popBackStack("library", inclusive = false, saveState = true)) {
+            navigate("library") { popUpTo(0); launchSingleTop = true }
+        }
+        return
+    }
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

@@ -63,7 +63,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 // A transcription was waiting for this download.
                 WorkScheduler.transcribe(applicationContext, id, manual = true)
             } else if (inputData.getBoolean(WorkScheduler.KEY_TRANSCRIBE_AFTER, true)) {
-                graph.repo.transcribe(id, manual = true)
+                // Automatic (after a download): waits its turn instead of stopping another episode.
+                graph.repo.transcribe(id, manual = true, takeOver = false)
             }
             Result.success()
         } catch (e: CancellationException) {

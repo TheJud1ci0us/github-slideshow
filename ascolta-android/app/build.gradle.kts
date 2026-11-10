@@ -21,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.11.2"
+        versionCode = 22
+        versionName = "0.11.3"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.

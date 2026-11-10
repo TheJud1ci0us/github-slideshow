@@ -179,14 +179,14 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                 TextButton(onClick = { importModel.launch(arrayOf("*/*")) }, modifier = Modifier.padding(horizontal = 8.dp)) {
                     Text(stringResource(R.string.import_model))
                 }
-
+                // Benchmark of the model chosen above.
+                SpeedTestRow()
             }
             "speed" -> {
                 ThreadsRow(settings.threads)
                 SwitchRow(stringResource(R.string.flash_title), stringResource(R.string.flash_text), settings.flashAttention)
                 SwitchRow(stringResource(R.string.skip_title), stringResource(R.string.skip_text), settings.skipNonSpeech)
                 SwitchRow(stringResource(R.string.gpu_title), stringResource(R.string.gpu_text), settings.useGpu)
-                SpeedTestRow()
 
             }
             "display" -> {

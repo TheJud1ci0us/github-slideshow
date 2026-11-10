@@ -255,10 +255,24 @@ class PodcastRepository(
         }
     }
 
-    suspend fun transcribe(episodeId: Long, manual: Boolean = true) {
+    /**
+     * Queues this episode's transcription. With [takeOver] (a Transcribe button), any other
+     * episode being transcribed or waiting is stopped first (its progress is kept, so
+     * "Continue" resumes it) and this one starts right away instead of waiting its turn.
+     */
+    suspend fun transcribe(episodeId: Long, manual: Boolean = true, takeOver: Boolean = manual) {
         Analytics.track("Transcription.requested", mapOf("manual" to manual.toString()))
         val episode = episodeDao.get(episodeId) ?: return
         if (episode.transcriptState in listOf(TranscriptState.QUEUED, TranscriptState.RUNNING, TranscriptState.DONE)) return
+        if (takeOver) {
+            val others = episodeDao.activeList().filter {
+                it.id != episodeId && (it.transcriptState == TranscriptState.QUEUED || it.transcriptState == TranscriptState.RUNNING)
+            }
+            for (other in others) {
+                AppLog.i("Repo", "Switching transcription #${other.id} → #$episodeId")
+                stopTranscription(other.id)
+            }
+        }
         val podcast = podcastDao.get(episode.podcastId ?: -1)
         val language = podcast?.libraryLanguage
             ?: podcast?.language?.lowercase()?.take(2)?.takeIf { lang -> LANGUAGES.any { it.code == lang } && lang != settings.nativeLanguage.value }
