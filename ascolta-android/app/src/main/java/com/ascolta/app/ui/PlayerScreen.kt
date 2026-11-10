@@ -403,9 +403,15 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             )
         },
         bottomBar = {
-            val sel = selection
-            if (sel != null) SelectionBar(
+            val raw = selection
+            val joinPref by settings.joinSelection.flow.collectAsState()
+            // A selection across two transcript sentences: with or without the "." or "?" between them.
+            val sel = if (raw != null && raw.canJoin && joinPref) raw.joined() else raw
+            if (sel != null && raw != null) SelectionBar(
                 text = sel.text,
+                canJoin = raw.canJoin,
+                joined = joinPref,
+                onJoin = { settings.joinSelection.set(it) },
                 onSave = {
                     if (graph.allowPractice()) scope.launch {
                         val added = graph.repo.saveSelection(ep, sel, transcript?.language ?: settings.learningLanguage.value)
@@ -763,6 +769,8 @@ private fun SegmentItem(
     onSelect: (Int) -> Unit = {},
 ) {
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val select by androidx.compose.runtime.rememberUpdatedState(onSelect)
+    val seek by androidx.compose.runtime.rememberUpdatedState(onSeek)
     Column(
         Modifier
             .fillMaxWidth()
@@ -774,7 +782,7 @@ private fun SegmentItem(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             // Tap: play from here. Long press: select the whole sentence (e.g. to shadow it).
-            modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures(onTap = { onSeek() }, onLongPress = { onSelect(-1) }) }
+            modifier = Modifier.pointerInput(segment.startMs) { detectTapGestures(onTap = { seek() }, onLongPress = { select(-1) }) }
                 .padding(bottom = 2.dp),
         )
         val textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -842,14 +850,18 @@ private fun SegmentItem(
 @Composable
 private fun TappableText(text: AnnotatedString, style: TextStyle, onTap: (Int) -> Unit, onLongPress: (Int) -> Unit) {
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    // The gesture detector lives as long as the text: always call the latest handlers (otherwise a
+    // tap after a long press still acts as if nothing were selected and opens the dictionary).
+    val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    val longPress by androidx.compose.runtime.rememberUpdatedState(onLongPress)
     Text(
         text,
         style = style,
         onTextLayout = { layout = it },
         modifier = Modifier.pointerInput(text.text) {
             detectTapGestures(
-                onTap = { pos -> layout?.let { onTap(it.getOffsetForPosition(pos)) } },
-                onLongPress = { pos -> layout?.let { onLongPress(it.getOffsetForPosition(pos)) } },
+                onTap = { pos -> layout?.let { tap(it.getOffsetForPosition(pos)) } },
+                onLongPress = { pos -> layout?.let { longPress(it.getOffsetForPosition(pos)) } },
             )
         },
     )
@@ -1124,7 +1136,16 @@ private fun Controls(
 
 /** Shown instead of the player controls while part of the transcript is selected. */
 @Composable
-private fun SelectionBar(text: String, onSave: () -> Unit, onShadow: () -> Unit, onCopy: () -> Unit, onClose: () -> Unit) {
+private fun SelectionBar(
+    text: String,
+    canJoin: Boolean,
+    joined: Boolean,
+    onJoin: (Boolean) -> Unit,
+    onSave: () -> Unit,
+    onShadow: () -> Unit,
+    onCopy: () -> Unit,
+    onClose: () -> Unit,
+) {
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1135,6 +1156,21 @@ private fun SelectionBar(text: String, onSave: () -> Unit, onShadow: () -> Unit,
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.action_close)) }
             }
             Text(stringResource(R.string.select_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (canJoin) {
+                // The model sometimes ends a sentence too early: let the learner drop the stray "." or "?".
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.select_join_question), style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.FilterChip(
+                        selected = !joined, onClick = { onJoin(false) },
+                        label = { Text(stringResource(R.string.select_keep_punctuation)) },
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = joined, onClick = { onJoin(true) },
+                        label = { Text(stringResource(R.string.select_remove_punctuation)) },
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onSave, modifier = Modifier.weight(1f)) {

@@ -63,4 +63,27 @@ class SelectionTest {
         assertEquals(0.8f, r.score, 0.001f)
         assertEquals(3, ShadowCheck.compare("今日はいい天気", "今日はいい").matched - 2) // character by character
     }
+
+    @Test
+    fun punctuationBetweenSentencesCanBeRemoved() {
+        val sel = Selection.of(segs, timed, ranges, WordPos(0, 3), WordPos(1, 1))
+        assertEquals("è bello. Andiamo al", sel.text)
+        assertTrue(sel.canJoin)
+        val joined = sel.joined()
+        assertEquals("è bello Andiamo al", joined.text)
+        assertEquals("Oggi il tempo è bello Andiamo al mare!", joined.context) // the real end is kept
+        assertEquals(sel.startMs, joined.startMs)
+        // Within one sentence there is nothing to join.
+        assertFalse(Selection.of(segs, timed, ranges, WordPos(0, 1), WordPos(0, 2)).canJoin)
+    }
+
+    @Test
+    fun joinKeepsInnerAndFinalPunctuationAndCapitals() {
+        assertEquals("Je vais au marché", Selection.join(listOf("Je vais.", "au marché")))
+        assertEquals("Ich gehe, glaube ich Haus?", Selection.join(listOf("Ich gehe, glaube ich…", "Haus?")))
+        assertEquals("¿Vas al cine?", Selection.join(listOf("¿Vas?", "¿al cine?")))
+        assertEquals("今日は天気がいいですね。", Selection.join(listOf("今日は。", "天気がいいですね。")))
+        assertEquals("Ես գնում եմ տուն", Selection.join(listOf("Ես գնում եմ։", "տուն")))
+        assertEquals("a b c", Selection.join(listOf("a!", " b ?", "c")))
+    }
 }

@@ -274,6 +274,7 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                 TextButton(onClick = {
                     settings.tourSeen.set(false)
                     settings.playerTourSeen.set(false)
+                    settings.selectTourSeen.set(false)
                     onBack()
                 }, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.tour_replay)) }
                 LegalSection()

@@ -486,7 +486,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Unzip this file.\n2. Copy the files in media/ into Anki\'s collection.media folder (Anki: Tools → Check Media → View Files).\n3. In Anki: File → Import → cards.txt. Fields: Front, Back, Sentence, Sentence translation, Audio (tab-separated).\n</string>
     <string name="shadow_this">Shadow this sentence</string>
     <string name="saved_without_audio">Saved without the speaker\'s audio: the episode is downloading for next time</string>
-    <string name="select_hint">Tap another word to extend the selection</string>
+    <string name="select_hint">Tap another word, even in the next sentence, to extend</string>
     <string name="select_save">Save</string>
     <string name="select_shadow">Shadow</string>
     <string name="select_copy">Copy</string>
@@ -517,7 +517,7 @@
     <string name="tour_stats_title">Statistics</string>
     <string name="tour_stats_text">Profile → Statistics shows your listening time, streaks, records and podcasts.</string>
     <string name="tour_transcript_title">The transcript</string>
-    <string name="tour_transcript_text">Tap a word for its meaning and to hear it. Long-press a word to select a phrase: save it with its audio, or shadow it. Long-press a sentence\'s time to select the whole sentence.</string>
+    <string name="tour_transcript_text">Tap a word to see its meaning and hear it. Tap a sentence\'s time to play from there.</string>
     <string name="tour_more_title">Display options</string>
     <string name="tour_more_text">Text size, translation under each sentence (double subtitles), word highlighting, furigana or romaji, and shadowing a sentence.</string>
     <string name="tour_controls_title">Controls</string>
@@ -570,4 +570,9 @@
     <string name="pro_yearly">Yearly (save 50%)</string>
     <string name="pro_lifetime">Lifetime (pay once)</string>
     <string name="pro_profile_subtitle">Unlimited transcription, Best models, Anki export</string>
+    <string name="tour_select_title">Select and save</string>
+    <string name="tour_select_text">1. Long-press a word to start a selection.\n2. Tap another word, even in a later sentence, to extend it.\n3. Or long-press a sentence\'s time to take the whole sentence.\n4. Then Save (a card with the speaker\'s voice), Shadow, or Copy.\nIf your selection crosses two sentences, you can remove the \".\" or \"?\" the transcription put between them.</string>
+    <string name="select_join_question">Punctuation between the sentences:</string>
+    <string name="select_keep_punctuation">Keep</string>
+    <string name="select_remove_punctuation">Remove</string>
 </resources>

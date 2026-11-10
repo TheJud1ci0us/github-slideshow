@@ -466,7 +466,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Descomprime este archivo.\n2. Copia los archivos de media/ en la carpeta collection.media de Anki (Anki: Herramientas → Comprobar multimedia → Ver archivos).\n3. En Anki: Archivo → Importar → cards.txt. Campos: Anverso, Reverso, Frase, Traducción de la frase, Audio (separados por tabulaciones).\n</string>
     <string name="shadow_this">Shadowing de esta frase</string>
     <string name="saved_without_audio">Guardado sin el audio del hablante: el episodio se está descargando para la próxima vez</string>
-    <string name="select_hint">Toca otra palabra para ampliar la selección</string>
+    <string name="select_hint">Toca otra palabra, incluso en la frase siguiente, para ampliar</string>
     <string name="select_save">Guardar</string>
     <string name="select_shadow">Shadowing</string>
     <string name="select_copy">Copiar</string>
@@ -497,7 +497,7 @@
     <string name="tour_stats_title">Estadísticas</string>
     <string name="tour_stats_text">Perfil → Estadísticas muestra tu tiempo de escucha, rachas, récords y pódcasts.</string>
     <string name="tour_transcript_title">La transcripción</string>
-    <string name="tour_transcript_text">Toca una palabra para ver su significado y oírla. Mantén pulsada una palabra para seleccionar un fragmento: guárdalo con su audio o haz shadowing. Mantén pulsada la hora de una frase para seleccionarla entera.</string>
+    <string name="tour_transcript_text">Toca una palabra para ver su significado y oírla. Toca la hora de una frase para escuchar desde ahí.</string>
     <string name="tour_more_title">Opciones de visualización</string>
     <string name="tour_more_text">Tamaño del texto, traducción bajo cada frase (subtítulos dobles), resaltado de palabras, furigana o romaji, y shadowing de una frase.</string>
     <string name="tour_controls_title">Controles</string>
@@ -550,4 +550,9 @@
     <string name="pro_yearly">Anual (ahorra un 50 %)</string>
     <string name="pro_lifetime">De por vida (pago único)</string>
     <string name="pro_profile_subtitle">Transcripción ilimitada, mejores modelos, exportación a Anki</string>
+    <string name="tour_select_title">Seleccionar y guardar</string>
+    <string name="tour_select_text">1. Mantén pulsada una palabra para empezar una selección.\n2. Toca otra palabra, incluso en una frase posterior, para ampliarla.\n3. O mantén pulsada la hora de una frase para tomarla entera.\n4. Luego Guardar (una tarjeta con la voz de quien habla), Shadowing o Copiar.\nSi la selección cruza dos frases, puedes quitar el «.» o el «?» que la transcripción puso entre ellas.</string>
+    <string name="select_join_question">Puntuación entre las frases:</string>
+    <string name="select_keep_punctuation">Mantener</string>
+    <string name="select_remove_punctuation">Quitar</string>
 </resources>

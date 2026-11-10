@@ -69,9 +69,13 @@ object Tour {
     /** The first time an episode is opened. */
     val PLAYER = listOf(
         Step("transcript", R.string.tour_transcript_title, R.string.tour_transcript_text),
+        Step("transcript", R.string.tour_select_title, R.string.tour_select_text),
         Step("player_more", R.string.tour_more_title, R.string.tour_more_text),
         Step("player_controls", R.string.tour_controls_title, R.string.tour_controls_text),
     )
+
+    /** Only the selection step, for people who saw the player tour before it existed. */
+    val SELECT = listOf(Step("transcript", R.string.tour_select_title, R.string.tour_select_text))
 }
 
 /** Marks a control for the tour under [id]. */

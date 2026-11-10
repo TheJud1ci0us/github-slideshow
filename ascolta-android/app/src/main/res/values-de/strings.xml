@@ -459,7 +459,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Entpacke diese Datei.\n2. Kopiere die Dateien aus media/ in Ankis Ordner collection.media (Anki: Extras → Medien prüfen → Dateien anzeigen).\n3. In Anki: Datei → Importieren → cards.txt. Felder: Vorderseite, Rückseite, Satz, Satzübersetzung, Audio (tabulatorgetrennt).\n</string>
     <string name="shadow_this">Diesen Satz nachsprechen</string>
     <string name="saved_without_audio">Ohne Audio des Sprechers gespeichert: die Folge wird für das nächste Mal heruntergeladen</string>
-    <string name="select_hint">Tippe auf ein anderes Wort, um die Auswahl zu erweitern</string>
+    <string name="select_hint">Tippe auf ein anderes Wort, auch im nächsten Satz, um zu erweitern</string>
     <string name="select_save">Speichern</string>
     <string name="select_shadow">Nachsprechen</string>
     <string name="select_copy">Kopieren</string>
@@ -490,7 +490,7 @@
     <string name="tour_stats_title">Statistik</string>
     <string name="tour_stats_text">Profil → Statistik zeigt Hörzeit, Serien, Rekorde und Podcasts.</string>
     <string name="tour_transcript_title">Das Transkript</string>
-    <string name="tour_transcript_text">Tippe auf ein Wort für seine Bedeutung und Aussprache. Halte ein Wort gedrückt, um einen Abschnitt auszuwählen: mit Audio speichern oder nachsprechen. Halte die Zeit eines Satzes gedrückt, um den ganzen Satz zu wählen.</string>
+    <string name="tour_transcript_text">Tippe auf ein Wort für seine Bedeutung und Aussprache. Tippe auf die Zeit eines Satzes, um ab dort zu hören.</string>
     <string name="tour_more_title">Anzeigeoptionen</string>
     <string name="tour_more_text">Textgröße, Übersetzung unter jedem Satz (doppelte Untertitel), Wortmarkierung, Furigana oder Romaji und einen Satz nachsprechen.</string>
     <string name="tour_controls_title">Steuerung</string>
@@ -543,4 +543,9 @@
     <string name="pro_yearly">Jährlich (50 % sparen)</string>
     <string name="pro_lifetime">Lebenslang (einmal zahlen)</string>
     <string name="pro_profile_subtitle">Unbegrenzte Transkription, beste Modelle, Anki-Export</string>
+    <string name="tour_select_title">Auswählen und speichern</string>
+    <string name="tour_select_text">1. Halte ein Wort gedrückt, um eine Auswahl zu beginnen.\n2. Tippe auf ein anderes Wort, auch in einem späteren Satz, um sie zu erweitern.\n3. Oder halte die Zeit eines Satzes gedrückt, um den ganzen Satz zu nehmen.\n4. Dann Speichern (eine Karte mit der Stimme des Sprechers), Nachsprechen oder Kopieren.\nGeht die Auswahl über zwei Sätze, kannst du den „.“ oder das „?“ entfernen, das die Transkription dazwischen gesetzt hat.</string>
+    <string name="select_join_question">Satzzeichen zwischen den Sätzen:</string>
+    <string name="select_keep_punctuation">Behalten</string>
+    <string name="select_remove_punctuation">Entfernen</string>
 </resources>

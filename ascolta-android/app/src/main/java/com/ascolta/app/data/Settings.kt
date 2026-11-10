@@ -167,6 +167,10 @@ class Settings(context: Context) {
     val askOnMobileData = bool("ask_on_mobile_data", true)
     val tourSeen = bool("tour_seen", false)
     val playerTourSeen = bool("player_tour_seen", false)
+    /** The "Select and save" tour step (added in 1.0.1, shown once to people who saw the player tour). */
+    val selectTourSeen = bool("select_tour_seen", false)
+    /** Remove the "." or "?" between transcript sentences in a selection (last choice made). */
+    val joinSelection = bool("join_selection", false)
 
     fun learningList(): List<String> =
         learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }

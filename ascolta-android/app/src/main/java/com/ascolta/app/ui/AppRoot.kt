@@ -183,10 +183,13 @@ fun AscoltaRoot() {
     val tourSettings = context0().graph.settings
     val tourSeen by tourSettings.tourSeen.flow.collectAsState()
     val playerTourSeen by tourSettings.playerTourSeen.flow.collectAsState()
+    val selectTourSeen by tourSettings.selectTourSeen.flow.collectAsState()
     if (!tourSeen && !inPlayer) {
         TourOverlay(Tour.MAIN) { tourSettings.tourSeen.set(true) }
     } else if (tourSeen && !playerTourSeen && route.startsWith("player")) {
-        TourOverlay(Tour.PLAYER) { tourSettings.playerTourSeen.set(true) }
+        TourOverlay(Tour.PLAYER) { tourSettings.playerTourSeen.set(true); tourSettings.selectTourSeen.set(true) }
+    } else if (playerTourSeen && !selectTourSeen && route.startsWith("player")) {
+        TourOverlay(Tour.SELECT) { tourSettings.selectTourSeen.set(true) }
     }
     }
 
