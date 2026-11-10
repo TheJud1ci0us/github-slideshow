@@ -420,4 +420,5 @@
     <string name="no_offline_translation">Noch keine Offline-Übersetzung für %1$s: das Transkript wird ohne Übersetzung gezeigt</string>
     <string name="discover_loading_more">Weitere Podcasts werden geladen…</string>
     <string name="discover_end">Das ist im Moment alles</string>
+    <string name="dictionary_credit">Bedeutungen aus Wiktionary (CC BY-SA)</string>
 </resources>

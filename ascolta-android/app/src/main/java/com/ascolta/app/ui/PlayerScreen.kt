@@ -757,6 +757,17 @@ private fun WordSheet(
         value = runCatching { graph.repo.translateWord(lookup.word, language) }
             .getOrElse { context.getString(R.string.word_translation_unavailable, it.message ?: "") }
     }
+    // Dictionary meanings (Wiktionary), in the learner's language when it isn't English.
+    val entry by produceState<Pair<com.ascolta.app.data.Dictionary.Entry, List<String>>?>(null, lookup) {
+        val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { graph.dictionary.lookup(lookup.word, language) }.getOrNull()
+        } ?: return@produceState
+        val native = graph.settings.nativeLanguage.value
+        val meanings = if (native == "en") found.meanings else runCatching {
+            graph.repo.translateText(found.meanings.joinToString("\n"), "en", native).split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        }.getOrDefault(found.meanings)
+        value = found to meanings
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
@@ -811,6 +822,24 @@ private fun WordSheet(
             Spacer(Modifier.height(4.dp))
             if (translation == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
             else Text(translation!!, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            entry?.let { (e, meanings) ->
+                // From the dictionary: the word's dictionary form, how it reads, and its meanings.
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    listOfNotNull(
+                        e.word.takeIf { !it.equals(lookup.word, ignoreCase = true) },
+                        e.romanization,
+                        e.pos.takeIf { it.isNotBlank() },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                meanings.take(5).forEachIndexed { i, m ->
+                    Text("${i + 1}. $m", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(stringResource(R.string.dictionary_credit), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(Modifier.height(16.dp))
             Text(lookup.segment.text, style = MaterialTheme.typography.bodyMedium)
             lookup.segment.translation?.let {
@@ -830,7 +859,8 @@ private fun WordSheet(
                             val added = graph.repo.saveWord(
                                 VocabEntity(
                                     word = lookup.word.lowercase(),
-                                    translation = translation.orEmpty(),
+                                    // The dictionary's meanings when there are some (more precise than one guess).
+                                    translation = entry?.second?.take(3)?.joinToString("; ") ?: translation.orEmpty(),
                                     sentence = lookup.segment.text,
                                     sentenceTranslation = sentenceTranslation,
                                     language = language,

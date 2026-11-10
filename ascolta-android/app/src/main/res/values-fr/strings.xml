@@ -427,4 +427,5 @@
     <string name="no_offline_translation">Pas encore de traduction hors ligne pour %1$s : la transcription est affichée sans traduction</string>
     <string name="discover_loading_more">Chargement d\'autres podcasts…</string>
     <string name="discover_end">C\'est tout pour le moment</string>
+    <string name="dictionary_credit">Sens tirés du Wiktionnaire (CC BY-SA)</string>
 </resources>

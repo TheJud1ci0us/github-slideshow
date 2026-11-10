@@ -447,4 +447,5 @@
     <string name="no_offline_translation">No offline translation for %1$s yet: the transcript is shown without translation</string>
     <string name="discover_loading_more">Loading more podcasts…</string>
     <string name="discover_end">That\'s everything for now</string>
+    <string name="dictionary_credit">Meanings from Wiktionary (CC BY-SA)</string>
 </resources>

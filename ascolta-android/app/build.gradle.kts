@@ -21,8 +21,8 @@ android {
         applicationId = "com.ascolta.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.13.1"
+        versionCode = 30
+        versionName = "0.14.0"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
@@ -87,6 +87,8 @@ android {
         jniLibs {
             // Only linked against at build time; the phone's own OpenCL driver is used.
             excludes += listOf("**/libOpenCL.so")
+            // sherpa-onnx and onnxruntime-android both carry ONNX Runtime; the versions match (1.24.3).
+            pickFirsts += listOf("**/libonnxruntime.so")
             // Extract native libraries to disk: ggml looks for its CPU-variant
             // plug-ins (libggml-cpu-*.so) in the app's native library folder.
             useLegacyPackaging = true
@@ -119,6 +121,11 @@ if (!sherpaAar.exists()) {
         .joinToString("") { "%02x".format(it) }
     check(digest == sherpaSha256) { "sherpa-onnx AAR checksum mismatch: $digest" }
     tmp.renameTo(sherpaAar)
+}
+
+tasks.withType<Test>().configureEach {
+    // Folder with downloaded Opus-MT models (hy-en/, en-hy/) for MarianTranslatorTest; skipped if unset.
+    System.getenv("OPUS_DIR")?.let { systemProperty("opus.dir", it) }
 }
 
 dependencies {
@@ -154,6 +161,12 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Japanese readings (furigana / romaji): morphological analyzer with the IPADIC dictionary.
     implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
+    // ONNX Runtime's Java API, for the Helsinki-NLP (Opus-MT) translation models. Same version
+    // as the runtime inside sherpa-onnx, so one copy of the library serves both.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
+    // The desktop build of the same runtime, to test the translator on the computer.
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.24.3")
+    testImplementation("org.json:json:20240303") // the real JSON parser (Android's is a stub in unit tests)
     implementation("io.coil-kt.coil3:coil-compose:3.2.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
 

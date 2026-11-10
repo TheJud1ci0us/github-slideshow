@@ -427,4 +427,5 @@
     <string name="no_offline_translation">Ainda não há tradução offline para %1$s: a transcrição é mostrada sem tradução</string>
     <string name="discover_loading_more">A carregar mais podcasts…</string>
     <string name="discover_end">Por agora é tudo</string>
+    <string name="dictionary_credit">Significados do Wikcionário (CC BY-SA)</string>
 </resources>

@@ -46,6 +46,7 @@ the phone.
   Chinese and Korean (one pass, very light), Whisper otherwise. Japanese can also use
   **ReazonSpeech v2** (small, trained on 35,000 h of Japanese) or **Kotoba-Whisper v2**.
 - **Meta Omnilingual** (365 MB, 1,600 languages, Apache 2.0): Armenian, and better than Whisper Base for Farsi, Hindi, Georgian and others. No punctuation (sentences are cut at pauses). Armenian has no offline translation (ML Kit), so it is transcript only.
+- **Translation beyond Google's languages**: Armenian ↔ English with Helsinki-NLP Opus-MT (Apache 2.0, ONNX Runtime on the phone, ~150 MB / ~60 MB downloads), chained with ML Kit for other languages (Armenian → English → French). Tapped Armenian words also show their Wiktionary meanings (CC BY-SA, bundled, 3 MB; inflected forms lead to the dictionary word; `tools/build_dict.py` builds the file).
 - **Graphics chip (experimental)**: whisper.cpp's OpenCL backend (Adreno-tuned kernels) is
   built as a plug-in using the phone's own OpenCL driver; with the switch on, the uncompressed
   "Whisper Base/Small · GPU" models run on the GPU (CPU fallback for anything it can't run).
