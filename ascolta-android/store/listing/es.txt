@@ -1,0 +1,18 @@
+SHORT DESCRIPTION: Aprende idiomas con pódcasts reales: transcripciones, traducciones, tarjetas.
+
+FULL DESCRIPTION:
+Aprende un idioma escuchando de lo que realmente hablan los nativos.
+
+LingoPod convierte cualquier pódcast en una lección. Sigue pódcasts en el idioma que aprendes: LingoPod escribe la transcripción mientras escuchas, con la traducción bajo cada frase, todo en tu teléfono. Sin cuenta, nada se envía a servidores.
+
+• Transcripciones en directo en más de 100 idiomas, en el teléfono
+• Traducción bajo cada frase, sin conexión
+• Toca una palabra: significado, diccionario y la pronunciación del hablante
+• Selecciona una expresión y guárdala con el audio original
+• Shadowing: repite tras el hablante, compara y comprueba tus palabras
+• Tarjetas con repetición espaciada, exportación a Anki con audio
+• Pódcasts por tema y nivel (A1–C2), comprobados en tu idioma
+• Estadísticas, rachas y logros
+
+Gratis: todas las funciones para probar, 30 minutos de transcripción por semana.
+LingoPod Pro: transcripción ilimitada, los modelos más precisos, tarjetas ilimitadas, comprobación del shadowing, exportación a Anki y estadísticas completas.

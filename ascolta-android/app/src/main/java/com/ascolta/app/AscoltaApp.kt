@@ -60,6 +60,7 @@ class AscoltaApp : Application() {
         // Statistics are sent when the app goes to the background (and every minute).
         graph.scope.launch { AppVisibility.visible.collect { if (!it) com.ascolta.app.data.Analytics.flush() } }
         Notifications.createChannels(this)
+        graph.billing.start()
         WorkScheduler.schedulePeriodicRefresh(this)
         graph.scope.launch {
             runCatching { graph.repo.recoverStuckWork() }.onFailure { AppLog.w("App", "Recovery failed", it) }
@@ -119,6 +120,17 @@ class AppGraph(app: Application) {
     val translation = TranslationService(com.ascolta.app.translate.OpusModels(app, http))
     val directory = PodcastDirectory(http)
     val dictionary = com.ascolta.app.data.Dictionary(app)
+    /** LingoPod Pro (Google Play) and what the free version allows. */
+    val billing = com.ascolta.app.data.Billing(app, http, scope)
+    val limits = com.ascolta.app.data.FreeLimits(app, billing.device)
+    val isPro get() = billing.isPro.value
+
+    /** One free saved selection or shadowing session (5 a day); false (and the paywall) when none is left. */
+    fun allowPractice(): Boolean =
+        isPro || limits.usePractice().also { if (!it) billing.requestPaywall("practice") }
+
+    /** A Pro-only feature: true with Pro, otherwise shows the paywall. */
+    fun requirePro(reason: String): Boolean = isPro.also { if (!it) billing.requestPaywall(reason) }
     val feedLanguage = com.ascolta.app.net.FeedLanguage(http)
     val repo = PodcastRepository(app, db, http, settings, transcripts, translation)
     val player = PlayerConnection(app, db, settings, progress)

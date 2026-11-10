@@ -13,3 +13,8 @@ third_party/whisper.cpp/
 
 # Downloaded by app/build.gradle.kts
 app/libs/*.aar
+keystore.properties
+*.jks
+*.keystore
+server/keys/
+.kotlin/

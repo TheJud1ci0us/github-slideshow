@@ -183,6 +183,7 @@ fun ShadowSheet(
 
     /** Transcribes the recording with this language's speech model and compares the words. */
     fun checkWhatISaid() {
+        if (!graph.requirePro("check")) return
         checking = true
         checkError = null
         scope.launch {

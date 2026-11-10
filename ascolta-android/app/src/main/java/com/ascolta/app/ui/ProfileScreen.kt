@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
@@ -53,7 +54,8 @@ import com.ascolta.app.graph
  * in rounded cards, each opening its own page.
  */
 @Composable
-fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, openPersonalize: () -> Unit) {
+fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, openPersonalize: () -> Unit, openPaywall: () -> Unit = {}) {
+    val proActive by LocalContext.current.graph.billing.isPro.collectAsState()
     val graph = LocalContext.current.graph
     val settings = graph.settings
     val learning by settings.learningLanguage.flow.collectAsState()
@@ -100,6 +102,8 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
             SettingsRow(Icons.Outlined.Category, stringResource(R.string.profile_personalize), subtitle = stringResource(R.string.profile_personalize_text)) {
                 openPersonalize()
             }
+            // LingoPod Pro: plans, or "active".
+            SettingsRow(Icons.Outlined.WorkspacePremium, stringResource(R.string.pro_title), subtitle = stringResource(if (proActive) R.string.pro_active else R.string.pro_profile_subtitle)) { openPaywall() }
             SettingsRow(Icons.Outlined.BarChart, stringResource(R.string.stats_title)) { openProgress() }
         }
         SectionCard(stringResource(R.string.profile_app_section)) {

@@ -13,7 +13,13 @@ import java.util.Locale
 /** Sizes of downloads, for the warning shown before downloading on mobile data. */
 object DownloadCost {
     /** Something to download: its name, size, and whether the size is exact (or "about"). */
-    data class Item(val name: String, val bytes: Long, val exact: Boolean)
+    data class Item(
+        val name: String,
+        val bytes: Long,
+        val exact: Boolean,
+        /** For models: the key recorded when the learner agrees (see Settings.approve); always asked. */
+        val approveKey: String? = null,
+    )
 
     /** "652 MB", "1.2 GB", "850 KB" (pure). */
     fun formatSize(bytes: Long, locale: Locale = Locale.getDefault()): String = when {

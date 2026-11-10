@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
  * "Don't ask again" was ticked) the action runs straight away.
  */
 class DataWarning internal constructor(private val scope: CoroutineScope, private val context: android.content.Context) {
-    internal class Pending(val items: List<DownloadCost.Item>, val now: () -> Unit, val onWifi: (() -> Unit)?)
+    internal class Pending(val items: List<DownloadCost.Item>, val now: () -> Unit, val onWifi: (() -> Unit)?, val metered: Boolean)
 
     internal var pending by mutableStateOf<Pending?>(null)
 
@@ -44,11 +44,20 @@ class DataWarning internal constructor(private val scope: CoroutineScope, privat
      */
     fun run(needs: suspend () -> List<DownloadCost.Item>, onWifi: (() -> Unit)? = null, now: () -> Unit) {
         val settings = context.graph.settings
-        if (!settings.askOnMobileData.value || !DownloadCost.isMetered(context)) return now()
+        val metered = DownloadCost.isMetered(context)
         scope.launch {
             val items = runCatching { needs() }.getOrDefault(emptyList()).filter { it.bytes > 0 }
-            if (items.isEmpty()) now() else pending = Pending(items, now, onWifi)
+            // Models are always asked (with their size), on Wi-Fi too; other downloads only on
+            // mobile data, unless "Don't ask again" was ticked.
+            val ask = items.any { it.approveKey != null } || (metered && settings.askOnMobileData.value && items.isNotEmpty())
+            if (!ask) now() else pending = Pending(items, now, onWifi?.takeIf { metered }, metered)
         }
+    }
+
+    /** The learner agreed: remember it, so background jobs may download these. */
+    internal fun approve(items: List<DownloadCost.Item>) {
+        val settings = context.graph.settings
+        items.mapNotNull { it.approveKey }.forEach(settings::approve)
     }
 }
 
@@ -68,11 +77,12 @@ fun rememberDataWarning(): DataWarning {
         }
         AlertDialog(
             onDismissRequest = { warning.pending = null },
-            title = { Text(stringResource(R.string.data_warning_title, size)) },
+            title = { Text(stringResource(if (p.metered) R.string.data_warning_title else R.string.download_confirm_title, size)) },
             text = {
                 Column {
-                    Text(stringResource(R.string.data_warning_text))
-                    if (p.items.size > 1) {
+                    if (p.metered) Text(stringResource(R.string.data_warning_text))
+                    else Text(stringResource(R.string.download_confirm_text))
+                    if (p.items.size > 1 || !p.metered) {
                         // What makes up the total.
                         HorizontalDivider(Modifier.padding(vertical = 8.dp))
                         p.items.forEach { item ->
@@ -85,19 +95,19 @@ fun rememberDataWarning(): DataWarning {
                             }
                         }
                     }
-                    Row(Modifier.fillMaxWidth().padding(top = 8.dp).clickable { dontAsk = !dontAsk }, verticalAlignment = Alignment.CenterVertically) {
+                    if (p.metered) Row(Modifier.fillMaxWidth().padding(top = 8.dp).clickable { dontAsk = !dontAsk }, verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = dontAsk, onCheckedChange = { dontAsk = it })
                         Text(stringResource(R.string.data_warning_dont_ask), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { close(); p.now() }) { Text(stringResource(R.string.data_warning_now)) }
+                TextButton(onClick = { close(); warning.approve(p.items); p.now() }) { Text(stringResource(R.string.data_warning_now)) }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { warning.pending = null }) { Text(stringResource(R.string.action_cancel)) }
-                    if (p.onWifi != null) TextButton(onClick = { close(); p.onWifi.invoke() }) { Text(stringResource(R.string.data_warning_wifi)) }
+                    if (p.onWifi != null) TextButton(onClick = { close(); warning.approve(p.items); p.onWifi.invoke() }) { Text(stringResource(R.string.data_warning_wifi)) }
                 }
             },
         )

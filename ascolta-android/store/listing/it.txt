@@ -1,0 +1,18 @@
+SHORT DESCRIPTION: Impara le lingue con veri podcast: trascrizioni, traduzioni, flashcard.
+
+FULL DESCRIPTION:
+Impara una lingua ascoltando ciò di cui parlano davvero i madrelingua.
+
+LingoPod trasforma qualsiasi podcast in una lezione. Segui podcast nella lingua che studi: LingoPod scrive la trascrizione mentre ascolti, con la traduzione sotto ogni frase, tutto sul telefono. Nessun account, niente inviato a server.
+
+• Trascrizioni dal vivo in oltre 100 lingue, sul telefono
+• Traduzione sotto ogni frase, offline
+• Tocca una parola: significato, dizionario e pronuncia del parlante
+• Seleziona una frase e salvala con l'audio originale
+• Shadowing: ripeti dopo il parlante, confronta, controlla le parole
+• Flashcard con ripetizione dilazionata, esportazione Anki con audio
+• Podcast per tema e livello (A1–C2), verificati nella tua lingua
+• Statistiche, serie e traguardi
+
+Gratis: tutte le funzioni da provare, 30 minuti di trascrizione a settimana.
+LingoPod Pro: trascrizione illimitata, modelli più precisi, schede illimitate, controllo dello shadowing, esportazione Anki e statistiche complete.

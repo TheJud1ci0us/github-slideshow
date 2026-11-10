@@ -1,0 +1,25 @@
+APP NAME (30): LingoPod: Learn with Podcasts
+
+SHORT DESCRIPTION (80):
+Learn languages with real podcasts: live transcripts, translations, flashcards.
+
+FULL DESCRIPTION:
+Learn a language by listening to what native speakers really talk about.
+
+LingoPod turns any podcast into a language lesson. Follow podcasts in the language you're learning, and LingoPod writes the transcript as you listen, with the translation under each sentence — all on your phone. No account, no servers listening in.
+
+• Live transcripts in 100+ languages, made on your phone (Whisper, NVIDIA Parakeet, SenseVoice, ReazonSpeech, Meta Omnilingual)
+• Translation under every sentence, offline
+• Tap any word: meaning, dictionary entry, and hear it as the speaker said it
+• Select any phrase and save it with the speaker's own audio
+• Shadowing: repeat after the speaker, compare, and check which words you got right
+• Flashcards with spaced repetition, export to Anki with audio
+• Discover podcasts by theme and level (A1–C2), checked to really be in your language
+• Japanese: furigana or romaji
+• Statistics, streaks and milestones
+• Sleep timer that stops at the end of a sentence
+
+Free: all features to try, with 30 minutes of transcription per week.
+LingoPod Pro: unlimited transcription, the most accurate speech models, unlimited cards, shadowing checks, Anki export and full statistics.
+
+Privacy: speech recognition and translation run on your device. Podcasts are public RSS feeds.

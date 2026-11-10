@@ -115,7 +115,7 @@ fun WordsScreen(openReview: () -> Unit) {
                             // For Anki, with the speakers' audio.
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.export_anki)) }, onClick = {
                                 exportMenu = false
-                                scope.launch {
+                                if (graph.requirePro("anki")) scope.launch {
                                     val zip = graph.repo.exportAnkiZip()
                                     val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", zip)
                                     val send = Intent(Intent.ACTION_SEND).apply {
@@ -384,7 +384,7 @@ fun ReviewScreen(onBack: () -> Unit) {
                         Icon(Icons.AutoMirrored.Filled.VolumeUp, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.play_clip))
                     }
                     // Repeat it after the speaker (works offline, even after the episode is deleted).
-                    if (flipped) TextButton(onClick = { shadowCard = card }) {
+                    if (flipped) TextButton(onClick = { if (graph.allowPractice()) shadowCard = card }) {
                         Icon(Icons.Filled.Mic, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_shadow))
                     }
                 }

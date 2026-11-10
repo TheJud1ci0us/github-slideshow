@@ -380,7 +380,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                                 menu = false
                                 graph.player.pause()
                                 selA = null; selB = null
-                                shadowing = com.ascolta.app.data.Selection.of(segments, timedWords, allRanges,
+                                if (graph.allowPractice()) shadowing = com.ascolta.app.data.Selection.of(segments, timedWords, allRanges,
                                     com.ascolta.app.data.WordPos(navIndex, 0), com.ascolta.app.data.WordPos(navIndex, ((allRanges.getOrNull(navIndex)?.size ?: 1) - 1).coerceAtLeast(0)))
                             })
                         }
@@ -407,7 +407,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             if (sel != null) SelectionBar(
                 text = sel.text,
                 onSave = {
-                    scope.launch {
+                    if (graph.allowPractice()) scope.launch {
                         val added = graph.repo.saveSelection(ep, sel, transcript?.language ?: settings.learningLanguage.value)
                         Toast.makeText(context, context.getString(
                             when {
@@ -420,7 +420,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         selA = null; selB = null
                     }
                 },
-                onShadow = { shadowing = sel },
+                onShadow = { if (graph.allowPractice()) shadowing = sel },
                 onCopy = {
                     val cm = context.getSystemService(android.content.ClipboardManager::class.java)
                     cm?.setPrimaryClip(android.content.ClipData.newPlainText("LingoPod", sel.text))
@@ -638,7 +638,8 @@ private fun CheckItem(label: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @Composable
 private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating: Boolean) {
-    val graph = LocalContext.current.graph
+    val context = LocalContext.current
+    val graph = context.graph
     val scope = rememberCoroutineScope()
     val dataWarning = rememberDataWarning()
     fun transcribe() = dataWarning.run(
@@ -679,7 +680,20 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
                 stringResource(R.string.transcription_failed, ep.error ?: stringResource(R.string.unknown_error)),
                 color = MaterialTheme.colorScheme.error,
             )
-            TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
+            // A model not downloaded yet: ask (with its size), then start.
+            val missing = remember(ep.error) {
+                !graph.models.isDownloaded(graph.settings.modelFor(ep.transcriptLanguage ?: graph.settings.learningLanguage.value))
+            }
+            // Free weekly minutes used up: Pro removes the limit.
+            val limitReached = !graph.isPro && graph.limits.transcriptionLeftMs() <= 0
+            if (limitReached) Button(onClick = { graph.billing.requestPaywall("transcription") }) { Text(stringResource(R.string.get_pro)) }
+            else if (missing) Button(onClick = {
+                dataWarning.run(
+                    needs = { graph.repo.downloadNeeds(ep.id, transcribe = true) },
+                    onWifi = { scope.launch { graph.repo.restartTranscription(ep.id, wifiOnly = true) } },
+                ) { scope.launch { graph.repo.restartTranscription(ep.id) } }
+            }) { Text(stringResource(R.string.download_model_and_transcribe)) }
+            else TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
                 Text(stringResource(R.string.action_try_again))
             }
         }

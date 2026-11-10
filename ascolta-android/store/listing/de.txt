@@ -1,0 +1,18 @@
+SHORT DESCRIPTION: Sprachen lernen mit echten Podcasts: Transkripte, Übersetzungen, Lernkarten.
+
+FULL DESCRIPTION:
+Lerne eine Sprache, indem du hörst, worüber Muttersprachler wirklich sprechen.
+
+LingoPod macht jeden Podcast zur Lektion. Folge Podcasts in deiner Lernsprache: LingoPod schreibt beim Hören das Transkript, mit der Übersetzung unter jedem Satz – alles auf deinem Telefon. Kein Konto, nichts wird an Server gesendet.
+
+• Live-Transkripte in über 100 Sprachen, auf dem Telefon
+• Übersetzung unter jedem Satz, offline
+• Tippe auf ein Wort: Bedeutung, Wörterbuch und die Aussprache des Sprechers
+• Wähle eine Wendung und speichere sie mit dem Originalton
+• Nachsprechen (Shadowing): vergleichen und erkannte Wörter prüfen
+• Lernkarten mit verteilter Wiederholung, Anki-Export mit Audio
+• Podcasts nach Thema und Niveau (A1–C2), auf deine Sprache geprüft
+• Statistik, Serien und Meilensteine
+
+Kostenlos: alle Funktionen zum Ausprobieren, 30 Minuten Transkription pro Woche.
+LingoPod Pro: unbegrenzte Transkription, die genauesten Modelle, unbegrenzte Karten, Nachsprech-Prüfung, Anki-Export und volle Statistik.

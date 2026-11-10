@@ -359,7 +359,9 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 }
                 else -> items(picks.size, key = { picks[it].feedUrl }) { i ->
                     val r = picks[i]
-                    Box(Modifier.padding(start = if (i % 3 == 0) 10.dp else 0.dp, end = if (i % 3 == 2) 10.dp else 0.dp)) {
+                    // Every column gets the same total side margin, so all covers are equal squares.
+                    val (startPad, endPad) = when (i % 3) { 0 -> 10.dp to 3.33.dp; 1 -> 6.67.dp to 6.67.dp; else -> 3.33.dp to 10.dp }
+                    Box(Modifier.padding(start = startPad, end = endPad)) {
                         CoverTile(
                             imageUrl = r.artworkUrl,
                             title = r.title,

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 import java.net.URI
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
@@ -18,17 +20,23 @@ android {
     ndkVersion = "27.2.12479018"
 
     defaultConfig {
-        applicationId = "com.ascolta.app"
+        // The store ID (permanent). The code's package stays com.ascolta.app.
+        applicationId = "app.lingopod"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "0.16.2"
+        versionCode = 100
+        versionName = "1.0.0"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
         fun prop(name: String) = (project.findProperty(name) as String?).orEmpty().replace("\"", "")
         buildConfigField("String", "TELEMETRYDECK_APP_ID", "\"${prop("telemetryDeckAppId")}\"")
         buildConfigField("String", "TELEMETRYDECK_SALT", "\"${prop("telemetryDeckSalt")}\"")
+        // Purchase-check server (store/server-setup.md) and its Cloud project number (Play Integrity).
+        buildConfigField("String", "PRO_SERVER_URL", "\"${prop("lingopodServerUrl")}\"")
+        buildConfigField("long", "CLOUD_PROJECT_NUMBER", "${prop("lingopodCloudProjectNumber").ifBlank { "0" }}L")
+        // Public half of the key the server signs Pro passes with (the private half is only on the server).
+        buildConfigField("String", "PRO_PASS_PUBLIC_KEY", "\"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvMp+KvbL7Wj2Vbv4onr8S93kVMfRSRYeYxN1O3hQmaHEnHIseZ3FV2CtgD6PG7pbPiDL7SOWrdbaEqOBInId9g==\"")
 
         ndk {
             // arm64 for real phones, x86_64 for the emulator.
@@ -48,12 +56,27 @@ android {
         }
     }
 
+    // Upload key for Google Play, read from keystore.properties (git-ignored, never committed):
+    //   storeFile=/path/to/lingopod-upload.jks  storePassword=…  keyAlias=upload  keyPassword=…
+    val keystoreProps = Properties().apply {
+        rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) create("upload") {
+            storeFile = file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
-            // Signed with the debug key so a release APK can be side-loaded for testing.
-            // Replace with your own signing config before publishing.
-            signingConfig = signingConfigs.getByName("debug")
+            // Shrinks and obfuscates the code (harder to tamper with); native-called classes are kept.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // The upload key when present; otherwise the debug key, for side-loaded test builds.
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -164,6 +187,9 @@ dependencies {
     // ONNX Runtime's Java API, for the Helsinki-NLP (Opus-MT) translation models. Same version
     // as the runtime inside sherpa-onnx, so one copy of the library serves both.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
+    // LingoPod Pro: Google Play Billing, and Play Integrity for the server's purchase check.
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
+    implementation("com.google.android.play:integrity:1.4.0")
     // The desktop build of the same runtime, to test the translator on the computer.
     testImplementation("com.microsoft.onnxruntime:onnxruntime:1.24.3")
     testImplementation("org.json:json:20240303") // the real JSON parser (Android's is a stub in unit tests)

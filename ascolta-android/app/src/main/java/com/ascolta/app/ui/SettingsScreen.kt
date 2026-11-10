@@ -171,11 +171,15 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                 // Three choices for this language, lightest to best.
                 val tiers = remember(learning) { SpeechModel.tiers(learning) }
                 val tierNames = listOf(R.string.tier_light, R.string.tier_balanced, R.string.tier_best)
+                val pro by graph.billing.isPro.collectAsState()
                 tiers.forEachIndexed { i, model ->
+                    // The Best model is part of LingoPod Pro.
+                    val proOnly = i == tiers.lastIndex && !pro
                     ModelRow(
-                        model, selected = model == current, learning = learning, refreshKey = refreshKey,
-                        onSelect = { settings.setModelFor(learning, model) }, onChanged = { refreshKey++ },
-                        tier = stringResource(tierNames[i]),
+                        model, selected = model == current && !proOnly, learning = learning, refreshKey = refreshKey,
+                        onSelect = { if (proOnly) graph.billing.requestPaywall("best_model") else settings.setModelFor(learning, model) },
+                        onChanged = { refreshKey++ },
+                        tier = stringResource(tierNames[i]) + if (proOnly) " · Pro" else "",
                     )
                 }
                 // A model chosen earlier that isn't one of the three stays usable until another is picked.
@@ -451,7 +455,7 @@ private fun TranslationModelRow(source: String, target: String) {
                 OutlinedButton(onClick = {
                     dataWarning.run(needs = {
                         graph.translation.missingDownloads(source, target).map { (n, b, e) ->
-                            com.ascolta.app.data.DownloadCost.Item(context.getString(R.string.translation_model_named, n), b, e)
+                            com.ascolta.app.data.DownloadCost.Item(context.getString(R.string.translation_model_named, n), b, e, "tr:$source-$target")
                         }
                     }) {
                         busy = true
@@ -566,7 +570,14 @@ private fun ModelRow(
                     model != SpeechModel.CUSTOM -> TextButton(enabled = enabled, onClick = {
                         // On mobile data: the exact size first, with the option to wait for Wi-Fi.
                         dataWarning.run(
-                            needs = { listOf(com.ascolta.app.data.DownloadCost.Item(model.label, graph.models.missingBytes(model), true)) },
+                            needs = {
+                                listOfNotNull(
+                                    com.ascolta.app.data.DownloadCost.Item(model.label, graph.models.missingBytes(model), true, "model:${model.id}"),
+                                    // Models other than Whisper also need voice detection.
+                                    graph.models.vadMissingBytes().takeIf { it > 0 && model.engine != com.ascolta.app.whisper.Engine.WHISPER }
+                                        ?.let { com.ascolta.app.data.DownloadCost.Item(context.getString(R.string.voice_detection), it, true, "vad") },
+                                )
+                            },
                             onWifi = { WorkScheduler.downloadModel(context, model, wifiOnly = true) },
                         ) {
                             WorkScheduler.downloadModel(context, model)
@@ -703,12 +714,9 @@ private fun DiagnosticsSection() {
 
     ListItem(
         modifier = Modifier.clickable {
-            // OnePlus/Oppo and others stop background work aggressively unless the app is exempt.
-            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .setData(Uri.parse("package:${context.packageName}"))
-            runCatching { context.startActivity(intent) }.onFailure {
-                context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            }
+            // OnePlus/Oppo and others stop background work aggressively unless the app is exempt:
+            // opens the phone's battery list, where LingoPod can be set to "Don't optimise".
+            runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
         },
         headlineContent = { Text(stringResource(R.string.allow_background)) },
         supportingContent = { Text(stringResource(if (unrestricted) R.string.battery_ok else R.string.battery_hint)) },

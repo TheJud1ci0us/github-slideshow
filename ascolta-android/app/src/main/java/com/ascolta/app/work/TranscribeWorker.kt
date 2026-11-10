@@ -185,6 +185,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     private suspend fun prepareTranslation(source: String, target: String): Boolean {
         if (!graph.translation.isSupported(source, target)) return false
         if (runCatching { graph.translation.isModelDownloaded(source, target) }.getOrDefault(false)) return true
+        // Only a translation download the learner agreed to (asked with its size).
+        if (!graph.settings.isApproved("tr:$source-$target")) {
+            AppLog.i(TAG, "Translation model $source→$target not agreed yet; transcript only for now")
+            return false
+        }
         val metered = applicationContext.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: true
         if (metered && graph.settings.wifiOnly.value) {
             AppLog.i(TAG, "Translation model missing and not on Wi-Fi; translating later")
@@ -209,7 +214,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val settings = graph.settings
         // Parakeet only knows 25 European languages: other podcasts use Whisper instead.
         // Each language has its own model (e.g. Parakeet for Italian, SenseVoice for Japanese).
-        val model = settings.modelFor(language)
+        // The free version uses the Balanced model where the chosen one is a Pro model.
+        val model = com.ascolta.app.data.FreeLimits.allowedModel(settings.modelFor(language), language, graph.isPro)
+        if (!graph.isPro && graph.limits.transcriptionLeftMs() <= 0) throw FreeLimitReached(applicationContext.getString(R.string.free_minutes_used))
         // Did the previous attempt crash inside the speech engine (a damaged model file)?
         val mark = CrashGuard.read(applicationContext)
         val guardAction = if (mark == null) CrashGuard.Action.CONTINUE
@@ -232,6 +239,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         // Parakeet always works on detected speech; for Whisper it's the "skip music and silence" option.
         val useVad = settings.skipNonSpeech.value || model.engine != Engine.WHISPER
         if (useVad && !graph.models.isVadDownloaded()) {
+            // Agreed together with the speech model (it is listed in the same question).
+            if (!settings.isApproved("vad") && !settings.isApproved("model:${model.id}")) {
+                throw ModelNeeded(applicationContext.getString(R.string.model_needed, applicationContext.getString(R.string.voice_detection)))
+            }
             update(applicationContext.getString(R.string.status_downloading_vad), status.value.progress)
             graph.models.downloadVad()
         }
@@ -420,6 +431,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         // Buffer zone: only 20% of the episode's duration ahead of the listener.
                         val ahead = BufferPolicy.aheadMs(spans, positionMs, totalMs)
                         if (buffered && ahead < BufferPolicy.resumeBelowMs(totalMs, BLOCK_MS)) buffered = false
+                        // Free version: 30 minutes of transcription a week; stop (keeping what's done) when used.
+                        if (!graph.isPro && graph.limits.transcriptionLeftMs() <= 0) {
+                            throw FreeLimitReached(applicationContext.getString(R.string.free_minutes_used))
+                        }
                         val block = if (buffered) null else {
                             // Short first block right after starting or jumping, so text appears within seconds.
                             val nearJump = jumpedToMs >= 0 && Coverage.runEnd(spans, jumpedToMs) - jumpedToMs < FIRST_BLOCK_MS
@@ -541,6 +556,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 "${if (following) ", following playback at ${player.positionMs / 1000}s" else ""}, $count sentences",
                         )
                         done(Span(blockStartMs, blockStartMs + blockLenMs))
+                        if (!graph.isPro) graph.limits.addTranscribed(blockLenMs)
                         if (guardArmed) {
                             guardArmed = false
                             CrashGuard.clear(applicationContext)
@@ -591,8 +607,24 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         data class Done(val span: Span) : WriterEvent
     }
 
+    /** The free version's weekly transcription time is used up. */
+    class FreeLimitReached(message: String) : Exception(message)
+
+    /** A model the learner hasn't agreed to download yet: the transcription waits for them. */
+    class ModelNeeded(message: String) : Exception(message)
+
     private suspend fun ensureModel(model: SpeechModel) {
         if (graph.models.isDownloaded(model)) return
+        // Never download a model without the learner having seen its size and agreed.
+        if (!graph.settings.isApproved("model:${model.id}")) {
+            // Agreed and downloading from Settings: wait for it.
+            if (WorkScheduler.isActive(applicationContext, WorkScheduler.modelWorkName(model))) {
+                update(applicationContext.getString(R.string.status_downloading_model, model.label), status.value.progress)
+                while (WorkScheduler.isActive(applicationContext, WorkScheduler.modelWorkName(model))) delay(2_000)
+                if (graph.models.isDownloaded(model)) return
+            }
+            throw ModelNeeded(applicationContext.getString(R.string.model_needed, "${model.label} · ${com.ascolta.app.data.DownloadCost.formatSize(graph.models.missingBytes(model))}"))
+        }
         val label = applicationContext.getString(R.string.status_downloading_model, model.label)
         update(label, 0f)
         AppLog.i(TAG, "Downloading model ${model.id}")

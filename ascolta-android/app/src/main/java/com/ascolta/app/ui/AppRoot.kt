@@ -146,7 +146,11 @@ fun AscoltaRoot() {
                     openSettings = { section -> nav.navigate("settings/$section") },
                     openProgress = { nav.navigate("progress") },
                     openPersonalize = { nav.navigate("personalize") },
+                    openPaywall = { nav.navigate("paywall") },
                 )
+            }
+            composable("paywall?reason={reason}", arguments = listOf(navArgument("reason") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
+                PaywallScreen(entry.arguments?.getString("reason"), onBack = { nav.popBackStack() }, openLegal = { nav.navigate("settings/about") })
             }
             composable("progress") { ProgressScreen(onBack = { nav.popBackStack() }) }
             composable("settings/{section}") { entry ->
@@ -186,6 +190,11 @@ fun AscoltaRoot() {
     }
     }
 
+    // A free limit was reached somewhere: show LingoPod Pro.
+    val billingForPaywall = context0().graph.billing
+    LaunchedEffect(billingForPaywall) {
+        billingForPaywall.paywallRequests.collect { reason -> nav.navigate("paywall?reason=$reason") { launchSingleTop = true } }
+    }
     // A link shared from another app (Spotify, Apple Podcasts, a browser…).
     val context = LocalContext.current
 

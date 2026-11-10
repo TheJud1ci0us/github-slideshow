@@ -359,13 +359,13 @@ class PodcastRepository(
             val language = podcast?.libraryLanguage ?: episode.transcriptLanguage ?: settings.learningLanguage.value
             val model = settings.modelFor(language)
             val models = (context.applicationContext as com.ascolta.app.AscoltaApp).graph.models
-            models.missingBytes(model).takeIf { it > 0 }?.let { out += DownloadCost.Item(model.label, it, true) }
+            models.missingBytes(model).takeIf { it > 0 }?.let { out += DownloadCost.Item(model.label, it, true, "model:${model.id}") }
             if (model.engine != com.ascolta.app.whisper.Engine.WHISPER || settings.skipNonSpeech.value) {
-                models.vadMissingBytes().takeIf { it > 0 }?.let { out += DownloadCost.Item(context.getString(R.string.voice_detection), it, true) }
+                models.vadMissingBytes().takeIf { it > 0 }?.let { out += DownloadCost.Item(context.getString(R.string.voice_detection), it, true, "vad") }
             }
             if (settings.translate.value) {
                 translation.missingDownloads(language, settings.nativeLanguage.value).forEach { (name, bytes, exact) ->
-                    out += DownloadCost.Item(context.getString(R.string.translation_model_named, name), bytes, exact)
+                    out += DownloadCost.Item(context.getString(R.string.translation_model_named, name), bytes, exact, "tr:$language-${settings.nativeLanguage.value}")
                 }
             }
         }
@@ -403,7 +403,7 @@ class PodcastRepository(
     }
 
     /** Stops whatever is happening for this episode and starts its transcription again (keeps saved progress). */
-    suspend fun restartTranscription(episodeId: Long) {
+    suspend fun restartTranscription(episodeId: Long, wifiOnly: Boolean = false) {
         AppLog.i("Repo", "Restart transcription #$episodeId")
         WorkScheduler.cancelTranscription(context, episodeId)
         episodeDao.setTranscript(episodeId, TranscriptState.NONE, 0f, null)
@@ -411,7 +411,7 @@ class PodcastRepository(
         if (episode.downloadState != DownloadState.DONE && episode.podcastId != null) {
             episodeDao.setDownload(episodeId, DownloadState.NONE, 0f)
         }
-        transcribe(episodeId, manual = true)
+        transcribe(episodeId, manual = true, wifiOnly = wifiOnly)
     }
 
     /**
@@ -524,6 +524,12 @@ class PodcastRepository(
     // ---- Vocabulary --------------------------------------------------------
 
     suspend fun saveWord(entry: VocabEntity): Boolean {
+        // Free version: 50 saved words and sentences.
+        val graph = (context.applicationContext as com.ascolta.app.AscoltaApp).graph
+        if (!graph.isPro && vocabDao.countAll() >= FreeLimits.MAX_CARDS) {
+            graph.billing.requestPaywall("cards")
+            return false
+        }
         if (vocabDao.count(entry.word, entry.language) > 0) return false
         vocabDao.insert(entry)
         Analytics.track(

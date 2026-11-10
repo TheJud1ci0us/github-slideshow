@@ -75,6 +75,7 @@ fun ProgressScreen(onBack: () -> Unit) {
     val log = remember(days) { ListeningStats.from(days, java.time.LocalDate.now()) }
     val totalMs = maxOf(stats.listenedMs.values.sum(), log.loggedMs)
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    val pro by graph.billing.isPro.collectAsState()
     val tabs = listOf(R.string.stats_overview, R.string.stats_insights, R.string.stats_podcasts, R.string.stats_learning)
 
     Scaffold(
@@ -143,7 +144,9 @@ fun ProgressScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            1 -> LazyColumn(listModifier, contentPadding = content, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            1, 2 -> if (!pro) ProLocked(listModifier) { graph.billing.requestPaywall("statistics") }
+            else if (tab == 2) PodcastsTab(listModifier, content, podcasts)
+            else LazyColumn(listModifier, contentPadding = content, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { SectionTitle(stringResource(R.string.stats_listening_time)) }
                 item {
                     HighlightCard(stringResource(R.string.stats_today), formatListening(log.today.ms),
@@ -174,26 +177,6 @@ fun ProgressScreen(onBack: () -> Unit) {
                     Text(stringResource(R.string.stats_history_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            2 -> LazyColumn(listModifier, contentPadding = content, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                item { SectionTitle(stringResource(R.string.stats_by_podcast)) }
-                val top = podcasts.firstOrNull()?.ms?.coerceAtLeast(1) ?: 1
-                listItems(podcasts, key = { it.podcastId }) { p ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Artwork(p.imageUrl, 64.dp)
-                        Spacer(Modifier.width(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(p.title ?: stringResource(R.string.stats_added_audio), style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                            Text(formatListening(p.ms), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(6.dp))
-                            LinearProgressIndicator(progress = { p.ms.toFloat() / top }, modifier = Modifier.fillMaxWidth(), drawStopIndicator = {})
-                        }
-                    }
-                }
-                if (podcasts.isEmpty()) item {
-                    Text(stringResource(R.string.stats_history_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
             else -> {
                 val badges = Badges.all()
                 LazyVerticalGrid(
@@ -222,6 +205,40 @@ fun ProgressScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PodcastsTab(modifier: Modifier, content: PaddingValues, podcasts: List<com.ascolta.app.data.PodcastTotal>) {
+    LazyColumn(modifier, contentPadding = content, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                item { SectionTitle(stringResource(R.string.stats_by_podcast)) }
+                val top = podcasts.firstOrNull()?.ms?.coerceAtLeast(1) ?: 1
+                listItems(podcasts, key = { it.podcastId }) { p ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Artwork(p.imageUrl, 64.dp)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(p.title ?: stringResource(R.string.stats_added_audio), style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text(formatListening(p.ms), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(progress = { p.ms.toFloat() / top }, modifier = Modifier.fillMaxWidth(), drawStopIndicator = {})
+                        }
+                    }
+                }
+                if (podcasts.isEmpty()) item {
+                    Text(stringResource(R.string.stats_history_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+}
+
+/** Shown instead of a Pro-only tab. */
+@Composable
+private fun ProLocked(modifier: Modifier, onGetPro: () -> Unit) {
+    Column(modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Text(stringResource(R.string.pro_feature), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(12.dp))
+        androidx.compose.material3.Button(onClick = onGetPro) { Text(stringResource(R.string.get_pro)) }
     }
 }
 

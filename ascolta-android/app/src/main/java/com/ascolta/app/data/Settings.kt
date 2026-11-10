@@ -153,6 +153,16 @@ class Settings(context: Context) {
     /** The first-launch language choice has been made. */
     val onboarded = bool("onboarded", false)
     /** The guided tours were seen (or skipped); "Show the tutorial" in About resets them. */
+    /**
+     * Downloads the learner agreed to (after seeing their size): "model:<id>", "vad",
+     * "tr:<from>-<to>". Background jobs only download what is listed here.
+     */
+    private val approved = string("approved_downloads", "")
+    fun isApproved(key: String) = key in approved.value.split(',')
+    fun approve(key: String) {
+        if (!isApproved(key)) approved.set((approved.value.split(',').filter { it.isNotBlank() } + key).joinToString(","))
+    }
+
     /** Ask before downloading on mobile data (with the size); off = "Don't ask again". */
     val askOnMobileData = bool("ask_on_mobile_data", true)
     val tourSeen = bool("tour_seen", false)
