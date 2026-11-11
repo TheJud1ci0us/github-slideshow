@@ -330,6 +330,20 @@ fun ReviewScreen(onBack: () -> Unit) {
         },
     ) { padding ->
         val card = queue?.firstOrNull()
+        // After a good session (20+ cards reviewed in total), ask once for a rating on Google Play.
+        LaunchedEffect(queue != null && card == null) {
+            if (queue == null || card != null || reviewed == 0) return@LaunchedEffect
+            val total = graph.settings.cardsReviewed.value + reviewed
+            graph.settings.cardsReviewed.set(total)
+            if (total >= 20 && !graph.settings.ratingAsked.value) {
+                graph.settings.ratingAsked.set(true)
+                val activity = context.findActivity() ?: return@LaunchedEffect
+                val manager = com.google.android.play.core.review.ReviewManagerFactory.create(context)
+                manager.requestReviewFlow().addOnCompleteListener { t ->
+                    if (t.isSuccessful) manager.launchReviewFlow(activity, t.result)
+                }
+            }
+        }
         if (queue != null && card == null) {
             Column(Modifier.fillMaxSize().padding(padding).padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(R.string.cards_done, reviewed), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)

@@ -75,6 +75,7 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
     var confirmUnsubscribe by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
     var editingNames by remember { mutableStateOf(false) }
+    var adFreeHelp by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -101,6 +102,10 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                             DropdownMenuItem(text = { Text(stringResource(R.string.names_title)) }, onClick = {
                                 menu = false
                                 editingNames = true
+                            })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.ad_free_title)) }, onClick = {
+                                menu = false
+                                adFreeHelp = true
                             })
                             DropdownMenuItem(text = { Text(stringResource(R.string.move_language)) }, onClick = {
                                 menu = false
@@ -223,6 +228,22 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                 }) { Text(stringResource(R.string.select_save)) }
             },
             dismissButton = { TextButton(onClick = { editingNames = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+
+    if (adFreeHelp) {
+        AlertDialog(
+            onDismissRequest = { adFreeHelp = false },
+            title = { Text(stringResource(R.string.ad_free_title)) },
+            text = { Text(stringResource(R.string.ad_free_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    adFreeHelp = false
+                    // Opens "Add a link", where the private feed address is pasted.
+                    graph.pendingSharedText.value = ""
+                }) { Text(stringResource(R.string.ad_free_add)) }
+            },
+            dismissButton = { TextButton(onClick = { adFreeHelp = false }) { Text(stringResource(R.string.action_close)) } },
         )
     }
 

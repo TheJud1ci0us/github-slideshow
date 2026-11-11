@@ -138,7 +138,7 @@ private fun price(p: ProductDetails): String =
     p.subscriptionOfferDetails?.firstOrNull()?.pricingPhases?.pricingPhaseList?.lastOrNull()?.formattedPrice
         ?: p.oneTimePurchaseOfferDetails?.formattedPrice ?: ""
 
-private fun Context.findActivity(): Activity? = when (this) {
+internal fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

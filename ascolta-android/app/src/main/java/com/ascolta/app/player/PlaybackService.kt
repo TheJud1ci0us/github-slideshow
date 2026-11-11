@@ -21,9 +21,18 @@ class PlaybackService : MediaSessionService() {
         // Exact seeking in MP3 files with a variable bit rate (most podcasts). Without an index,
         // ExoPlayer estimates the position after a seek, which can be seconds off and would
         // make the highlighted sentence not match what is being said.
-        val extractors = DefaultExtractorsFactory()
+        // The index is built while reading, so on a stream a jump forward would first read
+        // everything up to there (seeking looked stuck, e.g. over an ad at the start): streams
+        // use the MP3 header / bit rate instead, until the player switches to the downloaded file.
+        val indexed = DefaultExtractorsFactory()
             .setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING)
             .setConstantBitrateSeekingEnabled(true)
+        val streamed = DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)
+        val extractors = object : androidx.media3.extractor.ExtractorsFactory {
+            override fun createExtractors() = indexed.createExtractors()
+            override fun createExtractors(uri: android.net.Uri, responseHeaders: Map<String, List<String>>) =
+                (if (uri.scheme == "file" || uri.scheme == "content") indexed else streamed).createExtractors(uri, responseHeaders)
+        }
         val player = ExoPlayer.Builder(this, DefaultMediaSourceFactory(this, extractors))
             .setAudioAttributes(
                 AudioAttributes.Builder()

@@ -116,6 +116,8 @@ class AppGraph(app: Application) {
     val db = AppDatabase.build(app)
     val http = Http.client()
     val transcripts = TranscriptStore(File(app.filesDir, "transcripts"))
+    val knownWords = com.ascolta.app.data.KnownWords(File(app.filesDir, "known"))
+    val wordLists = com.ascolta.app.data.WordLists(app)
     val models = ModelManager(app, http)
     val translation = TranslationService(com.ascolta.app.translate.OpusModels(app, http))
     val directory = PodcastDirectory(http)

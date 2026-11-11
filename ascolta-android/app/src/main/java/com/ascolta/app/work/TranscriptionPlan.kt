@@ -53,6 +53,15 @@ object Coverage {
 
 object TranscriptionPlan {
     /**
+     * Where "next sentence" goes: the next transcribed sentence after [positionMs] (however far,
+     * so an ad is crossed in one tap), or 15 s on when there is none yet. Never backwards.
+     */
+    fun nextTarget(sentenceStarts: List<Long>, positionMs: Long, durationMs: Long): Long {
+        val next = sentenceStarts.firstOrNull { it > positionMs + 300 } ?: (positionMs + 15_000)
+        return if (durationMs > 0) next.coerceAtMost(durationMs - 1_000).coerceAtLeast(positionMs) else next
+    }
+
+    /**
      * A block where a quarter or more of the sentences (at least 2) came out in the wrong
      * language (a fast conversation, short replies) is redone whole rather than patched.
      */

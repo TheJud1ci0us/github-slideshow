@@ -174,6 +174,15 @@ class Settings(context: Context) {
     /** Parakeet wrote sentences in English and no Whisper model was there to redo them: suggest Whisper Base. */
     val languageFixSuggested = bool("language_fix_suggested", false)
     val languageFixDismissed = bool("language_fix_dismissed", false)
+    /** Softly highlight words not yet marked Familiar or Known (optional). */
+    val highlightNewWords = bool("highlight_new_words", false)
+    /** Jump over detected ads by itself (otherwise a "Skip ad" button is offered). */
+    val skipAdsAutomatically = bool("skip_ads_auto", false)
+    /** The note about transcription accuracy was read. */
+    val accuracyNoteSeen = bool("accuracy_note_seen", false)
+    /** Flashcards reviewed in total, and whether the store rating was asked. */
+    val cardsReviewed = int("cards_reviewed", 0)
+    val ratingAsked = bool("rating_asked", false)
 
     fun learningList(): List<String> =
         learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }

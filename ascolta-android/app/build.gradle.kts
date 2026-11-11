@@ -24,8 +24,8 @@ android {
         applicationId = "app.lingopod"
         minSdk = 26
         targetSdk = 35
-        versionCode = 120
-        versionName = "1.2.0"
+        versionCode = 130
+        versionName = "1.3.0"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
@@ -193,6 +193,8 @@ dependencies {
     // LingoPod Pro: Google Play Billing, and Play Integrity for the server's purchase check.
     implementation("com.android.billingclient:billing-ktx:7.1.1")
     implementation("com.google.android.play:integrity:1.4.0")
+    // In-app rating prompt (asked once, after a good review session).
+    implementation("com.google.android.play:review-ktx:2.0.2")
     // The desktop build of the same runtime, to test the translator on the computer.
     testImplementation("com.microsoft.onnxruntime:onnxruntime:1.24.3")
     testImplementation("org.json:json:20240303") // the real JSON parser (Android's is a stub in unit tests)

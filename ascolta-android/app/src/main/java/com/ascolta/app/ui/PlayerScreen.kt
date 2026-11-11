@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.ListItem
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.filled.Headphones
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Column
@@ -42,6 +46,8 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -148,6 +154,15 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     }
     // Always in time order, so finding the sentence being spoken can't pick the wrong one.
     val segments = remember(transcript) { transcript?.segments.orEmpty().sortedBy { it.startMs } }
+    // Ads in this copy of the episode, found from their wording.
+    val ads = remember(segments) { com.ascolta.app.data.AdDetector.detect(segments) }
+    // Known words (optional): new words softly highlighted.
+    val highlightNew by settings.highlightNewWords.flow.collectAsState()
+    val wordsLanguage = transcript?.language ?: settings.learningLanguage.value
+    val knownLevels by remember(wordsLanguage) { graph.knownWords.levels(wordsLanguage) }.collectAsState()
+    val commonWords by produceState(emptySet<String>(), wordsLanguage, highlightNew) {
+        if (highlightNew) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { graph.knownWords.common(wordsLanguage, graph.wordLists) }
+    }
 
     // Fill in missing translations (e.g. translation model wasn't available during transcription).
     var translating by remember { mutableStateOf(false) }
@@ -295,6 +310,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     var shadowing by remember { mutableStateOf<com.ascolta.app.data.Selected?>(null) }
     // Correcting a sentence by hand (a misheard name…): its index in the transcript.
     var editing by remember { mutableStateOf<Int?>(null) }
+    // "Words in this episode": how much is known, and the new words to learn first.
+    var showEpisodeWords by remember { mutableStateOf(false) }
     val allRanges = remember(segments, timedWords) { segments.mapIndexed { i, s -> wordRanges(s.text, timedWords.getOrNull(i)) } }
     val selection = remember(selA, selB, segments, timedWords, allRanges) {
         val a = selA
@@ -362,6 +379,11 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         if (translateOn) CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
                         CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
                         CheckItem(stringResource(R.string.highlight_words), wordHighlight) { settings.wordHighlight.set(it) }
+                        if (!isJapanese) CheckItem(stringResource(R.string.highlight_new_words), highlightNew) { settings.highlightNewWords.set(it) }
+                        if (segments.isNotEmpty() && !isJapanese) DropdownMenuItem(
+                            text = { Text(stringResource(R.string.episode_words)) },
+                            onClick = { menu = false; showEpisodeWords = true },
+                        )
                         if (isJapanese) {
                             HorizontalDivider()
                             com.ascolta.app.data.JapaneseScript.entries.forEach { s ->
@@ -458,8 +480,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     }
                 },
                 onNext = {
-                    if (segments.isEmpty()) seek(position + 30_000)
-                    else segments.getOrNull(navIndex + 1)?.let { seek(it.startMs) }
+                    // Always forward: the next sentence, or 15 s on when none is transcribed yet (an ad, music).
+                    seek(com.ascolta.app.work.TranscriptionPlan.nextTarget(segments.map { it.startMs }, position, duration))
                 },
                 onRepeat = {
                     segments.getOrNull(navIndex)?.let { seek(it.startMs) } ?: seek((position - 5_000).coerceAtLeast(0))
@@ -479,6 +501,49 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ep != null) StatusBanner(ep, transcript, translating)
             if (ep != null) LanguageFixBanner()
+            // In an ad: skip it (or it is skipped by itself, if chosen in Settings).
+            val currentAd = com.ascolta.app.data.AdDetector.at(ads, position)
+            val autoSkip by settings.skipAdsAutomatically.flow.collectAsState()
+            var skipped by remember { mutableStateOf(setOf<Long>()) }
+            LaunchedEffect(currentAd, autoSkip, player.isPlaying) {
+                val ad = currentAd ?: return@LaunchedEffect
+                if (autoSkip && isCurrent && player.isPlaying && ad.startMs !in skipped) {
+                    skipped = skipped + ad.startMs
+                    seek(ad.endMs)
+                    Toast.makeText(context, context.getString(R.string.ad_skipped), Toast.LENGTH_SHORT).show()
+                }
+            }
+            if (currentAd != null && segments.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.ad_now), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    FilledTonalButton(onClick = { skipped = skipped + currentAd.startMs; seek(currentAd.endMs) }) {
+                        Icon(Icons.Filled.SkipNext, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.ad_skip))
+                    }
+                }
+            }
+            // Transcripts made on the phone can be wrong: said once, with how to fix a word.
+            val noteSeen by settings.accuracyNoteSeen.flow.collectAsState()
+            if (transcript?.source == Transcript.SOURCE_FEED && segments.isNotEmpty() && !coverMode) {
+                Text(
+                    "✓ " + stringResource(R.string.official_transcript),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                )
+            } else if (!noteSeen && segments.isNotEmpty() && !coverMode) {
+                Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Row(Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.accuracy_note), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { settings.accuracyNoteSeen.set(true) }) {
+                            Icon(Icons.Filled.Close, stringResource(R.string.action_close), Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
             // No transcript (not chosen for this episode, or nothing recognised yet), or the
             // listener chose the picture: the cover. The transcript is kept and shown again on demand.
             if (segments.isEmpty() || coverMode) {
@@ -543,6 +608,10 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         },
                         selecting = selA != null,
                         onSelect = { w -> selectWord(i, w) },
+                        newWords = if (highlightNew && !isJapanese) remember(segment.text, knownLevels, commonWords) {
+                            com.ascolta.app.data.KnownWords.newWordRanges(segment.text, knownLevels, commonWords)
+                        } else null,
+                        isAd = ads.any { segment.startMs >= it.startMs && segment.startMs < it.endMs },
                     )
                 }
             }
@@ -610,6 +679,20 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             loadOriginal = { graph.repo.selectionClip(ep, sel) },
             onKeepRecording = { path -> scope.launch { graph.repo.saveSelection(ep, sel, lang, myAudioPath = path) } },
             onDismiss = { shadowing = null; selA = null; selB = null },
+        )
+    }
+
+    if (showEpisodeWords) {
+        EpisodeWordsSheet(
+            texts = segments.filterNot { s -> ads.any { s.startMs >= it.startMs && s.startMs < it.endMs } }.map { it.text },
+            levels = knownLevels,
+            common = commonWords,
+            onWord = { word ->
+                showEpisodeWords = false
+                segments.firstOrNull { s -> com.ascolta.app.data.KnownWords.WORD.findAll(s.text).any { com.ascolta.app.data.KnownWords.key(it.value) == word } }
+                    ?.let { lookup = WordLookup(word, it) }
+            },
+            onDismiss = { showEpisodeWords = false },
         )
     }
 
@@ -835,6 +918,10 @@ private fun SegmentItem(
     selecting: Boolean = false,
     /** Long press on a word (index; -1 = the whole sentence), or a tap while [selecting]. */
     onSelect: (Int) -> Unit = {},
+    /** Words not yet Familiar or Known (character ranges), softly highlighted; null when the option is off. */
+    newWords: List<IntRange>? = null,
+    /** Part of a detected ad: shown dimmed. */
+    isAd: Boolean = false,
 ) {
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val select by androidx.compose.runtime.rememberUpdatedState(onSelect)
@@ -843,10 +930,11 @@ private fun SegmentItem(
         Modifier
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .then(if (isAd && !active) Modifier.alpha(0.45f) else Modifier),
     ) {
         Text(
-            formatTime(segment.startMs),
+            if (isAd) formatTime(segment.startMs) + " · " + stringResource(R.string.ad_label) else formatTime(segment.startMs),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
             // Tap: play from here. Long press: select the whole sentence (e.g. to shadow it).
@@ -865,9 +953,12 @@ private fun SegmentItem(
             val wordRanges = remember(segment, words) { wordRanges(segment.text, words) }
             val highlight = MaterialTheme.colorScheme.primary
             val selectColor = MaterialTheme.colorScheme.tertiary
-            val text = remember(segment.text, activeWord, wordRanges, highlight, selected) {
+            val newColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
+            val text = remember(segment.text, activeWord, wordRanges, highlight, selected, newWords, newColor) {
                 buildAnnotatedString {
                     append(segment.text)
+                    // New words: a light tint, the same for all (not distracting).
+                    newWords?.forEach { r -> if (r.last < segment.text.length) addStyle(SpanStyle(background = newColor), r.first, r.last + 1) }
                     wordRanges.getOrNull(activeWord)?.let { range ->
                         addStyle(
                             SpanStyle(background = highlight.copy(alpha = 0.22f), fontWeight = FontWeight.SemiBold),
@@ -966,6 +1057,69 @@ fun wordRanges(text: String, words: List<Word>?): List<IntRange> {
     }
 }
 
+/**
+ * Words in this episode: the share of words already Familiar or Known, and the new words that
+ * come up most (worth learning before or while listening). Ads aren't counted.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EpisodeWordsSheet(texts: List<String>, levels: Map<String, Int>, common: Set<String>, onWord: (String) -> Unit, onDismiss: () -> Unit) {
+    val (share, newWords) = remember(texts, levels, common) { com.ascolta.app.data.KnownWords.coverage(texts, levels, common) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
+            Text(stringResource(R.string.episode_words), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.episode_words_known, (share * 100).toInt(), newWords.size),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(progress = { share }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            Text(stringResource(R.string.episode_words_top), style = MaterialTheme.typography.labelLarge)
+            androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                items(newWords.take(40).size) { i ->
+                    val (word, count) = newWords[i]
+                    ListItem(
+                        headlineContent = { Text(word) },
+                        trailingContent = { Text("×$count", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        modifier = Modifier.clickable { onWord(word) },
+                    )
+                }
+            }
+            Text(stringResource(R.string.episode_words_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** New · Seen · Familiar · Known ✓, plus "Ignore" (names, interjections). */
+@Composable
+private fun FamiliarityRow(level: Int?, onSet: (Int) -> Unit) {
+    val K = com.ascolta.app.data.KnownWords
+    val labels = listOf(R.string.level_new, R.string.level_seen, R.string.level_familiar, R.string.level_known)
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.familiarity_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            if (level != null && !K.highlighted(level)) {
+                Text(
+                    if (level == K.IGNORED) stringResource(R.string.level_ignored) else "✓ " + stringResource(labels[level]),
+                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+            K.LEVELS.forEach { l ->
+                FilterChip(
+                    selected = (level ?: K.NEW) == l,
+                    onClick = { onSet(l) },
+                    label = { Text(stringResource(labels[l]) + if (l == K.KNOWN) " ✓" else "") },
+                )
+            }
+        }
+        TextButton(onClick = { onSet(if (level == K.IGNORED) K.NEW else K.IGNORED) }, contentPadding = PaddingValues(0.dp)) {
+            Text(stringResource(if (level == K.IGNORED) R.string.level_unignore else R.string.level_ignore), style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WordSheet(
@@ -1045,6 +1199,15 @@ private fun WordSheet(
                             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }) { Text(stringResource(R.string.install_voice)) }
+            }
+            // How familiar the word is (when known-word tracking is on): Familiar and Known remove
+            // its highlight in transcripts.
+            val tracking by graph.settings.highlightNewWords.flow.collectAsState()
+            if (tracking) {
+                val levels by remember(language) { graph.knownWords.levels(language) }.collectAsState()
+                val level = levels[com.ascolta.app.data.KnownWords.key(lookup.word)]
+                Spacer(Modifier.height(8.dp))
+                FamiliarityRow(level) { graph.knownWords.set(language, lookup.word, it) }
             }
             Spacer(Modifier.height(4.dp))
             if (translation == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
