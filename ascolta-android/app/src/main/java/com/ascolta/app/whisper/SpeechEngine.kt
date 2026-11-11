@@ -223,7 +223,10 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         aborted = false
         val regions = speech ?: listOf(0L to samples.size / 16L)
         // ReazonSpeech drops words on long input (it was trained on short utterances).
-        val pieces = SpeechAlignment.splitLong(regions, if (engine.cutsAtPauses) REAZON_MAX_PIECE_MS else MAX_PIECE_MS)
+        // Parakeet: short replies are recognised together with the speech around them (it
+        // guesses the language from what it hears, and a lone "Tu sais ?" can come out English).
+        val grouped = if (engine == Engine.PARAKEET) SpeechDetection.groupForContext(regions) else regions
+        val pieces = SpeechAlignment.splitLong(grouped, if (engine.cutsAtPauses) REAZON_MAX_PIECE_MS else MAX_PIECE_MS)
         // A piece of detected speech that comes back empty is logged and decoded again in two
         // halves (short input is where these models are most reliable).
         val queue = ArrayDeque(pieces.map { Triple(it.first, it.second, true) })

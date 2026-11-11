@@ -56,6 +56,22 @@ object SpeechDetection {
         return out
     }
 
+    /**
+     * Joins neighbouring stretches of speech (pauses of up to [maxPauseMs] kept inside) into
+     * pieces of at most [targetMs], so the model hears each phrase with the sentences around
+     * it. Recognised alone, a 2-second reply ("Tu sais ?") gives Parakeet too little to tell
+     * French from English. Longer silences (music, a jingle) still separate pieces.
+     */
+    fun groupForContext(regions: List<Pair<Long, Long>>, maxPauseMs: Long = 2_000, targetMs: Long = 20_000): List<Pair<Long, Long>> {
+        val out = mutableListOf<Pair<Long, Long>>()
+        for ((s, e) in merge(regions)) {
+            val last = out.lastOrNull()
+            if (last != null && s - last.second <= maxPauseMs && e - last.first <= targetMs) out[out.lastIndex] = last.first to e
+            else out += s to e
+        }
+        return out
+    }
+
     /** Seconds added by [fillGaps] (for the diagnostics log). */
     fun gapMs(regions: List<Pair<Long, Long>>, filled: List<Pair<Long, Long>>): Long =
         filled.sumOf { it.second - it.first } - merge(regions).sumOf { it.second - it.first }
