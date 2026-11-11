@@ -5,6 +5,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -82,15 +83,61 @@ class TranscriptStore(private val dir: File) {
         runCatching { json.decodeFromString(Transcript.serializer(), f.readText()) }.getOrNull()
     }
 
+    private fun editsFile(episodeId: Long) = File(dir, "$episodeId.edits.json")
+
+    /** Sentences corrected by the learner, by start time (kept even while transcription is still writing). */
+    private fun edits(episodeId: Long): Map<Long, String> = runCatching {
+        json.decodeFromString(kotlinx.serialization.builtins.MapSerializer(Long.serializer(), String.serializer()), editsFile(episodeId).readText())
+    }.getOrDefault(emptyMap())
+
+    /**
+     * The learner corrects a sentence (a misheard name…). The correction is kept apart too, so a
+     * transcription still running doesn't write the old text back over it.
+     */
+    suspend fun edit(episodeId: Long, startMs: Long, text: String) = withContext(Dispatchers.IO) {
+        dir.mkdirs()
+        val all = edits(episodeId) + (startMs to text.trim())
+        editsFile(episodeId).writeText(
+            json.encodeToString(kotlinx.serialization.builtins.MapSerializer(Long.serializer(), String.serializer()), all),
+        )
+        load(episodeId)?.let { save(episodeId, it) }
+    }
+
     suspend fun save(episodeId: Long, transcript: Transcript) = withContext(Dispatchers.IO) {
         dir.mkdirs()
         val tmp = File(dir, "$episodeId.json.tmp")
-        tmp.writeText(json.encodeToString(Transcript.serializer(), transcript))
+        tmp.writeText(json.encodeToString(Transcript.serializer(), applyEdits(transcript, edits(episodeId))))
         tmp.renameTo(file(episodeId))
         updates.tryEmit(episodeId)
     }
 
     fun delete(episodeId: Long) {
         file(episodeId).delete()
+        editsFile(episodeId).delete()
     }
+}
+
+/** The learner's corrections put into a transcript (pure). */
+fun applyEdits(transcript: Transcript, edits: Map<Long, String>): Transcript {
+    if (edits.isEmpty()) return transcript
+    return transcript.copy(
+        segments = transcript.segments.map { s ->
+            val text = edits[s.startMs]
+            if (text == null || text == s.text) s
+            else s.copy(text = text, translation = null, words = retime(s, text))
+        },
+    )
+}
+
+/**
+ * Word times for a corrected sentence: the same times when the number of words is unchanged,
+ * otherwise spread evenly over the sentence (null for languages written without spaces).
+ */
+fun retime(old: Segment, text: String): List<Word>? {
+    val words = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.size <= 1 && text.length > 12) return null // Japanese, Chinese…: no word boundaries
+    val before = old.words
+    if (before != null && before.size == words.size) return before.zip(words) { w, t -> w.copy(text = t) }
+    val span = (old.endMs - old.startMs).coerceAtLeast(1)
+    return words.mapIndexed { i, t -> Word(old.startMs + span * i / words.size, t) }
 }

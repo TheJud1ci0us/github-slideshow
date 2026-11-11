@@ -282,10 +282,21 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         // The engine is created on the recognition thread so its worker threads stay on the fast cores.
         // Loaded on demand and released while the buffer zone is full, so a waiting job
         // doesn't hold hundreds of MB of model in memory.
+        // Names the model can't know (guests, places…), from the episode's own texts and the
+        // learner's list for this podcast: hints before recognition, corrections after.
+        val names = run {
+            val ep = dao.get(episodeId)
+            val podcast = ep?.podcastId?.let { graph.db.podcastDao().get(it) }
+            com.ascolta.app.data.Names.extract(
+                listOf(podcast?.title, podcast?.author, ep?.title, ep?.description),
+                extra = podcast?.names.orEmpty().lines(),
+            )
+        }
+        if (names.isNotEmpty()) AppLog.i(TAG, "Name hints: ${names.size}")
         var engine: SpeechEngine? = null
         suspend fun engine(): SpeechEngine = engine ?: withContext(CoreDispatchers.recognition) {
             update(applicationContext.getString(R.string.status_loading_model), status.value.progress)
-            SpeechEngine.load(applicationContext, model, graph.models, options)
+            SpeechEngine.load(applicationContext, model, graph.models, options).also { it.setNames(names) }
         }.also { engine = it }
         suspend fun releaseEngine() {
             val e = engine ?: return
@@ -478,8 +489,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         val nextSpan = BufferPolicy.nextBlock(Coverage.add(spans, prepared.span), positionMs, totalMs, BLOCK_MS)
                         if (nextSpan != null && nextSpan.startMs >= prepared.span.endMs) prefetch = nextSpan to async { prepare(nextSpan) }
 
-                        val prompt = latest.value.segments.filter { it.endMs <= prepared.span.startMs + 500 }.takeLast(3)
+                        val previous = latest.value.segments.filter { it.endMs <= prepared.span.startMs + 500 }.takeLast(3)
                             .joinToString(" ") { it.text }.takeLast(200)
+                        val prompt = com.ascolta.app.data.Names.prompt(names, previous)
                         update(transcribing, progressOf(latest.value))
 
                         // While recognising, watch the player: if the listener jumps somewhere this
@@ -511,8 +523,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                     update(transcribing, progressOf(latest.value) + blockLenMs * percent / 100f / totalMs)
                                 },
                                 onSegment = { seg ->
-                                    val text = seg.text.trim()
-                                    if (text.isNotEmpty() && !isHallucination(text)) {
+                                    val (text, fixed) = com.ascolta.app.data.Names.correct(seg.text.trim(), names)
+                                    if (text.isNotEmpty() && !isHallucination(text) && !com.ascolta.app.data.Names.echoesPrompt(text, names)) {
                                         count++
                                         lastEnd = maxOf(lastEnd, seg.endMs + blockStartMs)
                                         events.trySend(
@@ -522,7 +534,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                                     seg.endMs + blockStartMs,
                                                     text,
                                                     words = cleanWords(seg.words, seg.startMs, seg.endMs)
-                                                        ?.map { it.copy(startMs = it.startMs + blockStartMs) },
+                                                        ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                                 ),
                                             ),
                                         )
@@ -589,6 +601,14 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
      * Word timings in order and inside their sentence, so the highlight moves forward
      * smoothly instead of jumping back or past the sentence.
      */
+    /** A timed word with the same name correction as its sentence ("Selenski," → "Zelensky,"). */
+    private fun fixWord(word: String, fixed: Map<String, String>): String {
+        if (fixed.isEmpty()) return word
+        val core = word.trim().trim { !it.isLetterOrDigit() }
+        val to = fixed[core] ?: return word
+        return word.replace(core, to)
+    }
+
     private fun cleanWords(words: List<com.ascolta.app.data.Word>?, startMs: Long, endMs: Long): List<com.ascolta.app.data.Word>? {
         if (words.isNullOrEmpty()) return words
         var last = startMs

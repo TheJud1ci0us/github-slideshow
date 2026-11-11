@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -292,6 +293,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     var selA by remember { mutableStateOf<com.ascolta.app.data.WordPos?>(null) }
     var selB by remember { mutableStateOf<com.ascolta.app.data.WordPos?>(null) }
     var shadowing by remember { mutableStateOf<com.ascolta.app.data.Selected?>(null) }
+    // Correcting a sentence by hand (a misheard name…): its index in the transcript.
+    var editing by remember { mutableStateOf<Int?>(null) }
     val allRanges = remember(segments, timedWords) { segments.mapIndexed { i, s -> wordRanges(s.text, timedWords.getOrNull(i)) } }
     val selection = remember(selA, selB, segments, timedWords, allRanges) {
         val a = selA
@@ -432,6 +435,10 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     cm?.setPrimaryClip(android.content.ClipData.newPlainText("LingoPod", sel.text))
                     selA = null; selB = null
                 },
+                onEdit = {
+                    val a = selA; val b = selB
+                    if (a != null && b != null) editing = minOf(a, b).segment
+                },
                 onClose = { selA = null; selB = null },
             ) else androidx.compose.foundation.layout.Box(Modifier.tourTarget("player_controls")) { Controls(
                 isPlaying = isCurrent && player.isPlaying,
@@ -539,6 +546,34 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    editing?.let { index ->
+        val segment = segments.getOrNull(index)
+        if (segment == null) { editing = null; return@let }
+        var text by remember(index, segment.text) { mutableStateOf(segment.text) }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            title = { Text(stringResource(R.string.edit_sentence)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.edit_sentence_text), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.material3.OutlinedTextField(
+                        value = text, onValueChange = { text = it }, minLines = 2,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ep0 = ep
+                    editing = null; selA = null; selB = null
+                    scope.launch { graph.repo.editSentence(ep0, segment, text) }
+                }) { Text(stringResource(R.string.select_save)) }
+            },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
     }
 
     if (sleepDialog) {
@@ -1144,6 +1179,7 @@ private fun SelectionBar(
     onSave: () -> Unit,
     onShadow: () -> Unit,
     onCopy: () -> Unit,
+    onEdit: () -> Unit,
     onClose: () -> Unit,
 ) {
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
@@ -1180,6 +1216,7 @@ private fun SelectionBar(
                     Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_shadow))
                 }
                 IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, stringResource(R.string.select_copy)) }
+                IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, stringResource(R.string.edit_sentence)) }
             }
         }
     }

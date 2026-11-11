@@ -551,8 +551,13 @@
     <string name="pro_lifetime">À vie (paiement unique)</string>
     <string name="pro_profile_subtitle">Transcription illimitée, meilleurs modèles, export Anki</string>
     <string name="tour_select_title">Sélectionner et enregistrer</string>
-    <string name="tour_select_text">1. Appui long sur un mot pour commencer une sélection.\n2. Touchez un autre mot, même dans une phrase plus loin, pour l\'étendre.\n3. Ou appui long sur l\'heure d\'une phrase pour la prendre entière.\n4. Puis Enregistrer (une carte avec la voix de l\'intervenant), Shadowing ou Copier.\nSi la sélection traverse deux phrases, vous pouvez retirer le « . » ou le « ? » que la transcription a mis entre elles.</string>
+    <string name="tour_select_text">1. Appui long sur un mot pour commencer une sélection.\n2. Touchez un autre mot, même dans une phrase plus loin, pour l\'étendre.\n3. Ou appui long sur l\'heure d\'une phrase pour la prendre entière.\n4. Puis Enregistrer (une carte avec la voix de l\'intervenant), Shadowing ou Copier.\nSi la sélection traverse deux phrases, vous pouvez retirer le « . » ou le « ? » que la transcription a mis entre elles.\nPour corriger un mot ou un nom, sélectionnez-le et touchez le crayon.</string>
     <string name="select_join_question">Ponctuation entre les phrases :</string>
     <string name="select_keep_punctuation">Garder</string>
     <string name="select_remove_punctuation">Retirer</string>
+    <string name="names_title">Noms (transcriptions plus justes)</string>
+    <string name="names_text">Les noms que le modèle peut ne pas connaître : animateurs, invités, lieux. Un par ligne. Les noms du titre et des notes de chaque épisode sont utilisés automatiquement.</string>
+    <string name="names_placeholder">Emmanuel Macron\nLyon</string>
+    <string name="edit_sentence">Corriger le texte</string>
+    <string name="edit_sentence_text">Corrigez un mot ou un nom mal compris. Les noms corrigés sont retenus pour les prochains épisodes de ce podcast.</string>
 </resources>

@@ -74,6 +74,7 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
     var menu by remember { mutableStateOf(false) }
     var confirmUnsubscribe by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
+    var editingNames by remember { mutableStateOf(false) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -96,6 +97,10 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                             DropdownMenuItem(text = { Text(stringResource(R.string.refresh_feeds)) }, onClick = {
                                 menu = false
                                 scope.launch { podcast?.let { runCatching { graph.repo.refresh(it) } } }
+                            })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.names_title)) }, onClick = {
+                                menu = false
+                                editingNames = true
                             })
                             DropdownMenuItem(text = { Text(stringResource(R.string.move_language)) }, onClick = {
                                 menu = false
@@ -190,6 +195,34 @@ fun PodcastScreen(podcastId: Long?, onBack: () -> Unit, openPlayer: (Long) -> Un
                 scope.launch { podcastId?.let { graph.repo.moveToLanguage(it, codes.first()) } }
             },
             onDismiss = { moving = false },
+        )
+    }
+
+    if (editingNames) podcast?.let { p ->
+        var text by remember(p.id) { mutableStateOf(p.names) }
+        AlertDialog(
+            onDismissRequest = { editingNames = false },
+            title = { Text(stringResource(R.string.names_title)) },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    Text(stringResource(R.string.names_text), style = MaterialTheme.typography.bodyMedium)
+                    androidx.compose.material3.OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        placeholder = { Text(stringResource(R.string.names_placeholder)) },
+                        minLines = 4,
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editingNames = false
+                    scope.launch { graph.repo.setPodcastNames(p.id, text) }
+                }) { Text(stringResource(R.string.select_save)) }
+            },
+            dismissButton = { TextButton(onClick = { editingNames = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 

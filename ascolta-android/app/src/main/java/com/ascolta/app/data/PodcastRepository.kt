@@ -66,6 +66,19 @@ class PodcastRepository(
         }
     }
 
+    /** The learner's names list for a podcast (one per line): hints for its transcriptions. */
+    suspend fun setPodcastNames(podcastId: Long, names: String) {
+        val clean = names.lines().map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+        podcastDao.setNames(podcastId, clean.joinToString("\n"))
+    }
+
+    /** Adds names (e.g. corrected by hand in a transcript) to a podcast's list. */
+    suspend fun addPodcastNames(podcastId: Long, names: List<String>) {
+        if (names.isEmpty()) return
+        val current = podcastDao.get(podcastId)?.names.orEmpty()
+        setPodcastNames(podcastId, current + "\n" + names.joinToString("\n"))
+    }
+
     suspend fun setFavourite(podcastId: Long, favourite: Boolean) {
         podcastDao.setFavourite(podcastId, favourite)
         Analytics.track(if (favourite) "Podcast.favourited" else "Podcast.unfavourited")
@@ -464,6 +477,22 @@ class PodcastRepository(
     // ---- Transcripts & translation ------------------------------------------
 
     suspend fun loadTranscript(episodeId: Long) = transcripts.load(episodeId)
+
+    /**
+     * The learner corrects a sentence. Names they fixed (capitalised words that weren't there
+     * before) are added to the podcast's names list, so the next episodes get them right.
+     */
+    suspend fun editSentence(episode: EpisodeEntity?, segment: Segment, text: String) {
+        val id = episode?.id ?: return
+        if (text.isBlank() || text.trim() == segment.text.trim()) return
+        transcripts.edit(id, segment.startMs, text)
+        val podcastId = episode.podcastId ?: return
+        val before = Regex("""[\p{L}][\p{L}\p{M}'’\-]*""").findAll(segment.text).map { it.value }.toSet()
+        val added = Regex("""[\p{L}][\p{L}\p{M}'’\-]*""").findAll(text).map { it.value }
+            .filterIndexed { i, w -> i > 0 && w[0].isUpperCase() && w.length >= 3 && w !in before }
+            .toList()
+        addPodcastNames(podcastId, added)
+    }
 
     /**
      * Fills in missing translations (or redoes them if the native language changed).

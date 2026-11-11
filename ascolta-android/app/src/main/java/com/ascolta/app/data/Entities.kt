@@ -23,6 +23,8 @@ data class PodcastEntity(
     val libraryLanguage: String? = null,
     /** Favourites are listed first and notify about new episodes. */
     @ColumnInfo(defaultValue = "0") val favourite: Boolean = false,
+    /** Names the learner added for this podcast (hosts, places…), one per line: hints for transcription. */
+    @ColumnInfo(defaultValue = "") val names: String = "",
 )
 
 object DownloadState {

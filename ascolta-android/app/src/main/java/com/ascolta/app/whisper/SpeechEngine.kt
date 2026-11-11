@@ -43,6 +43,12 @@ interface SpeechEngine : Closeable {
     /** Can be called from any thread to stop the running transcription early. */
     fun abort()
 
+    /**
+     * Names to expect in this episode (guests, places…), for engines that take word hints
+     * (Parakeet). Whisper gets them in its prompt instead.
+     */
+    fun setNames(names: List<String>) {}
+
     /** Whether this engine needs speech regions (it can't process a long block in one go). */
     val needsSpeechRegions: Boolean get() = false
 
@@ -127,8 +133,16 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
     private val recognizer: OfflineRecognizer
     private val language = options.language
     private val engine = model.engine
+    /** Parakeet takes names as hints (the other sherpa models can't). */
+    private val hints = model.engine == Engine.PARAKEET
+    @Volatile private var names = ""
 
     override val needsSpeechRegions: Boolean get() = true
+
+    override fun setNames(names: List<String>) {
+        this.names = com.ascolta.app.data.Names.hotwords(names)
+    }
+
 
     init {
         val modelConfig = when (model.engine) {
@@ -166,6 +180,9 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 tokens = File(modelDir, "tokens.txt").path,
                 numThreads = options.threads,
                 modelType = "nemo_transducer",
+                // Names as hints: their spelling is found from Parakeet's own word pieces.
+                modelingUnit = "bpe",
+                bpeVocab = bpeVocab(modelDir).path,
             )
         }
         // ReazonSpeech gives no punctuation: its sentences are found with the Japanese dictionary.
@@ -175,7 +192,12 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
             OfflineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = 16_000, featureDim = 80),
                 modelConfig = modelConfig,
-                decodingMethod = "greedy_search",
+                // Parakeet searches a few candidates so the names given as hints can win
+                // (measured: 58% → 80% of names spelled right).
+                decodingMethod = if (hints) "modified_beam_search" else "greedy_search",
+                maxActivePaths = 4,
+                hotwordsFile = if (hints) hotwordsFile(modelDir).path else "",
+                hotwordsScore = 1.5f,
             ),
         )
     }
@@ -198,7 +220,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
             val from = (startMs * 16).toInt().coerceIn(0, samples.size)
             val to = (endMs * 16).toInt().coerceIn(from, samples.size)
             if (to - from < 1_600) return@forEachIndexed // < 0.1 s
-            val stream = recognizer.createStream()
+            val stream = if (hints && names.isNotEmpty()) recognizer.createStream(names) else recognizer.createStream()
             try {
                 stream.acceptWaveform(samples.copyOfRange(from, to), 16_000)
                 recognizer.decode(stream)
@@ -250,6 +272,22 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         const val REAZON_MAX_PIECE_MS = 12_000L
         const val REAZON_SHIFT_MS = 300L
         val TAG = Regex("""<\|[^|]*\|>""")
+
+        /** Parakeet's word pieces in the form sherpa-onnx reads to spell hints (fewest pieces win). */
+        fun bpeVocab(dir: File): File = File(dir, "bpe.vocab").also { out ->
+            if (out.exists() && out.length() > 0) return@also
+            val tmp = File(dir, "bpe.vocab.tmp")
+            tmp.bufferedWriter().use { w ->
+                File(dir, "tokens.txt").forEachLine { line ->
+                    val token = line.substringBeforeLast(' ')
+                    if (token.isNotEmpty()) w.append(token).append("\t-1\n")
+                }
+            }
+            tmp.renameTo(out)
+        }
+
+        /** sherpa-onnx needs a hints file to enable hints; each episode then gives its own names. */
+        fun hotwordsFile(dir: File): File = File(dir, "hotwords.txt").also { if (!it.exists()) it.writeText("LingoPod\n") }
     }
 }
 

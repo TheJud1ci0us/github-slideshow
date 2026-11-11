@@ -43,6 +43,9 @@ interface PodcastDao {
     @Query("SELECT * FROM podcasts WHERE id = :id")
     suspend fun get(id: Long): PodcastEntity?
 
+    @Query("UPDATE podcasts SET names = :names WHERE id = :id")
+    suspend fun setNames(id: Long, names: String)
+
     @Query("SELECT * FROM podcasts WHERE feedUrl = :feedUrl")
     suspend fun getByFeedUrl(feedUrl: String): PodcastEntity?
 
@@ -211,7 +214,7 @@ interface ListeningDao {
 
 @Database(
     entities = [PodcastEntity::class, EpisodeEntity::class, VocabEntity::class, ListeningEntry::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -222,7 +225,14 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "ascolta.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+
+        /** v1.1: the learner's names list per podcast (hints for transcription). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE podcasts ADD COLUMN names TEXT NOT NULL DEFAULT ''")
+            }
+        }
 
         /** v0.16: saved selections keep their place in the episode, and the learner's recording. */
         val MIGRATION_4_5 = object : Migration(4, 5) {

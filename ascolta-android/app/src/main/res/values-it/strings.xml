@@ -551,8 +551,13 @@
     <string name="pro_lifetime">A vita (pagamento unico)</string>
     <string name="pro_profile_subtitle">Trascrizione illimitata, modelli migliori, esportazione Anki</string>
     <string name="tour_select_title">Seleziona e salva</string>
-    <string name="tour_select_text">1. Tieni premuta una parola per iniziare una selezione.\n2. Tocca un\'altra parola, anche in una frase successiva, per estenderla.\n3. Oppure tieni premuto l\'orario di una frase per prenderla tutta.\n4. Poi Salva (una scheda con la voce di chi parla), Shadowing o Copia.\nSe la selezione attraversa due frasi, puoi togliere il «.» o il «?» che la trascrizione ha messo tra loro.</string>
+    <string name="tour_select_text">1. Tieni premuta una parola per iniziare una selezione.\n2. Tocca un\'altra parola, anche in una frase successiva, per estenderla.\n3. Oppure tieni premuto l\'orario di una frase per prenderla tutta.\n4. Poi Salva (una scheda con la voce di chi parla), Shadowing o Copia.\nSe la selezione attraversa due frasi, puoi togliere il «.» o il «?» che la trascrizione ha messo tra loro.\nPer correggere una parola o un nome, selezionalo e tocca la matita.</string>
     <string name="select_join_question">Punteggiatura tra le frasi:</string>
     <string name="select_keep_punctuation">Mantieni</string>
     <string name="select_remove_punctuation">Togli</string>
+    <string name="names_title">Nomi (trascrizioni più precise)</string>
+    <string name="names_text">I nomi che il modello potrebbe non conoscere: conduttori, ospiti, luoghi. Uno per riga. I nomi nel titolo e nelle note di ogni puntata sono usati automaticamente.</string>
+    <string name="names_placeholder">Sergio Mattarella\nBologna</string>
+    <string name="edit_sentence">Correggi il testo</string>
+    <string name="edit_sentence_text">Correggi una parola o un nome capito male. I nomi corretti vengono ricordati per le prossime puntate di questo podcast.</string>
 </resources>

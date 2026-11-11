@@ -544,8 +544,13 @@
     <string name="pro_lifetime">Lebenslang (einmal zahlen)</string>
     <string name="pro_profile_subtitle">Unbegrenzte Transkription, beste Modelle, Anki-Export</string>
     <string name="tour_select_title">Auswählen und speichern</string>
-    <string name="tour_select_text">1. Halte ein Wort gedrückt, um eine Auswahl zu beginnen.\n2. Tippe auf ein anderes Wort, auch in einem späteren Satz, um sie zu erweitern.\n3. Oder halte die Zeit eines Satzes gedrückt, um den ganzen Satz zu nehmen.\n4. Dann Speichern (eine Karte mit der Stimme des Sprechers), Nachsprechen oder Kopieren.\nGeht die Auswahl über zwei Sätze, kannst du den „.“ oder das „?“ entfernen, das die Transkription dazwischen gesetzt hat.</string>
+    <string name="tour_select_text">1. Halte ein Wort gedrückt, um eine Auswahl zu beginnen.\n2. Tippe auf ein anderes Wort, auch in einem späteren Satz, um sie zu erweitern.\n3. Oder halte die Zeit eines Satzes gedrückt, um den ganzen Satz zu nehmen.\n4. Dann Speichern (eine Karte mit der Stimme des Sprechers), Nachsprechen oder Kopieren.\nGeht die Auswahl über zwei Sätze, kannst du den „.“ oder das „?“ entfernen, das die Transkription dazwischen gesetzt hat.\nUm ein Wort oder einen Namen zu korrigieren, wähle es aus und tippe auf den Stift.</string>
     <string name="select_join_question">Satzzeichen zwischen den Sätzen:</string>
     <string name="select_keep_punctuation">Behalten</string>
     <string name="select_remove_punctuation">Entfernen</string>
+    <string name="names_title">Namen (genauere Transkripte)</string>
+    <string name="names_text">Namen, die das Modell vielleicht nicht kennt: Moderatoren, Gäste, Orte. Einer pro Zeile. Namen aus Titel und Shownotes jeder Folge werden automatisch genutzt.</string>
+    <string name="names_placeholder">Angela Merkel\nLeipzig</string>
+    <string name="edit_sentence">Text korrigieren</string>
+    <string name="edit_sentence_text">Korrigiere ein falsch verstandenes Wort oder einen Namen. Korrigierte Namen werden für die nächsten Folgen dieses Podcasts gemerkt.</string>
 </resources>

@@ -551,8 +551,13 @@
     <string name="pro_lifetime">De por vida (pago único)</string>
     <string name="pro_profile_subtitle">Transcripción ilimitada, mejores modelos, exportación a Anki</string>
     <string name="tour_select_title">Seleccionar y guardar</string>
-    <string name="tour_select_text">1. Mantén pulsada una palabra para empezar una selección.\n2. Toca otra palabra, incluso en una frase posterior, para ampliarla.\n3. O mantén pulsada la hora de una frase para tomarla entera.\n4. Luego Guardar (una tarjeta con la voz de quien habla), Shadowing o Copiar.\nSi la selección cruza dos frases, puedes quitar el «.» o el «?» que la transcripción puso entre ellas.</string>
+    <string name="tour_select_text">1. Mantén pulsada una palabra para empezar una selección.\n2. Toca otra palabra, incluso en una frase posterior, para ampliarla.\n3. O mantén pulsada la hora de una frase para tomarla entera.\n4. Luego Guardar (una tarjeta con la voz de quien habla), Shadowing o Copiar.\nSi la selección cruza dos frases, puedes quitar el «.» o el «?» que la transcripción puso entre ellas.\nPara corregir una palabra o un nombre, selecciónalo y toca el lápiz.</string>
     <string name="select_join_question">Puntuación entre las frases:</string>
     <string name="select_keep_punctuation">Mantener</string>
     <string name="select_remove_punctuation">Quitar</string>
+    <string name="names_title">Nombres (transcripciones más precisas)</string>
+    <string name="names_text">Nombres que el modelo puede no conocer: presentadores, invitados, lugares. Uno por línea. Los nombres del título y las notas de cada episodio se usan automáticamente.</string>
+    <string name="names_placeholder">Pedro Almodóvar\nValencia</string>
+    <string name="edit_sentence">Corregir el texto</string>
+    <string name="edit_sentence_text">Corrige una palabra o un nombre mal entendido. Los nombres corregidos se recuerdan para los próximos episodios de este podcast.</string>
 </resources>
