@@ -170,7 +170,7 @@
     <string name="flash_title">Faster calculation mode</string>
     <string name="flash_text">Flash attention for Whisper models. Whether it helps depends on the phone: compare with the speed test.</string>
     <string name="skip_title">Skip music and silence</string>
-    <string name="skip_text">Finds the speech first so only the talking is transcribed. Always on for Parakeet.</string>
+    <string name="skip_text">Finds the speech first, so only the talking is transcribed: faster, and nothing made up over music. Turn it off if bits of speech get missed (talk over loud music).</string>
     <string name="speed_test">Run speed test</string>
     <string name="speed_test_text">Transcribes the same 30-second Italian recording: one warm-up run, then 3 timed runs (the middle one is shown), so you can compare models and settings.</string>
     <string name="speed_test_running">Running speed test…</string>

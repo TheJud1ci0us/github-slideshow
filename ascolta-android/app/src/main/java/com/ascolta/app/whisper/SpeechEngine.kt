@@ -274,7 +274,8 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
 
     /** Mostly inside what the detector marked as speech (not a gap checked just in case). */
     private fun isDetectedSpeech(startMs: Long, endMs: Long): Boolean {
-        val regions = detected ?: return true
+        // Without speech detection (option off) an empty piece is most likely music: no retry.
+        val regions = detected ?: return false
         val inside = regions.sumOf { (s, e) -> (minOf(e, endMs) - maxOf(s, startMs)).coerceAtLeast(0) }
         return inside * 2 >= endMs - startMs
     }

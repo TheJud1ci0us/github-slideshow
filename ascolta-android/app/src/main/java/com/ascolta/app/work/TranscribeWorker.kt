@@ -237,8 +237,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val crashCount = if (guardAction == CrashGuard.Action.CONTINUE) 0 else CrashGuard.crashes(mark, model.id, episodeId) + 1
         ensureModel(model)
 
-        // Parakeet always works on detected speech; for Whisper it's the "skip music and silence" option.
-        val useVad = settings.skipNonSpeech.value || model.engine != Engine.WHISPER
+        // "Skip music and silence" (on by default, for every model). Off: the whole audio is
+        // recognised, in pieces of at most 25 s for Parakeet and the other sherpa models.
+        val useVad = settings.skipNonSpeech.value
         if (useVad && !graph.models.isVadDownloaded()) {
             // Agreed together with the speech model (it is listed in the same question).
             if (!settings.isApproved("vad") && !settings.isApproved("model:${model.id}")) {

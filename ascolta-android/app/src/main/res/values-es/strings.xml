@@ -133,7 +133,7 @@
     <string name="flash_title">Modo de cálculo más rápido</string>
     <string name="flash_text">Flash attention para los modelos Whisper. Que ayude depende del teléfono: compáralo con la prueba de velocidad.</string>
     <string name="skip_title">Saltar música y silencios</string>
-    <string name="skip_text">Detecta primero la voz para transcribir solo lo hablado. Siempre activo con Parakeet.</string>
+    <string name="skip_text">Detecta primero la voz para transcribir solo lo hablado: más rápido y nada inventado sobre la música. Desactívalo si faltan partes habladas (voz sobre música fuerte).</string>
     <string name="speed_test">Hacer prueba de velocidad</string>
     <string name="speed_test_text">Transcribe la misma grabación en italiano de 30 segundos: una prueba de calentamiento y luego 3 cronometradas (se muestra la del medio), para comparar modelos y ajustes.</string>
     <string name="speed_test_running">Prueba de velocidad en curso…</string>

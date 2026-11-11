@@ -133,7 +133,7 @@
     <string name="flash_title">Mode de calcul plus rapide</string>
     <string name="flash_text">Flash attention pour les modèles Whisper. Son effet dépend du téléphone : comparez avec le test de vitesse.</string>
     <string name="skip_title">Ignorer la musique et les silences</string>
-    <string name="skip_text">Détecte d\'abord la parole pour ne transcrire que les passages parlés. Toujours actif pour Parakeet.</string>
+    <string name="skip_text">Repère d\'abord la parole pour ne transcrire que les passages parlés : plus rapide, et rien d\'inventé sur la musique. Désactivez-le si des passages parlés manquent (paroles sur une musique forte).</string>
     <string name="speed_test">Lancer le test de vitesse</string>
     <string name="speed_test_text">Transcrit le même enregistrement italien de 30 secondes : un essai de chauffe, puis 3 essais chronométrés (celui du milieu est affiché), pour comparer modèles et réglages.</string>
     <string name="speed_test_running">Test de vitesse en cours…</string>

@@ -133,7 +133,7 @@
     <string name="flash_title">Schnellerer Rechenmodus</string>
     <string name="flash_text">Flash Attention für Whisper-Modelle. Ob es hilft, hängt vom Handy ab: vergleiche mit dem Geschwindigkeitstest.</string>
     <string name="skip_title">Musik und Stille überspringen</string>
-    <string name="skip_text">Erkennt zuerst die Sprache, damit nur Gesprochenes transkribiert wird. Bei Parakeet immer aktiv.</string>
+    <string name="skip_text">Erkennt zuerst die Sprache, damit nur Gesprochenes transkribiert wird: schneller und nichts Erfundenes über Musik. Schalte es aus, wenn Gesprochenes fehlt (Sprache über lauter Musik).</string>
     <string name="speed_test">Geschwindigkeitstest starten</string>
     <string name="speed_test_text">Transkribiert dieselbe 30-sekündige italienische Aufnahme: ein Aufwärmdurchlauf, dann 3 gemessene Durchläufe (der mittlere wird angezeigt), damit du Modelle und Einstellungen vergleichen kannst.</string>
     <string name="speed_test_running">Geschwindigkeitstest läuft…</string>

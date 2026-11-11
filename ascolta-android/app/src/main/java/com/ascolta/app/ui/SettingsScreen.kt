@@ -198,6 +198,8 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                         tier = stringResource(R.string.tier_current),
                     )
                 }
+                // Skip music and silence (also under Speed): on or off for every model.
+                SwitchRow(stringResource(R.string.skip_title), stringResource(R.string.skip_text), settings.skipNonSpeech)
                 // Benchmark of the model chosen above.
                 SpeedTestRow()
             }
