@@ -349,6 +349,19 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                         translationLanguage = if (canTranslate) target else t.translationLanguage,
                                     )
                                 }
+                                is WriterEvent.ReplaceSpan -> {
+                                    val kept = t.segments.filter { it.startMs < event.span.startMs || it.startMs >= event.span.endMs }
+                                    val added = event.segments.map { segment ->
+                                        val translation = if (canTranslate) runCatching {
+                                            withTimeoutOrNull(15_000) { graph.translation.translate(segment.text, language, target) }
+                                        }.getOrNull() else null
+                                        segment.copy(translation = translation)
+                                    }
+                                    t = t.copy(
+                                        segments = (kept + added).sortedBy { it.startMs },
+                                        translationLanguage = if (canTranslate) target else t.translationLanguage,
+                                    )
+                                }
                                 is WriterEvent.Done -> {
                                     val covered = Coverage.add(t.covered, event.span)
                                     t = t.copy(covered = covered, processedMs = Coverage.runEnd(covered, 0))
@@ -553,9 +566,20 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         watcher.cancel()
                         if (wrongLanguage.isNotEmpty() && !isStopped) {
                             val redoStarted = System.currentTimeMillis()
-                            val redone = redoInLanguage(wrongLanguage, prepared.samples, blockStartMs, language, names, options)
-                            AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Whisper in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
-                            wrongLanguage.forEach { events.send(WriterEvent.Sentence(it)) }
+                            // A conversation where many sentences slipped into English: the whole block is
+                            // redone by Whisper (told the language), which keeps the exchange together.
+                            val wholeBlock = finished && TranscriptionPlan.redoWholeBlock(wrongLanguage.size, count) &&
+                                redoBlockInLanguage(prepared, blockStartMs, language, names, options)?.let { segments ->
+                                    events.send(WriterEvent.ReplaceSpan(Span(blockStartMs, blockStartMs + blockLenMs), segments))
+                                    AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} of $count sentences; whole block redone with Whisper " +
+                                        "(${segments.size} sentences) in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
+                                    true
+                                } == true
+                            if (!wholeBlock) {
+                                val redone = redoInLanguage(wrongLanguage, prepared.samples, blockStartMs, language, names, options)
+                                AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Whisper in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
+                                wrongLanguage.forEach { events.send(WriterEvent.Sentence(it)) }
+                            }
                         }
                         if (rescuedMs > 0) AppLog.i(TAG, "Gap check: ${rescuedMs / 1000}s without detected speech also checked")
                         if (!finished) {
@@ -630,6 +654,52 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
      * quote), the original stays. Uses Small, else Base; without either, the player suggests
      * downloading Base (never downloaded silently). Returns how many were redone.
      */
+    /** Whisper Small, else Base, loaded once per job; null (and the download suggested) without either. */
+    private suspend fun whisperFixer(options: EngineOptions): SpeechEngine? {
+        if (!fixerChecked) {
+            fixerChecked = true
+            val model = listOf(SpeechModel.SMALL, SpeechModel.BASE).firstOrNull { graph.models.isDownloaded(it) }
+            if (model != null) fixer = withContext(CoreDispatchers.recognition) {
+                SpeechEngine.load(applicationContext, model, graph.models, options.copy(gpu = false))
+            }
+        }
+        return fixer ?: run {
+            fixerChecked = false // check again next block (the learner may download one meanwhile)
+            graph.settings.languageFixSuggested.set(true)
+            null
+        }
+    }
+
+    /**
+     * The whole block recognised again by Whisper forced to [language] (one pass over its
+     * detected speech). Returns its sentences, or null when Whisper isn't on the phone, heard
+     * nothing, or heard mostly English too (an English ad: Parakeet's text then stays).
+     */
+    private suspend fun redoBlockInLanguage(
+        prepared: PreparedBlock,
+        blockStartMs: Long,
+        language: String,
+        names: List<String>,
+        options: EngineOptions,
+    ): List<Segment>? {
+        val whisper = whisperFixer(options) ?: return null
+        val parts = mutableListOf<com.ascolta.app.whisper.WhisperSegment>()
+        withContext(CoreDispatchers.recognition) {
+            whisper.transcribe(prepared.samples, prepared.speech, language, Names.prompt(names, null), {}, { parts += it })
+        }
+        val segments = parts.mapNotNull { p ->
+            val (text, fixed) = Names.correct(p.text.trim(), names)
+            if (text.isEmpty() || isHallucination(text) || Names.echoesPrompt(text, names)) return@mapNotNull null
+            Segment(
+                p.startMs + blockStartMs, p.endMs + blockStartMs, text,
+                words = cleanWords(p.words, p.startMs, p.endMs)?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
+            )
+        }
+        if (segments.isEmpty()) return null
+        val english = segments.count { com.ascolta.app.data.SentenceLanguage.isEnglishInstead(it.text, language, wordLists, names) }
+        return segments.takeIf { english * 2 < segments.size }
+    }
+
     private suspend fun redoInLanguage(
         wrong: MutableList<Segment>,
         samples: FloatArray,
@@ -638,19 +708,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         names: List<String>,
         options: EngineOptions,
     ): Int {
-        if (!fixerChecked) {
-            fixerChecked = true
-            val model = listOf(SpeechModel.SMALL, SpeechModel.BASE).firstOrNull { graph.models.isDownloaded(it) }
-            if (model != null) fixer = withContext(CoreDispatchers.recognition) {
-                SpeechEngine.load(applicationContext, model, graph.models, options.copy(gpu = false))
-            }
-        }
-        val whisper = fixer
-        if (whisper == null) {
-            fixerChecked = false // check again next block (the learner may download one meanwhile)
-            graph.settings.languageFixSuggested.set(true)
-            return 0
-        }
+        val whisper = whisperFixer(options) ?: return 0
         val pad = 250L
         val lengthMs = samples.size / 16L
         val regions = wrong.map { (it.startMs - blockStartMs - pad).coerceAtLeast(0) to (it.endMs - blockStartMs + pad).coerceAtMost(lengthMs) }
@@ -699,6 +757,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     private sealed interface WriterEvent {
         data class Sentence(val segment: Segment) : WriterEvent
+        /** The sentences starting in [span] are replaced by [segments] (a block redone by Whisper). */
+        data class ReplaceSpan(val span: Span, val segments: List<Segment>) : WriterEvent
         /** This stretch is fully transcribed. */
         data class Done(val span: Span) : WriterEvent
     }

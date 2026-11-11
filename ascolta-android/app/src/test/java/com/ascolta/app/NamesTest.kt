@@ -78,6 +78,27 @@ class NamesTest {
         assertTrue(Names.echoesPrompt("Volodymyr Zelensky, Lyon, Ferguson.", names))
         assertFalse(Names.echoesPrompt("Zelensky est arrivé à Lyon hier soir.", names))
         assertFalse(Names.echoesPrompt("Zelensky.", names))
+        // Ordinary short sentences are never dropped, even made of words found in the notes.
+        assertFalse(Names.echoesPrompt("Sa femme.", listOf("Femme", "Sa", "Enfer")))
+        assertFalse(Names.echoesPrompt("Zelensky Lyon Ferguson", names))
+    }
+
+    @Test
+    fun titlesInCapitalsGiveNoNames() {
+        val title = "FEMME TRANSGENRE : ELLE REGRETTE SA TRANSITION ET VIT UN ENFER DEPUIS SON CHANGEMENT DE S*XE"
+        val notes = "Guillaume Pley reçoit Lou, qui raconte sa transition. Avec le soutien de la SNCF."
+        val names = Names.extract(listOf("Legend", title, notes))
+        listOf("FEMME", "SA", "VIT", "ENFER", "SON", "UN", "ELLE").forEach { assertFalse(it, it in names) }
+        assertTrue(names.containsAll(listOf("Pley", "Lou", "SNCF")))
+        // "Femme" at the start of a sentence stays as it is.
+        assertEquals("Femme et mari.", Names.correct("Femme et mari.", names).first)
+    }
+
+    @Test
+    fun aConversationFullOfSlipsIsRedoneWhole() {
+        assertTrue(com.ascolta.app.work.TranscriptionPlan.redoWholeBlock(wrong = 4, total = 15))
+        assertFalse(com.ascolta.app.work.TranscriptionPlan.redoWholeBlock(wrong = 2, total = 15))
+        assertFalse(com.ascolta.app.work.TranscriptionPlan.redoWholeBlock(wrong = 1, total = 2))
     }
 
     @Test

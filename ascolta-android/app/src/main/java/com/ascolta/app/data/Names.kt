@@ -75,6 +75,9 @@ object Names {
         val counts = LinkedHashMap<String, Int>()
         for (text in clean) {
             for (chunk in text.split(SENTENCE_END)) {
+                // A title IN CAPITALS ("FEMME TRANSGENRE : ELLE REGRETTE…") says nothing about
+                // which words are names: every word would look like an acronym.
+                if (shouting(chunk)) continue
                 WORD.findAll(chunk).forEachIndexed { i, m ->
                     val w = m.value.trim('-', '\'', '’')
                     if (w.isEmpty()) return@forEachIndexed
@@ -90,6 +93,13 @@ object Names {
             w.length >= 3 && lw !in COMMON && lw !in lowercase && w.any { it.isLowerCase() || it.isDigit() } || isAcronym(w, lowercase)
         }.sortedByDescending { counts[it] ?: 0 }
         return (extra.map { it.trim() }.filter { it.isNotEmpty() } + found).distinctBy { it.lowercase() }.take(MAX)
+    }
+
+    /** Text written (almost) entirely in capital letters: at least 3 words, 80%+ of letters capitals. */
+    private fun shouting(chunk: String): Boolean {
+        val letters = chunk.filter { it.isLetter() }
+        if (WORD.findAll(chunk).count() < 3) return false
+        return letters.count { it.isUpperCase() } >= letters.length * 0.8
     }
 
     private fun isAcronym(w: String, lowercase: Set<String>) =
@@ -121,14 +131,15 @@ object Names {
 
     /**
      * Whisper sometimes repeats its hint over music or silence: a "sentence" that is only a
-     * list of the names (2+ words, nearly all of them names) is dropped.
+     * list of the names (3+ words, all of them names, with commas) is dropped.
      */
     fun echoesPrompt(text: String, names: List<String>): Boolean {
         if (names.isEmpty()) return false
         val known = names.flatMap { it.split(' ') }.map { it.lowercase() }.toSet()
         val words = WORD.findAll(text).map { it.value.lowercase() }.toList()
-        if (words.size < 2) return false
-        return words.count { it in known } >= words.size * 0.8
+        // A list ("Zelensky, Macron, Lyon."), never an ordinary sentence ("Sa femme.").
+        if (words.size < 3 || ',' !in text) return false
+        return words.all { it in known }
     }
 
     /**

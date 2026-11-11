@@ -53,6 +53,12 @@ object Coverage {
 
 object TranscriptionPlan {
     /**
+     * A block where a quarter or more of the sentences (at least 2) came out in the wrong
+     * language (a fast conversation, short replies) is redone whole rather than patched.
+     */
+    fun redoWholeBlock(wrong: Int, total: Int): Boolean = wrong >= 2 && wrong * 4 >= total
+
+    /**
      * Gives each of [targets] (start, end) the text of the [parts] (start, end, text) whose
      * middle falls inside it (with 250 ms of margin); the nearest target when none contains it.
      * Used to put Whisper's redone sentences back on the right wrong-language sentence.
