@@ -777,7 +777,7 @@ private fun LanguageFixBanner() {
     val suggested by graph.settings.languageFixSuggested.flow.collectAsState()
     val dismissed by graph.settings.languageFixDismissed.flow.collectAsState()
     if (!suggested || dismissed) return
-    val model = com.ascolta.app.whisper.SpeechModel.BASE
+    val model = com.ascolta.app.whisper.SpeechModel.CANARY_180M
     if (graph.models.isDownloaded(model)) return
     val dataWarning = rememberDataWarning()
     Banner {

@@ -560,7 +560,7 @@
     <string name="names_placeholder">Sergio Mattarella\nBologna</string>
     <string name="edit_sentence">Correggi il testo</string>
     <string name="edit_sentence_text">Correggi una parola o un nome capito male. I nomi corretti vengono ricordati per le prossime puntate di questo podcast.</string>
-    <string name="language_fix_text">Alcune frasi sono uscite in inglese. Scarica Whisper Base per riscriverle automaticamente nella lingua della puntata.</string>
+    <string name="language_fix_text">Alcune frasi sono uscite in inglese. Scarica NVIDIA Canary (210 MB), un piccolo modello a cui si indica la lingua della puntata, per riscriverle automaticamente.</string>
     <string name="language_fix_download">Scarica (%1$s)</string>
     <string name="tier_most_accurate">Il più preciso · lento</string>
     <string name="tier_most_accurate_hint">Whisper Large v3 è più lento della riproduzione sulla maggior parte dei telefoni: ideale per le puntate scaricate in anticipo.</string>
@@ -590,4 +590,5 @@
     <string name="ad_free_title">Versione senza pubblicità</string>
     <string name="ad_free_text">Molti podcast vendono una versione senza pubblicità come feed RSS privato (Patreon, Supercast, Acast+…). Se ne hai uno, copia l\'indirizzo del feed da quel servizio e aggiungilo qui: avrai le puntate senza pubblicità.</string>
     <string name="ad_free_add">Aggiungi un link al feed</string>
+    <string name="model_desc_canary">Canary 180M (NVIDIA): un piccolo modello a cui si indica la lingua, usato per rifare le frasi che Parakeet scrive in inglese. Francese, spagnolo, tedesco.</string>
 </resources>

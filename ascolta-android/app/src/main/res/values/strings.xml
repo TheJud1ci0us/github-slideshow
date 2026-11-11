@@ -580,7 +580,7 @@
     <string name="names_placeholder">Emmanuel Macron\nLyon</string>
     <string name="edit_sentence">Edit text</string>
     <string name="edit_sentence_text">Fix a misheard word or name. Names you correct are remembered for this podcast\'s next episodes.</string>
-    <string name="language_fix_text">Some sentences came out in English. Download Whisper Base to rewrite them in the episode\'s language automatically.</string>
+    <string name="language_fix_text">Some sentences came out in English. Download NVIDIA Canary (210 MB), a small model that is told the episode\'s language, to rewrite them automatically.</string>
     <string name="language_fix_download">Download (%1$s)</string>
     <string name="tier_most_accurate">Most accurate · slow</string>
     <string name="tier_most_accurate_hint">Whisper Large v3 is slower than real time on most phones: best for episodes downloaded in advance.</string>
@@ -610,4 +610,5 @@
     <string name="ad_free_title">Ad-free version</string>
     <string name="ad_free_text">Many podcasts sell an ad-free version as a private RSS feed (Patreon, Supercast, Acast+…). If you have one, copy its feed address from that service and add it here: you\'ll get the episodes without ads.</string>
     <string name="ad_free_add">Add a feed link</string>
+    <string name="model_desc_canary">Canary 180M (NVIDIA): a small model told the language, used to redo the sentences Parakeet writes in English. French, Spanish, German.</string>
 </resources>

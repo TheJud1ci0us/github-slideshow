@@ -11,7 +11,7 @@ import okhttp3.OkHttpClient
 import java.io.File
 
 enum class Engine {
-    WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH, OMNILINGUAL;
+    WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH, OMNILINGUAL, CANARY;
 
     /**
      * Models that write no punctuation: their speech is cut at short pauses (250 ms) into
@@ -31,6 +31,7 @@ private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/res
 private const val SENSEVOICE_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main"
 private const val REAZON_HF = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/main"
 private const val KOTOBA_HF = "https://huggingface.co/kotoba-tech/kotoba-whisper-v2.0-ggml/resolve/main"
+private const val CANARY_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main"
 private const val OMNILINGUAL_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-omnilingual-asr-1600-languages-300M-ctc-int8-2025-11-12/resolve/main"
 private const val PARAKEET_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main"
 
@@ -101,6 +102,18 @@ enum class SpeechModel(
      * Whisper Base for languages Parakeet and SenseVoice don't cover (Farsi, Hindi, Georgian…).
      * Writes no punctuation. Apache 2.0.
      */
+    /**
+     * NVIDIA Canary 180M Flash (CC BY 4.0): small, and told the language, so it can't switch to
+     * English. Used to redo the sentences Parakeet writes in English (French, Spanish, German).
+     */
+    CANARY_180M("canary-180m", Engine.CANARY, "NVIDIA Canary 180M", 207,
+        listOf(
+            ModelFile("$CANARY_HF/tokens.txt", "canary-180m/tokens.txt", 53_555),
+            ModelFile("$CANARY_HF/decoder.int8.onnx", "canary-180m/decoder.int8.onnx", 74_437_848),
+            ModelFile("$CANARY_HF/encoder.int8.onnx", "canary-180m/encoder.int8.onnx", 132_678_643),
+        ),
+        languages = setOf("en", "es", "de", "fr"),
+    ),
     OMNILINGUAL("omnilingual", Engine.OMNILINGUAL, "Meta Omnilingual (1,600 languages)", 365,
         listOf(
             ModelFile("$OMNILINGUAL_HF/tokens.txt", "omnilingual/tokens.txt", 86_423),

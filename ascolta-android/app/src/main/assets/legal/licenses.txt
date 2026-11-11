@@ -336,3 +336,7 @@ Word frequency lists (assets/words) — wordfreq by Robyn Speer, data licensed u
 Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0). https://github.com/rspeer/wordfreq
 Used to recognise sentences written in the wrong language. The lists are a subset of the
 original data, shared under the same licence.
+
+NVIDIA Canary 180M Flash — Creative Commons Attribution 4.0 (CC BY 4.0), © NVIDIA.
+https://huggingface.co/nvidia/canary-180m-flash — used to redo sentences in the episode's language
+(ONNX export by the sherpa-onnx project, Apache 2.0).

@@ -553,7 +553,7 @@
     <string name="names_placeholder">Angela Merkel\nLeipzig</string>
     <string name="edit_sentence">Text korrigieren</string>
     <string name="edit_sentence_text">Korrigiere ein falsch verstandenes Wort oder einen Namen. Korrigierte Namen werden für die nächsten Folgen dieses Podcasts gemerkt.</string>
-    <string name="language_fix_text">Einige Sätze kamen auf Englisch heraus. Lade Whisper Base herunter, um sie automatisch in der Sprache der Folge neu zu schreiben.</string>
+    <string name="language_fix_text">Einige Sätze kamen auf Englisch heraus. Lade NVIDIA Canary (210 MB) herunter, ein kleines Modell, dem die Sprache der Folge gesagt wird, um sie automatisch neu zu schreiben.</string>
     <string name="language_fix_download">Herunterladen (%1$s)</string>
     <string name="tier_most_accurate">Am genauesten · langsam</string>
     <string name="tier_most_accurate_hint">Whisper Large v3 ist auf den meisten Handys langsamer als die Wiedergabe: am besten für vorab heruntergeladene Folgen.</string>
@@ -583,4 +583,5 @@
     <string name="ad_free_title">Werbefreie Version</string>
     <string name="ad_free_text">Viele Podcasts verkaufen eine werbefreie Version als privaten RSS-Feed (Patreon, Supercast, Acast+…). Wenn du einen hast, kopiere die Feed-Adresse aus diesem Dienst und füge sie hier hinzu: Du bekommst die Folgen ohne Werbung.</string>
     <string name="ad_free_add">Feed-Link hinzufügen</string>
+    <string name="model_desc_canary">Canary 180M (NVIDIA): ein kleines Modell, dem die Sprache gesagt wird; es schreibt die Sätze neu, die Parakeet auf Englisch schreibt. Französisch, Spanisch, Deutsch.</string>
 </resources>

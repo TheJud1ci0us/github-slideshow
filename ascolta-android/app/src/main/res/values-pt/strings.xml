@@ -560,7 +560,7 @@
     <string name="names_placeholder">Fernando Pessoa\nCoimbra</string>
     <string name="edit_sentence">Corrigir o texto</string>
     <string name="edit_sentence_text">Corrija uma palavra ou um nome mal entendido. Os nomes corrigidos ficam guardados para os próximos episódios deste podcast.</string>
-    <string name="language_fix_text">Algumas frases saíram em inglês. Transfira o Whisper Base para as reescrever automaticamente na língua do episódio.</string>
+    <string name="language_fix_text">Algumas frases saíram em inglês. Transfira o NVIDIA Canary (210 MB), um modelo pequeno a quem se indica a língua do episódio, para as reescrever automaticamente.</string>
     <string name="language_fix_download">Transferir (%1$s)</string>
     <string name="tier_most_accurate">O mais preciso · lento</string>
     <string name="tier_most_accurate_hint">O Whisper Large v3 é mais lento do que a reprodução na maioria dos telemóveis: ideal para episódios transferidos com antecedência.</string>
@@ -590,4 +590,5 @@
     <string name="ad_free_title">Versão sem anúncios</string>
     <string name="ad_free_text">Muitos podcasts vendem uma versão sem anúncios como feed RSS privado (Patreon, Supercast, Acast+…). Se tiver um, copie o endereço do feed desse serviço e adicione-o aqui: terá os episódios sem anúncios.</string>
     <string name="ad_free_add">Adicionar um link de feed</string>
+    <string name="model_desc_canary">Canary 180M (NVIDIA): um modelo pequeno a quem se indica a língua, usado para refazer as frases que o Parakeet escreve em inglês. Francês, espanhol, alemão.</string>
 </resources>

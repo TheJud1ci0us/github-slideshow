@@ -59,7 +59,7 @@ interface SpeechEngine : Closeable {
         fun load(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine =
             when (model.engine) {
                 Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
-                Engine.PARAKEET, Engine.SENSEVOICE, Engine.REAZONSPEECH, Engine.OMNILINGUAL -> SherpaEngine(model, models.primaryPath(model), options)
+                Engine.PARAKEET, Engine.SENSEVOICE, Engine.REAZONSPEECH, Engine.OMNILINGUAL, Engine.CANARY -> SherpaEngine(model, models.primaryPath(model), options)
             }
 
     }
@@ -179,6 +179,18 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 numThreads = options.threads,
                 modelType = "transducer",
             )
+            // Canary is told the language (source and target the same: transcription, not translation).
+            Engine.CANARY -> OfflineModelConfig(
+                canary = com.k2fsa.sherpa.onnx.OfflineCanaryModelConfig(
+                    encoder = File(modelDir, "encoder.int8.onnx").path,
+                    decoder = File(modelDir, "decoder.int8.onnx").path,
+                    srcLang = options.language ?: "en",
+                    tgtLang = options.language ?: "en",
+                    usePnc = true,
+                ),
+                tokens = File(modelDir, "tokens.txt").path,
+                numThreads = options.threads,
+            )
             Engine.OMNILINGUAL -> OfflineModelConfig(
                 omnilingual = OfflineOmnilingualAsrCtcModelConfig(model = File(modelDir, "model.int8.onnx").path),
                 tokens = File(modelDir, "tokens.txt").path,
@@ -200,7 +212,8 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         recognizer = OfflineRecognizer(
             null,
             OfflineRecognizerConfig(
-                featConfig = FeatureConfig(sampleRate = 16_000, featureDim = 80),
+                // Canary's encoder reads 128 mel bands, the others 80.
+                featConfig = FeatureConfig(sampleRate = 16_000, featureDim = if (model.engine == Engine.CANARY) 128 else 80),
                 modelConfig = modelConfig,
                 // Parakeet searches a few candidates so the names given as hints can win
                 // (off for Parakeet: see `hints`).
@@ -262,7 +275,10 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 } else {
                     SpeechAlignment.sentencesFromTokens(tokens, times, startMs, endMs, TAG.replace(result.text, ""))
                 }
-                sentences.forEach { seg ->
+                sentences.map { seg ->
+                    // Canary writes hyphenated words with spaces ("États - Unis").
+                    if (engine == Engine.CANARY) seg.copy(text = CANARY_HYPHEN.replace(seg.text, "-")) else seg
+                }.forEach { seg ->
                     // Real words (also in Japanese / Chinese), timed from the tokens.
                     val words = com.ascolta.app.data.WordSplitter.timedWords(seg.text, seg.words, seg.startMs, seg.endMs, this.language ?: language)
                     onSegment(seg.copy(words = words))
@@ -308,6 +324,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         const val REAZON_MAX_PIECE_MS = 12_000L
         const val REAZON_SHIFT_MS = 300L
         val TAG = Regex("""<\|[^|]*\|>""")
+        val CANARY_HYPHEN = Regex("""(?<=\p{L}) - (?=\p{L})""")
 
         /** Parakeet's word pieces in the form sherpa-onnx reads to spell hints (fewest pieces win). */
         fun bpeVocab(dir: File): File = File(dir, "bpe.vocab").also { out ->

@@ -497,6 +497,7 @@ private fun SpeechModel.descriptionRes() = when (this) {
     SpeechModel.REAZONSPEECH -> R.string.model_desc_reazonspeech
     SpeechModel.KOTOBA -> R.string.model_desc_kotoba
     SpeechModel.OMNILINGUAL -> R.string.model_desc_omnilingual
+    SpeechModel.CANARY_180M -> R.string.model_desc_canary
     SpeechModel.BASE_GPU, SpeechModel.SMALL_GPU -> R.string.model_desc_gpu
     SpeechModel.CUSTOM -> R.string.model_desc_custom
 }

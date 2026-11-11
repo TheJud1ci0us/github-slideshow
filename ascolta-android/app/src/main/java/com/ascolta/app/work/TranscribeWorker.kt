@@ -534,7 +534,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         // Speech the detector missed (talk over music): long quiet stretches are checked too.
                         val regions = prepared.speech?.let { com.ascolta.app.whisper.SpeechDetection.fillGaps(it, blockLenMs) }
                         val rescuedMs = if (prepared.speech != null && regions != null) com.ascolta.app.whisper.SpeechDetection.gapMs(prepared.speech, regions) else 0L
-                        // Parakeet can't be told the language: sentences it wrote in English are redone with Whisper.
+                        // Parakeet can't be told the language: sentences it wrote in English are redone with Canary.
                         val wrongLanguage = mutableListOf<Segment>()
                         recognizer.setDetectedSpeech(prepared.speech)
                         val finished = withContext(CoreDispatchers.recognition) {
@@ -555,7 +555,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                             words = cleanWords(seg.words, seg.startMs, seg.endMs)
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
-                                        if (FIX_WRONG_LANGUAGE && model.engine == Engine.PARAKEET && com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
+                                        if (FIX_WRONG_LANGUAGE && model.engine == Engine.PARAKEET && SpeechModel.CANARY_180M.supports(language) && language != "en" &&
+                                            com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
                                             wrongLanguage += segment
                                         } else {
                                             events.trySend(WriterEvent.Sentence(segment))
@@ -568,17 +569,17 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         if (wrongLanguage.isNotEmpty() && !isStopped) {
                             val redoStarted = System.currentTimeMillis()
                             // A conversation where many sentences slipped into English: the whole block is
-                            // redone by Whisper (told the language), which keeps the exchange together.
+                            // redone by Canary (told the language), which keeps the exchange together.
                             val wholeBlock = finished && TranscriptionPlan.redoWholeBlock(wrongLanguage.size, count) &&
                                 redoBlockInLanguage(prepared, blockStartMs, language, names, options)?.let { segments ->
                                     events.send(WriterEvent.ReplaceSpan(Span(blockStartMs, blockStartMs + blockLenMs), segments))
-                                    AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} of $count sentences; whole block redone with Whisper " +
+                                    AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} of $count sentences; whole block redone with Canary " +
                                         "(${segments.size} sentences) in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
                                     true
                                 } == true
                             if (!wholeBlock) {
                                 val redone = redoInLanguage(wrongLanguage, prepared.samples, blockStartMs, language, names, options)
-                                AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Whisper in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
+                                AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Canary in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
                                 wrongLanguage.forEach { events.send(WriterEvent.Sentence(it)) }
                             }
                         }
@@ -642,7 +643,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
      * Word timings in order and inside their sentence, so the highlight moves forward
      * smoothly instead of jumping back or past the sentence.
      */
-    /** Whisper for redoing wrong-language sentences: loaded once per job, freed at the end. */
+    /** Canary for redoing wrong-language sentences: loaded once per job, freed at the end. */
     private var fixer: SpeechEngine? = null
     private var fixerChecked = false
     private val wordLists by lazy { com.ascolta.app.data.WordLists(applicationContext) }
@@ -655,11 +656,14 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
      * quote), the original stays. Uses Small, else Base; without either, the player suggests
      * downloading Base (never downloaded silently). Returns how many were redone.
      */
-    /** Whisper Small, else Base, loaded once per job; null (and the download suggested) without either. */
+    /**
+     * Canary 180M, told the episode's language, loaded once per job; null (and the download
+     * suggested in the player, never downloaded silently) when it isn't on the phone.
+     */
     private suspend fun whisperFixer(options: EngineOptions): SpeechEngine? {
         if (!fixerChecked) {
             fixerChecked = true
-            val model = listOf(SpeechModel.SMALL, SpeechModel.BASE).firstOrNull { graph.models.isDownloaded(it) }
+            val model = SpeechModel.CANARY_180M.takeIf { graph.models.isDownloaded(it) }
             if (model != null) fixer = withContext(CoreDispatchers.recognition) {
                 SpeechEngine.load(applicationContext, model, graph.models, options.copy(gpu = false))
             }
@@ -758,7 +762,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     private sealed interface WriterEvent {
         data class Sentence(val segment: Segment) : WriterEvent
-        /** The sentences starting in [span] are replaced by [segments] (a block redone by Whisper). */
+        /** The sentences starting in [span] are replaced by [segments] (a block redone by Canary). */
         data class ReplaceSpan(val span: Span, val segments: List<Segment>) : WriterEvent
         /** This stretch is fully transcribed. */
         data class Done(val span: Span) : WriterEvent
@@ -849,10 +853,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     companion object {
         /**
-         * Redo with Whisper the sentences Parakeet writes in English (1.1.1–1.1.4). Off: it made
-         * transcription noticeably slower on conversations, and the learner preferred speed.
+         * Redo the sentences Parakeet writes in English with Canary 180M, which is told the
+         * language (French, Spanish, German). With Whisper (1.1.1–1.1.4) this was too slow;
+         * Canary is small and needs no 30-second window per sentence.
          */
-        const val FIX_WRONG_LANGUAGE = false
+        const val FIX_WRONG_LANGUAGE = true
 
         private const val TAG = "Transcribe"
         private const val NOTIFICATION_ID = 901
