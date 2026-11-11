@@ -53,7 +53,8 @@ class Billing(private val context: Context, private val http: OkHttpClient, priv
     /** A random ID made by the app (not a hardware ID), tying a pass to this install. */
     val device: String = prefs.getString("device", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("device", it).apply() }
 
-    private val _pro = MutableStateFlow(checkPass(prefs.getString("pass", null)))
+    /** With the paywall switched off (testing), everyone is Pro and Play is never asked. */
+    private val _pro = MutableStateFlow(!BuildConfig.PAYWALL_ENABLED || checkPass(prefs.getString("pass", null)))
     val isPro: StateFlow<Boolean> = _pro
 
     /** The plans with their prices in the user's currency (empty until Play answers). */
@@ -72,7 +73,7 @@ class Billing(private val context: Context, private val http: OkHttpClient, priv
         ProPass.check(token, BuildConfig.PRO_PASS_PUBLIC_KEY, context.packageName, device, System.currentTimeMillis())?.pro == true
 
     fun start() {
-        if (client.isReady) return
+        if (!BuildConfig.PAYWALL_ENABLED || client.isReady) return
         client.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode != BillingClient.BillingResponseCode.OK) {
@@ -172,5 +173,5 @@ class Billing(private val context: Context, private val http: OkHttpClient, priv
     }
 
     /** Asks the app to show the paywall (from a free limit). */
-    fun requestPaywall(reason: String) { paywallRequests.tryEmit(reason) }
+    fun requestPaywall(reason: String) { if (BuildConfig.PAYWALL_ENABLED) paywallRequests.tryEmit(reason) }
 }

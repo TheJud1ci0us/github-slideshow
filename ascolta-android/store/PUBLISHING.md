@@ -5,6 +5,10 @@ Files in this folder: `listing/` (texts, 6 languages), `icon-512.png`, `feature-
 Kept outside the repository (sent separately): `lingopod-upload.jks` + its passwords,
 `pro-pass-private-pkcs8.pem`. Keep two copies of each, somewhere safe.
 
+> **Before uploading a build to Play: turn the paywall on.** It is off while testing (everything
+> unlocked). Add `lingopodPaywall=true` to `ascolta-android/gradle.properties`, then rebuild
+> (`./gradlew bundleRelease`). With it off, Pro would be free for everyone.
+
 1. **Developer account** — play.google.com/console → *Personal*, pay $25, verify your identity
    (ID document) and your phone (Play Console app). A few days.
 2. **Payments profile** — Console → Settings → Payments profile: bank account and tax details.

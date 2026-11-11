@@ -24,8 +24,8 @@ android {
         applicationId = "app.lingopod"
         minSdk = 26
         targetSdk = 35
-        versionCode = 101
-        versionName = "1.0.1"
+        versionCode = 102
+        versionName = "1.0.2"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
@@ -33,6 +33,9 @@ android {
         buildConfigField("String", "TELEMETRYDECK_APP_ID", "\"${prop("telemetryDeckAppId")}\"")
         buildConfigField("String", "TELEMETRYDECK_SALT", "\"${prop("telemetryDeckSalt")}\"")
         // Purchase-check server (store/server-setup.md) and its Cloud project number (Play Integrity).
+        // Paywall switch: off while testing (everything unlocked, nothing asked to Play). Set
+        // lingopodPaywall=true in gradle.properties before publishing.
+        buildConfigField("boolean", "PAYWALL_ENABLED", "${prop("lingopodPaywall") == "true"}")
         buildConfigField("String", "PRO_SERVER_URL", "\"${prop("lingopodServerUrl")}\"")
         buildConfigField("long", "CLOUD_PROJECT_NUMBER", "${prop("lingopodCloudProjectNumber").ifBlank { "0" }}L")
         // Public half of the key the server signs Pro passes with (the private half is only on the server).

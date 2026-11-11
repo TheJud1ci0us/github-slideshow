@@ -103,7 +103,7 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
                 openPersonalize()
             }
             // LingoPod Pro: plans, or "active".
-            SettingsRow(Icons.Outlined.WorkspacePremium, stringResource(R.string.pro_title), subtitle = stringResource(if (proActive) R.string.pro_active else R.string.pro_profile_subtitle)) { openPaywall() }
+            if (com.ascolta.app.BuildConfig.PAYWALL_ENABLED) SettingsRow(Icons.Outlined.WorkspacePremium, stringResource(R.string.pro_title), subtitle = stringResource(if (proActive) R.string.pro_active else R.string.pro_profile_subtitle)) { openPaywall() }
             SettingsRow(Icons.Outlined.BarChart, stringResource(R.string.stats_title)) { openProgress() }
         }
         SectionCard(stringResource(R.string.profile_app_section)) {
