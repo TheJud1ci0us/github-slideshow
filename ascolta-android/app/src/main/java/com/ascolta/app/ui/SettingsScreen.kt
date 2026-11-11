@@ -182,8 +182,16 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                         tier = stringResource(tierNames[i]) + if (proOnly) " · Pro" else "",
                     )
                 }
-                // A model chosen earlier that isn't one of the three stays usable until another is picked.
-                if (current !in tiers) {
+                // Whisper Large v3: the most accurate, for episodes downloaded in advance.
+                ModelRow(
+                    SpeechModel.MOST_ACCURATE, selected = current == SpeechModel.MOST_ACCURATE, learning = learning, refreshKey = refreshKey,
+                    onSelect = { settings.setModelFor(learning, SpeechModel.MOST_ACCURATE) },
+                    onChanged = { refreshKey++ },
+                    tier = stringResource(R.string.tier_most_accurate),
+                )
+                if (current == SpeechModel.MOST_ACCURATE || current !in tiers) Hint(stringResource(R.string.tier_most_accurate_hint))
+                // A model chosen earlier that isn't one of the choices stays usable until another is picked.
+                if (current !in tiers && current != SpeechModel.MOST_ACCURATE) {
                     ModelRow(
                         current, selected = true, learning = learning, refreshKey = refreshKey,
                         onSelect = {}, onChanged = { refreshKey++ },
@@ -479,6 +487,7 @@ private fun SpeechModel.descriptionRes() = when (this) {
     SpeechModel.BASE -> R.string.model_desc_base
     SpeechModel.SMALL -> R.string.model_desc_small
     SpeechModel.TURBO -> R.string.model_desc_turbo
+    SpeechModel.LARGE_V3 -> R.string.model_desc_large_v3
     SpeechModel.PARAKEET -> R.string.model_desc_parakeet
     SpeechModel.SENSEVOICE -> R.string.model_desc_sensevoice
     SpeechModel.REAZONSPEECH -> R.string.model_desc_reazonspeech

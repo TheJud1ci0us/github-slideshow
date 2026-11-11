@@ -26,7 +26,7 @@ class FreeLimits(context: Context, private val salt: String) {
         fun allowedModel(chosen: com.ascolta.app.whisper.SpeechModel, language: String, pro: Boolean): com.ascolta.app.whisper.SpeechModel {
             if (pro) return chosen
             val tiers = com.ascolta.app.whisper.SpeechModel.tiers(language)
-            return if (chosen == tiers.last()) tiers[1] else chosen
+            return if (chosen == tiers.last() || chosen == com.ascolta.app.whisper.SpeechModel.MOST_ACCURATE) tiers[1] else chosen
         }
     }
 

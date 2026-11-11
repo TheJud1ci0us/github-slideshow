@@ -562,4 +562,7 @@
     <string name="edit_sentence_text">Correggi una parola o un nome capito male. I nomi corretti vengono ricordati per le prossime puntate di questo podcast.</string>
     <string name="language_fix_text">Alcune frasi sono uscite in inglese. Scarica Whisper Base per riscriverle automaticamente nella lingua della puntata.</string>
     <string name="language_fix_download">Scarica (%1$s)</string>
+    <string name="tier_most_accurate">Il più preciso · lento</string>
+    <string name="tier_most_accurate_hint">Whisper Large v3 è più lento della riproduzione sulla maggior parte dei telefoni: ideale per le puntate scaricate in anticipo.</string>
+    <string name="model_desc_large_v3">Il Whisper più grande di OpenAI, il più preciso in tutte le lingue. Pesante (1,08 GB) e lento sui telefoni.</string>
 </resources>

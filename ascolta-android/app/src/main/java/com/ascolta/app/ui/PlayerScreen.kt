@@ -686,6 +686,7 @@ private fun CheckItem(label: String, checked: Boolean, onChange: (Boolean) -> Un
 private fun LanguageFixBanner() {
     val context = LocalContext.current
     val graph = context.graph
+    if (!com.ascolta.app.work.TranscribeWorker.FIX_WRONG_LANGUAGE) return
     val suggested by graph.settings.languageFixSuggested.flow.collectAsState()
     val dismissed by graph.settings.languageFixDismissed.flow.collectAsState()
     if (!suggested || dismissed) return

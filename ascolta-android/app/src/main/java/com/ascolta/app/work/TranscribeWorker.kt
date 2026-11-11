@@ -554,7 +554,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                             words = cleanWords(seg.words, seg.startMs, seg.endMs)
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
-                                        if (model.engine == Engine.PARAKEET && com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
+                                        if (FIX_WRONG_LANGUAGE && model.engine == Engine.PARAKEET && com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
                                             wrongLanguage += segment
                                         } else {
                                             events.trySend(WriterEvent.Sentence(segment))
@@ -847,6 +847,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     }
 
     companion object {
+        /**
+         * Redo with Whisper the sentences Parakeet writes in English (1.1.1–1.1.4). Off: it made
+         * transcription noticeably slower on conversations, and the learner preferred speed.
+         */
+        const val FIX_WRONG_LANGUAGE = false
+
         private const val TAG = "Transcribe"
         private const val NOTIFICATION_ID = 901
         /** First block after starting or jumping: short, so text appears within seconds. */

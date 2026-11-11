@@ -66,6 +66,9 @@ enum class SpeechModel(
         listOf(ModelFile("$WHISPER_HF/ggml-small-q5_1.bin", "ggml-small-q5_1.bin", 190_085_487))),
     TURBO("turbo", Engine.WHISPER, "Whisper Large v3 Turbo", 574,
         listOf(ModelFile("$WHISPER_HF/ggml-large-v3-turbo-q5_0.bin", "ggml-large-v3-turbo-q5_0.bin", 574_041_195))),
+    /** Whisper Large v3: the most accurate Whisper, slower than real time on most phones. */
+    LARGE_V3("large-v3", Engine.WHISPER, "Whisper Large v3", 1081,
+        listOf(ModelFile("$WHISPER_HF/ggml-large-v3-q5_0.bin", "ggml-large-v3-q5_0.bin", 1_081_140_203))),
     PARAKEET("parakeet-v3", Engine.PARAKEET, "NVIDIA Parakeet v3", 670,
         listOf(
             ModelFile("$PARAKEET_HF/tokens.txt", "parakeet-v3/tokens.txt", 93_939),
@@ -139,6 +142,9 @@ enum class SpeechModel(
             language in OMNILINGUAL_FIRST -> listOf(BASE, SMALL, OMNILINGUAL)
             else -> listOf(BASE, SMALL, TURBO)
         }
+
+        /** Offered after the three tiers, for every language: the most accurate, but slow. */
+        val MOST_ACCURATE = LARGE_V3
 
         /** The NPU model was removed: anyone who had chosen it gets Parakeet on the CPU. */
         fun byId(id: String): SpeechModel = entries.firstOrNull { it.id == id }
