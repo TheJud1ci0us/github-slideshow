@@ -522,6 +522,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         val rescuedMs = if (prepared.speech != null && regions != null) com.ascolta.app.whisper.SpeechDetection.gapMs(prepared.speech, regions) else 0L
                         // Parakeet can't be told the language: sentences it wrote in English are redone with Whisper.
                         val wrongLanguage = mutableListOf<Segment>()
+                        recognizer.setDetectedSpeech(prepared.speech)
                         val finished = withContext(CoreDispatchers.recognition) {
                             recognizer.transcribe(
                                 prepared.samples, regions, language, prompt,

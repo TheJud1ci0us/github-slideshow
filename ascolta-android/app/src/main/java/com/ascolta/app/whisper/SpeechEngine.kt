@@ -49,6 +49,9 @@ interface SpeechEngine : Closeable {
      */
     fun setNames(names: List<String>) {}
 
+    /** Where the speech detector found speech in the next block (the rest are gaps checked anyway). */
+    fun setDetectedSpeech(regions: List<Pair<Long, Long>>?) {}
+
     /** Whether this engine needs speech regions (it can't process a long block in one go). */
     val needsSpeechRegions: Boolean get() = false
 
@@ -133,14 +136,24 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
     private val recognizer: OfflineRecognizer
     private val language = options.language
     private val engine = model.engine
-    /** Parakeet takes names as hints (the other sherpa models can't). */
-    private val hints = model.engine == Engine.PARAKEET
+    /**
+     * Names as hint words need beam search, which in sherpa-onnx ignores Parakeet's timing
+     * predictions (TDT) and left stretches untranscribed (1.1.0). Parakeet stays on greedy
+     * decoding; names are corrected after recognition instead (Names.correct).
+     */
+    private val hints = false
+    /** Where the detector found speech in the current block (the rest are gaps checked anyway). */
+    @Volatile private var detected: List<Pair<Long, Long>>? = null
     @Volatile private var names = ""
 
     override val needsSpeechRegions: Boolean get() = true
 
     override fun setNames(names: List<String>) {
         this.names = com.ascolta.app.data.Names.hotwords(names)
+    }
+
+    override fun setDetectedSpeech(regions: List<Pair<Long, Long>>?) {
+        detected = regions
     }
 
 
@@ -180,9 +193,6 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 tokens = File(modelDir, "tokens.txt").path,
                 numThreads = options.threads,
                 modelType = "nemo_transducer",
-                // Names as hints: their spelling is found from Parakeet's own word pieces.
-                modelingUnit = "bpe",
-                bpeVocab = bpeVocab(modelDir).path,
             )
         }
         // ReazonSpeech gives no punctuation: its sentences are found with the Japanese dictionary.
@@ -193,7 +203,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 featConfig = FeatureConfig(sampleRate = 16_000, featureDim = 80),
                 modelConfig = modelConfig,
                 // Parakeet searches a few candidates so the names given as hints can win
-                // (measured: 58% → 80% of names spelled right).
+                // (off for Parakeet: see `hints`).
                 decodingMethod = if (hints) "modified_beam_search" else "greedy_search",
                 maxActivePaths = 4,
                 hotwordsFile = if (hints) hotwordsFile(modelDir).path else "",
@@ -214,12 +224,17 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         val regions = speech ?: listOf(0L to samples.size / 16L)
         // ReazonSpeech drops words on long input (it was trained on short utterances).
         val pieces = SpeechAlignment.splitLong(regions, if (engine.cutsAtPauses) REAZON_MAX_PIECE_MS else MAX_PIECE_MS)
-        pieces.forEachIndexed { i, (startMs, endMs) ->
+        // A piece of detected speech that comes back empty is logged and decoded again in two
+        // halves (short input is where these models are most reliable).
+        val queue = ArrayDeque(pieces.map { Triple(it.first, it.second, true) })
+        var done = 0
+        while (queue.isNotEmpty()) {
+            val (startMs, endMs, mayRetry) = queue.removeFirst()
             if (aborted) return false
-            onProgress(i * 100 / pieces.size.coerceAtLeast(1))
+            onProgress(done++ * 100 / (done + queue.size).coerceAtLeast(1))
             val from = (startMs * 16).toInt().coerceIn(0, samples.size)
             val to = (endMs * 16).toInt().coerceIn(from, samples.size)
-            if (to - from < 1_600) return@forEachIndexed // < 0.1 s
+            if (to - from < 1_600) continue // < 0.1 s
             val stream = if (hints && names.isNotEmpty()) recognizer.createStream(names) else recognizer.createStream()
             try {
                 stream.acceptWaveform(samples.copyOfRange(from, to), 16_000)
@@ -229,6 +244,16 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 val keep = result.tokens.indices.filter { !TAG.matches(result.tokens[it]) }
                 val tokens = keep.map { result.tokens[it] }
                 val times = if (result.timestamps.size == result.tokens.size) keep.map { result.timestamps[it] } else emptyList()
+                if (tokens.none { it.isNotBlank() } && endMs - startMs >= 3_000 && isDetectedSpeech(startMs, endMs)) {
+                    AppLog.w("Speech", "${engine.name} returned nothing for ${startMs / 1000}-${endMs / 1000}s of speech (block-relative)" +
+                        if (mayRetry) "; retrying in two halves" else "")
+                    if (mayRetry) {
+                        val mid = (startMs + endMs) / 2
+                        queue.addFirst(Triple(mid, endMs, false))
+                        queue.addFirst(Triple(startMs, mid, false))
+                    }
+                    continue
+                }
                 val sentences = if (engine == Engine.REAZONSPEECH && tokens.isNotEmpty() && times.size == tokens.size) {
                     reazonSentences(tokens, times, startMs, endMs)
                 } else {
@@ -245,6 +270,13 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         }
         onProgress(100)
         return !aborted
+    }
+
+    /** Mostly inside what the detector marked as speech (not a gap checked just in case). */
+    private fun isDetectedSpeech(startMs: Long, endMs: Long): Boolean {
+        val regions = detected ?: return true
+        val inside = regions.sumOf { (s, e) -> (minOf(e, endMs) - maxOf(s, startMs)).coerceAtLeast(0) }
+        return inside * 2 >= endMs - startMs
     }
 
     override fun abort() {
