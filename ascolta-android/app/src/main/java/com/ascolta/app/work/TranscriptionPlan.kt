@@ -53,6 +53,25 @@ object Coverage {
 
 object TranscriptionPlan {
     /**
+     * Gives each of [targets] (start, end) the text of the [parts] (start, end, text) whose
+     * middle falls inside it (with 250 ms of margin); the nearest target when none contains it.
+     * Used to put Whisper's redone sentences back on the right wrong-language sentence.
+     */
+    fun assignByTime(targets: List<Pair<Long, Long>>, parts: List<Triple<Long, Long, String>>): List<String> {
+        val texts = Array(targets.size) { StringBuilder() }
+        if (targets.isEmpty()) return emptyList()
+        for ((s, e, text) in parts.sortedBy { it.first }) {
+            if (text.isBlank()) continue
+            val mid = (s + e) / 2
+            val i = targets.indices.firstOrNull { mid in (targets[it].first - 250)..(targets[it].second + 250) }
+                ?: targets.indices.minBy { minOf(kotlin.math.abs(targets[it].first - mid), kotlin.math.abs(targets[it].second - mid)) }
+            if (texts[i].isNotEmpty()) texts[i].append(' ')
+            texts[i].append(text.trim())
+        }
+        return texts.map { it.toString() }
+    }
+
+    /**
      * Next block to transcribe: the first gap at or after [anchorMs] (where the listener is,
      * or where the work was heading), otherwise the first gap from the beginning.
      */

@@ -331,3 +331,8 @@ This software also includes a binary and/or source version of data from
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+Word frequency lists (assets/words) — wordfreq by Robyn Speer, data licensed under
+Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0). https://github.com/rspeer/wordfreq
+Used to recognise sentences written in the wrong language. The lists are a subset of the
+original data, shared under the same licence.

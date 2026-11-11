@@ -541,7 +541,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                             words = cleanWords(seg.words, seg.startMs, seg.endMs)
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
-                                        if (model.engine == Engine.PARAKEET && com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language)) {
+                                        if (model.engine == Engine.PARAKEET && com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
                                             wrongLanguage += segment
                                         } else {
                                             events.trySend(WriterEvent.Sentence(segment))
@@ -552,8 +552,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         }
                         watcher.cancel()
                         if (wrongLanguage.isNotEmpty() && !isStopped) {
+                            val redoStarted = System.currentTimeMillis()
                             val redone = redoInLanguage(wrongLanguage, prepared.samples, blockStartMs, language, names, options)
-                            AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Whisper")
+                            AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Whisper in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
                             wrongLanguage.forEach { events.send(WriterEvent.Sentence(it)) }
                         }
                         if (rescuedMs > 0) AppLog.i(TAG, "Gap check: ${rescuedMs / 1000}s without detected speech also checked")
@@ -603,6 +604,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             }
         } finally {
             releaseEngine()
+            fixer?.let { f -> fixer = null; fixerChecked = false; withContext(NonCancellable + CoreDispatchers.recognition) { f.close() } }
             withContext(NonCancellable + CoreDispatchers.light) { reader.close() }
         }
         if (stopped) return null
@@ -615,12 +617,18 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
      * Word timings in order and inside their sentence, so the highlight moves forward
      * smoothly instead of jumping back or past the sentence.
      */
+    /** Whisper for redoing wrong-language sentences: loaded once per job, freed at the end. */
+    private var fixer: SpeechEngine? = null
+    private var fixerChecked = false
+    private val wordLists by lazy { com.ascolta.app.data.WordLists(applicationContext) }
+
     /**
-     * Sentences Parakeet wrote in English while the episode is in [language]: their audio is
-     * recognised again by Whisper forced to [language] (Small or Base, whichever is on the phone),
-     * and the text replaced in [wrong]. If Whisper hears English too (an ad, a quote), the
-     * original stays. Without a Whisper model, the player suggests downloading Base (never
-     * downloaded silently). Returns how many were redone.
+     * Sentences Parakeet wrote in English while the episode is in [language]: their audio,
+     * joined, is recognised again by Whisper forced to [language] in one pass (Whisper always
+     * processes 30 s windows, so one call per sentence was very slow). Each Whisper sentence
+     * goes back to the wrong sentence it overlaps; if Whisper hears English too (an ad, a
+     * quote), the original stays. Uses Small, else Base; without either, the player suggests
+     * downloading Base (never downloaded silently). Returns how many were redone.
      */
     private suspend fun redoInLanguage(
         wrong: MutableList<Segment>,
@@ -630,33 +638,41 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         names: List<String>,
         options: EngineOptions,
     ): Int {
-        val model = listOf(SpeechModel.SMALL, SpeechModel.BASE).firstOrNull { graph.models.isDownloaded(it) }
-        if (model == null) {
+        if (!fixerChecked) {
+            fixerChecked = true
+            val model = listOf(SpeechModel.SMALL, SpeechModel.BASE).firstOrNull { graph.models.isDownloaded(it) }
+            if (model != null) fixer = withContext(CoreDispatchers.recognition) {
+                SpeechEngine.load(applicationContext, model, graph.models, options.copy(gpu = false))
+            }
+        }
+        val whisper = fixer
+        if (whisper == null) {
+            fixerChecked = false // check again next block (the learner may download one meanwhile)
             graph.settings.languageFixSuggested.set(true)
             return 0
         }
-        var redone = 0
+        val pad = 250L
+        val lengthMs = samples.size / 16L
+        val regions = wrong.map { (it.startMs - blockStartMs - pad).coerceAtLeast(0) to (it.endMs - blockStartMs + pad).coerceAtMost(lengthMs) }
+            .filter { it.second > it.first }
+        if (regions.isEmpty()) return 0
+        val parts = mutableListOf<com.ascolta.app.whisper.WhisperSegment>()
         withContext(CoreDispatchers.recognition) {
-            val whisper = SpeechEngine.load(applicationContext, model, graph.models, options.copy(gpu = false))
-            try {
-                for (i in wrong.indices) {
-                    if (isStopped) break
-                    val seg = wrong[i]
-                    val from = ((seg.startMs - blockStartMs - 300).coerceAtLeast(0) * 16).toInt().coerceAtMost(samples.size)
-                    val to = ((seg.endMs - blockStartMs + 300) * 16).toInt().coerceIn(from, samples.size)
-                    if (to - from < 8_000) continue // under half a second
-                    val offset = blockStartMs + from / 16
-                    val parts = mutableListOf<com.ascolta.app.whisper.WhisperSegment>()
-                    whisper.transcribe(samples.copyOfRange(from, to), null, language, Names.prompt(names, null), {}, { parts += it })
-                    val text = parts.joinToString(" ") { it.text.trim() }.trim()
-                    if (text.isEmpty() || isHallucination(text) || com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language)) continue
-                    val words = parts.flatMap { it.words.orEmpty() }.map { it.copy(startMs = it.startMs + offset) }.takeIf { it.isNotEmpty() }
-                    wrong[i] = seg.copy(text = Names.correct(text, names).first, words = words)
-                    redone++
-                }
-            } finally {
-                whisper.close()
-            }
+            whisper.transcribe(samples, com.ascolta.app.whisper.SpeechDetection.merge(regions, 0), language, Names.prompt(names, null), {}, { parts += it })
+        }
+        val texts = TranscriptionPlan.assignByTime(
+            wrong.map { (it.startMs - blockStartMs) to (it.endMs - blockStartMs) },
+            parts.map { Triple(it.startMs, it.endMs, it.text.trim()) },
+        )
+        var redone = 0
+        wrong.indices.forEach { i ->
+            val text = texts[i].trim()
+            if (text.isEmpty() || isHallucination(text) ||
+                com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) return@forEach
+            val words = parts.filter { p -> (p.startMs + p.endMs) / 2 in (wrong[i].startMs - blockStartMs - pad)..(wrong[i].endMs - blockStartMs + pad) }
+                .flatMap { it.words.orEmpty() }.map { it.copy(startMs = it.startMs + blockStartMs) }.takeIf { it.isNotEmpty() }
+            wrong[i] = wrong[i].copy(text = Names.correct(text, names).first, words = words)
+            redone++
         }
         return redone
     }

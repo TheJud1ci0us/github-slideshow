@@ -43,14 +43,37 @@ object SentenceLanguage {
      * at least 2 English markers, and far more English markers than [language]'s own (so a
      * French sentence quoting "OK" or a song title is left alone).
      */
-    fun isEnglishInstead(text: String, language: String): Boolean {
-        val own = MARKERS[language] ?: return false
+    fun isEnglishInstead(text: String, language: String, lists: WordLists? = null, names: List<String> = emptyList()): Boolean {
+        if (language == "en") return false
         val words = WORD.findAll(text.lowercase().replace('’', '\'')).map { it.value }.toList()
+        if (words.isEmpty()) return false
+        if (lists != null && byFrequency(words, language, lists, names)) return true
+        val own = MARKERS[language] ?: return false
         if (words.size < 4) return false
         // French/Italian elisions: "l'homme" counts as "l'".
         fun ownWord(w: String) = w in own || (w.contains('\'') && w.substringBefore('\'') + "'" in own)
         val english = words.count { it in ENGLISH && it !in own }
         val native = words.count(::ownWord)
         return english >= 2 && english >= 2 * native + 1 && english * 4 >= words.size
+    }
+
+    /**
+     * Short slips too ("Exactly.", "Yes, exactly.", "Of course."): most words are common in
+     * English and rare or unknown in [language] (8× rarer at least, so loanwords such as "OK",
+     * "parking", "week-end" or "meeting" in French don't count). Names of the episode don't count.
+     */
+    private fun byFrequency(words: List<String>, language: String, lists: WordLists, names: List<String>): Boolean {
+        val en = lists.ranks("en") ?: return false
+        val own = lists.ranks(language) ?: return false
+        val skip = names.flatMap { it.lowercase().split(' ') }.toSet()
+        val counted = words.filter { it !in skip }
+        if (counted.isEmpty()) return false
+        val english = counted.count { w ->
+            val r = en[w] ?: return@count false
+            val t = own[w]
+            t == null || t > 8 * r + 50
+        }
+        val share = english.toDouble() / counted.size
+        return english >= 1 && share >= if (counted.size <= 2) 0.5 else 0.6
     }
 }
