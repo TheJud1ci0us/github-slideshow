@@ -155,7 +155,11 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     // Always in time order, so finding the sentence being spoken can't pick the wrong one.
     val segments = remember(transcript) { transcript?.segments.orEmpty().sortedBy { it.startMs } }
     // Ads in this copy of the episode, found from their wording.
-    val ads = remember(segments) { com.ascolta.app.data.AdDetector.detect(segments) }
+    val ads = remember(segments) {
+        runCatching { com.ascolta.app.data.AdDetector.detect(segments) }
+            .onFailure { com.ascolta.app.data.AppLog.w("Ads", "Ad detection failed", it) }
+            .getOrDefault(emptyList())
+    }
     // Known words (optional): new words softly highlighted.
     val highlightNew by settings.highlightNewWords.flow.collectAsState()
     val wordsLanguage = transcript?.language ?: settings.learningLanguage.value

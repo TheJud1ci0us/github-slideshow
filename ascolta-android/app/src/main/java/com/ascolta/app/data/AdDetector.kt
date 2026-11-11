@@ -18,18 +18,18 @@ object AdDetector {
     private const val MAX_MS = 180_000L
 
     private val STRONG = listOf(
-        Regex("""(?U)\b(code|codice|código|gutscheincode|rabattcode|cupom|cupón)\s+(promo|promocional|sconto|descuento)?\s*[A-Z0-9]{3,}"""),
-        Regex("""(?U)\b(code promo|promo code|coupon code|discount code|codice sconto|código de descuento|código promocional|cupom de desconto|gutscheincode|rabattcode)\b""", RegexOption.IGNORE_CASE),
-        Regex("""(?U)\b[\w-]+\s?(\.|point|dot|punto|ponto|punkt)\s?(com|fr|it|es|de|pt|io|co|net|org)\b(?!\w)""", RegexOption.IGNORE_CASE),
-        Regex("""(?U)\b(sponsoris[ée]|sponsored by|sponsorizzat|patrocinad|gesponsert|en partenariat avec|in collaborazione con|brought to you by|cet épisode est (présenté|soutenu)|este episodio (está )?patrocinado)\b""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])(code|codice|código|gutscheincode|rabattcode|cupom|cupón)\s+(promo|promocional|sconto|descuento)?\s*[A-Z0-9]{3,}"""),
+        Regex("""(?<![\p{L}\p{N}])(code promo|promo code|coupon code|discount code|codice sconto|código de descuento|código promocional|cupom de desconto|gutscheincode|rabattcode)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])[\w-]+\s?(\.|point|dot|punto|ponto|punkt)\s?(com|fr|it|es|de|pt|io|co|net|org)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])(sponsoris[ée]|sponsored by|sponsorizzat|patrocinad|gesponsert|en partenariat avec|in collaborazione con|brought to you by|cet épisode est (présenté|soutenu)|este episodio (está )?patrocinado)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
     )
 
     private val WEAK = listOf(
-        Regex("""(?U)\d+\s?(%|pour ?cent|percent|per ?cento|por ?ciento|prozent|por cento)""", RegexOption.IGNORE_CASE),
-        Regex("""(?U)\b(rendez-vous sur|rendez vous sur|allez sur|visit|visitez|vai su|visita|besuche|acesse|téléchargez|download|scarica|descarga|lade|baixe)\b""", RegexOption.IGNORE_CASE),
-        Regex("""(?U)\b(offre|offert|gratuit|essai|réduction|remise|livraison|abonnement|offer|free trial|discount|subscription|shipping|offerta|gratis|sconto|prova|oferta|descuento|envío|angebot|kostenlos|rabatt|versand|desconto|frete|grátis)\b""", RegexOption.IGNORE_CASE),
-        Regex("""(?U)\b(application|appli|app)\b""", RegexOption.IGNORE_CASE),
-        Regex("""(?U)\b(euros?|dollars?|€|\$)\b""", RegexOption.IGNORE_CASE),
+        Regex("""\d+\s?(%|pour ?cent|percent|per ?cento|por ?ciento|prozent|por cento)""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])(rendez-vous sur|rendez vous sur|allez sur|visit|visitez|vai su|visita|besuche|acesse|téléchargez|download|scarica|descarga|lade|baixe)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])(offre|offert|gratuit|essai|réduction|remise|livraison|abonnement|offer|free trial|discount|subscription|shipping|offerta|gratis|sconto|prova|oferta|descuento|envío|angebot|kostenlos|rabatt|versand|desconto|frete|grátis)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])(application|appli|app)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
+        Regex("""(?<![\p{L}\p{N}])(euros?|dollars?|€|\$)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE),
     )
 
     /** How ad-like one sentence is: 2 = strong sign, 1 per weaker sign. */
