@@ -553,4 +553,6 @@
     <string name="names_placeholder">Angela Merkel\nLeipzig</string>
     <string name="edit_sentence">Text korrigieren</string>
     <string name="edit_sentence_text">Korrigiere ein falsch verstandenes Wort oder einen Namen. Korrigierte Namen werden für die nächsten Folgen dieses Podcasts gemerkt.</string>
+    <string name="language_fix_text">Einige Sätze kamen auf Englisch heraus. Lade Whisper Base herunter, um sie automatisch in der Sprache der Folge neu zu schreiben.</string>
+    <string name="language_fix_download">Herunterladen (%1$s)</string>
 </resources>

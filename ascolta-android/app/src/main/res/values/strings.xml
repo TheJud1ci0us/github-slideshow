@@ -580,4 +580,6 @@
     <string name="names_placeholder">Emmanuel Macron\nLyon</string>
     <string name="edit_sentence">Edit text</string>
     <string name="edit_sentence_text">Fix a misheard word or name. Names you correct are remembered for this podcast\'s next episodes.</string>
+    <string name="language_fix_text">Some sentences came out in English. Download Whisper Base to rewrite them in the episode\'s language automatically.</string>
+    <string name="language_fix_download">Download (%1$s)</string>
 </resources>

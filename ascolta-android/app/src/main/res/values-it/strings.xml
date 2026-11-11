@@ -560,4 +560,6 @@
     <string name="names_placeholder">Sergio Mattarella\nBologna</string>
     <string name="edit_sentence">Correggi il testo</string>
     <string name="edit_sentence_text">Correggi una parola o un nome capito male. I nomi corretti vengono ricordati per le prossime puntate di questo podcast.</string>
+    <string name="language_fix_text">Alcune frasi sono uscite in inglese. Scarica Whisper Base per riscriverle automaticamente nella lingua della puntata.</string>
+    <string name="language_fix_download">Scarica (%1$s)</string>
 </resources>

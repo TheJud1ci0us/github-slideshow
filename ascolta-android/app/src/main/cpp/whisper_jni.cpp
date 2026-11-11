@@ -148,7 +148,7 @@ jstring utf8String(JNIEnv *env, const char *text) {
 
 whisper_vad_params vadParams() {
     whisper_vad_params p = whisper_vad_default_params();
-    p.threshold = 0.5f;
+    p.threshold = 0.35f;              // speech over background music often scores below 0.5
     p.min_speech_duration_ms = 250;
     p.min_silence_duration_ms = 500;   // keep sentences together across short pauses
     p.max_speech_duration_s = 25.0f;   // keep segments short enough to read and translate

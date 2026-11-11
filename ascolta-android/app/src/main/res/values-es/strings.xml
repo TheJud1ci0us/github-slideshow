@@ -560,4 +560,6 @@
     <string name="names_placeholder">Pedro Almodóvar\nValencia</string>
     <string name="edit_sentence">Corregir el texto</string>
     <string name="edit_sentence_text">Corrige una palabra o un nombre mal entendido. Los nombres corregidos se recuerdan para los próximos episodios de este podcast.</string>
+    <string name="language_fix_text">Algunas frases salieron en inglés. Descarga Whisper Base para reescribirlas automáticamente en el idioma del episodio.</string>
+    <string name="language_fix_download">Descargar (%1$s)</string>
 </resources>

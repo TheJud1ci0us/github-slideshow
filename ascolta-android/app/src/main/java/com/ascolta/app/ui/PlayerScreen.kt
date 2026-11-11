@@ -478,6 +478,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ep != null) StatusBanner(ep, transcript, translating)
+            if (ep != null) LanguageFixBanner()
             // No transcript (not chosen for this episode, or nothing recognised yet), or the
             // listener chose the picture: the cover. The transcript is kept and shown again on demand.
             if (segments.isEmpty() || coverMode) {
@@ -675,6 +676,37 @@ private fun CheckItem(label: String, checked: Boolean, onChange: (Boolean) -> Un
         trailingIcon = { androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null) },
         onClick = { onChange(!checked) },
     )
+}
+
+/**
+ * Shown once when Parakeet wrote sentences in English and no Whisper model was on the phone to
+ * redo them in the episode's language: suggests Whisper Base (asked with its size, as always).
+ */
+@Composable
+private fun LanguageFixBanner() {
+    val context = LocalContext.current
+    val graph = context.graph
+    val suggested by graph.settings.languageFixSuggested.flow.collectAsState()
+    val dismissed by graph.settings.languageFixDismissed.flow.collectAsState()
+    if (!suggested || dismissed) return
+    val model = com.ascolta.app.whisper.SpeechModel.BASE
+    if (graph.models.isDownloaded(model)) return
+    val dataWarning = rememberDataWarning()
+    Banner {
+        Text(stringResource(R.string.language_fix_text), style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+            Button(onClick = {
+                dataWarning.run(
+                    needs = { listOf(com.ascolta.app.data.DownloadCost.Item(model.label, graph.models.missingBytes(model), true, "model:${model.id}")) },
+                    onWifi = { com.ascolta.app.work.WorkScheduler.downloadModel(context, model, wifiOnly = true); graph.settings.languageFixDismissed.set(true) },
+                ) {
+                    com.ascolta.app.work.WorkScheduler.downloadModel(context, model)
+                    graph.settings.languageFixDismissed.set(true)
+                }
+            }) { Text(stringResource(R.string.language_fix_download, com.ascolta.app.data.DownloadCost.formatSize(graph.models.missingBytes(model)))) }
+            TextButton(onClick = { graph.settings.languageFixDismissed.set(true) }) { Text(stringResource(R.string.action_close)) }
+        }
+    }
 }
 
 @Composable

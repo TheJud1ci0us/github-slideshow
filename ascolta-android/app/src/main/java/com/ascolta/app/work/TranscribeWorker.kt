@@ -21,6 +21,7 @@ import com.ascolta.app.R
 import com.ascolta.app.data.languageName
 import com.ascolta.app.whisper.CoreDispatchers
 import com.ascolta.app.whisper.CpuTopology
+import com.ascolta.app.data.Names
 import com.ascolta.app.whisper.Engine
 import com.ascolta.app.whisper.EngineLock
 import com.ascolta.app.whisper.EngineOptions
@@ -516,9 +517,14 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         var count = 0
                         val recognitionStarted = System.currentTimeMillis()
                         val recognizer = engine()
+                        // Speech the detector missed (talk over music): long quiet stretches are checked too.
+                        val regions = prepared.speech?.let { com.ascolta.app.whisper.SpeechDetection.fillGaps(it, blockLenMs) }
+                        val rescuedMs = if (prepared.speech != null && regions != null) com.ascolta.app.whisper.SpeechDetection.gapMs(prepared.speech, regions) else 0L
+                        // Parakeet can't be told the language: sentences it wrote in English are redone with Whisper.
+                        val wrongLanguage = mutableListOf<Segment>()
                         val finished = withContext(CoreDispatchers.recognition) {
                             recognizer.transcribe(
-                                prepared.samples, prepared.speech, language, prompt,
+                                prepared.samples, regions, language, prompt,
                                 onProgress = { percent ->
                                     update(transcribing, progressOf(latest.value) + blockLenMs * percent / 100f / totalMs)
                                 },
@@ -527,22 +533,29 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                     if (text.isNotEmpty() && !isHallucination(text) && !com.ascolta.app.data.Names.echoesPrompt(text, names)) {
                                         count++
                                         lastEnd = maxOf(lastEnd, seg.endMs + blockStartMs)
-                                        events.trySend(
-                                            WriterEvent.Sentence(
-                                                Segment(
-                                                    seg.startMs + blockStartMs,
-                                                    seg.endMs + blockStartMs,
-                                                    text,
-                                                    words = cleanWords(seg.words, seg.startMs, seg.endMs)
-                                                        ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
-                                                ),
-                                            ),
+                                        val segment = Segment(
+                                            seg.startMs + blockStartMs,
+                                            seg.endMs + blockStartMs,
+                                            text,
+                                            words = cleanWords(seg.words, seg.startMs, seg.endMs)
+                                                ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
+                                        if (model.engine == Engine.PARAKEET && com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language)) {
+                                            wrongLanguage += segment
+                                        } else {
+                                            events.trySend(WriterEvent.Sentence(segment))
+                                        }
                                     }
                                 },
                             )
                         }
                         watcher.cancel()
+                        if (wrongLanguage.isNotEmpty() && !isStopped) {
+                            val redone = redoInLanguage(wrongLanguage, prepared.samples, blockStartMs, language, names, options)
+                            AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Whisper")
+                            wrongLanguage.forEach { events.send(WriterEvent.Sentence(it)) }
+                        }
+                        if (rescuedMs > 0) AppLog.i(TAG, "Gap check: ${rescuedMs / 1000}s without detected speech also checked")
                         if (!finished) {
                             if (abandoned && !isStopped) {
                                 // Keep what was recognised; the rest of this block is done later.
@@ -601,6 +614,52 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
      * Word timings in order and inside their sentence, so the highlight moves forward
      * smoothly instead of jumping back or past the sentence.
      */
+    /**
+     * Sentences Parakeet wrote in English while the episode is in [language]: their audio is
+     * recognised again by Whisper forced to [language] (Small or Base, whichever is on the phone),
+     * and the text replaced in [wrong]. If Whisper hears English too (an ad, a quote), the
+     * original stays. Without a Whisper model, the player suggests downloading Base (never
+     * downloaded silently). Returns how many were redone.
+     */
+    private suspend fun redoInLanguage(
+        wrong: MutableList<Segment>,
+        samples: FloatArray,
+        blockStartMs: Long,
+        language: String,
+        names: List<String>,
+        options: EngineOptions,
+    ): Int {
+        val model = listOf(SpeechModel.SMALL, SpeechModel.BASE).firstOrNull { graph.models.isDownloaded(it) }
+        if (model == null) {
+            graph.settings.languageFixSuggested.set(true)
+            return 0
+        }
+        var redone = 0
+        withContext(CoreDispatchers.recognition) {
+            val whisper = SpeechEngine.load(applicationContext, model, graph.models, options.copy(gpu = false))
+            try {
+                for (i in wrong.indices) {
+                    if (isStopped) break
+                    val seg = wrong[i]
+                    val from = ((seg.startMs - blockStartMs - 300).coerceAtLeast(0) * 16).toInt().coerceAtMost(samples.size)
+                    val to = ((seg.endMs - blockStartMs + 300) * 16).toInt().coerceIn(from, samples.size)
+                    if (to - from < 8_000) continue // under half a second
+                    val offset = blockStartMs + from / 16
+                    val parts = mutableListOf<com.ascolta.app.whisper.WhisperSegment>()
+                    whisper.transcribe(samples.copyOfRange(from, to), null, language, Names.prompt(names, null), {}, { parts += it })
+                    val text = parts.joinToString(" ") { it.text.trim() }.trim()
+                    if (text.isEmpty() || isHallucination(text) || com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language)) continue
+                    val words = parts.flatMap { it.words.orEmpty() }.map { it.copy(startMs = it.startMs + offset) }.takeIf { it.isNotEmpty() }
+                    wrong[i] = seg.copy(text = Names.correct(text, names).first, words = words)
+                    redone++
+                }
+            } finally {
+                whisper.close()
+            }
+        }
+        return redone
+    }
+
     /** A timed word with the same name correction as its sentence ("Selenski," → "Zelensky,"). */
     private fun fixWord(word: String, fixed: Map<String, String>): String {
         if (fixed.isEmpty()) return word
@@ -725,6 +784,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             "amara.org", "sottotitoli creati dalla comunità", "sottotitoli a cura di",
             "sottotitoli e revisione a cura di", "qtss", "subtitles by the amara",
             "thanks for watching", "grazie per la visione",
+            // French, Spanish, German, Portuguese subtitle credits Whisper writes over music.
+            "sous-titrage st'", "sous-titrage société radio-canada", "sous-titres réalisés par", "sous-titres par",
+            "merci d'avoir regardé", "abonnez-vous à la chaîne",
+            "subtítulos realizados por", "subtítulos por la comunidad", "gracias por ver",
+            "untertitel im auftrag", "untertitel der amara", "untertitelung des zdf", "danke fürs zuschauen",
+            "legendas pela comunidade", "obrigado por assistir",
         )
 
         fun isHallucination(text: String): Boolean {

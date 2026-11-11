@@ -560,4 +560,6 @@
     <string name="names_placeholder">Fernando Pessoa\nCoimbra</string>
     <string name="edit_sentence">Corrigir o texto</string>
     <string name="edit_sentence_text">Corrija uma palavra ou um nome mal entendido. Os nomes corrigidos ficam guardados para os próximos episódios deste podcast.</string>
+    <string name="language_fix_text">Algumas frases saíram em inglês. Transfira o Whisper Base para as reescrever automaticamente na língua do episódio.</string>
+    <string name="language_fix_download">Transferir (%1$s)</string>
 </resources>

@@ -560,4 +560,6 @@
     <string name="names_placeholder">Emmanuel Macron\nLyon</string>
     <string name="edit_sentence">Corriger le texte</string>
     <string name="edit_sentence_text">Corrigez un mot ou un nom mal compris. Les noms corrigés sont retenus pour les prochains épisodes de ce podcast.</string>
+    <string name="language_fix_text">Certaines phrases sont sorties en anglais. Téléchargez Whisper Base pour les réécrire automatiquement dans la langue de l\'épisode.</string>
+    <string name="language_fix_download">Télécharger (%1$s)</string>
 </resources>

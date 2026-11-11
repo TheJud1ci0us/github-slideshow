@@ -38,6 +38,28 @@ object SpeechDetection {
         }
     }
 
+    /**
+     * The detector can miss speech over background music (jingles, reportages) for a minute or
+     * more. Any stretch of at least [minGapMs] without detected speech in 0..[totalMs] is added
+     * back, so the speech model checks it too: on real music or silence it writes nothing.
+     */
+    fun fillGaps(regions: List<Pair<Long, Long>>, totalMs: Long, minGapMs: Long = 6_000): List<Pair<Long, Long>> {
+        val sorted = merge(regions)
+        val out = mutableListOf<Pair<Long, Long>>()
+        var last = 0L
+        for ((s, e) in sorted) {
+            if (s - last >= minGapMs) out += last to s
+            out += s to e
+            last = maxOf(last, e)
+        }
+        if (totalMs - last >= minGapMs) out += last to totalMs
+        return out
+    }
+
+    /** Seconds added by [fillGaps] (for the diagnostics log). */
+    fun gapMs(regions: List<Pair<Long, Long>>, filled: List<Pair<Long, Long>>): Long =
+        filled.sumOf { it.second - it.first } - merge(regions).sumOf { it.second - it.first }
+
     /** Union of possibly overlapping regions; regions less than 100 ms apart are joined. */
     fun merge(regions: List<Pair<Long, Long>>, joinBelowMs: Long = 100): List<Pair<Long, Long>> {
         val out = mutableListOf<Pair<Long, Long>>()
