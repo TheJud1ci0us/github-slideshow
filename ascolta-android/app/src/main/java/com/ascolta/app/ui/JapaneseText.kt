@@ -1,7 +1,9 @@
 package com.ascolta.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -33,9 +35,17 @@ fun JapaneseSentence(
     script: JapaneseScript,
     activeWord: Int,
     style: TextStyle,
-    onWord: (String) -> Unit,
+    /** The learner's selection in this sentence (characters), or null. */
+    selectedChars: IntRange? = null,
+    /** Tap on a token: the dictionary, or extending a selection. */
+    onTap: (JaToken) -> Unit,
+    /** Long press on a token: starts (or extends) a selection. */
+    onLongPress: (JaToken) -> Unit = {},
 ) {
     val highlight = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    val selectColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)
+    val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
+    val longPress by androidx.compose.runtime.rememberUpdatedState(onLongPress)
     val rubyStyle = style.copy(fontSize = style.fontSize * 0.55f, lineHeight = style.fontSize * 0.7f, fontWeight = FontWeight.Normal)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(if (script == JapaneseScript.ROMAJI) 5.dp else 0.dp),
@@ -45,9 +55,14 @@ fun JapaneseSentence(
         tokens.forEach { token ->
             if (token.isWord) wordIndex++
             val active = token.isWord && wordIndex == activeWord
+            val chosen = selectedChars != null && token.start <= selectedChars.last && token.end > selectedChars.first
             val mod = Modifier
-                .then(if (active) Modifier.background(highlight, RoundedCornerShape(4.dp)) else Modifier)
-                .then(if (token.isWord) Modifier.clickable { onWord(token.surface) } else Modifier)
+                .then(if (chosen) Modifier.background(selectColor) else if (active) Modifier.background(highlight, RoundedCornerShape(4.dp)) else Modifier)
+                .then(
+                    if (token.isWord) Modifier.pointerInput(token) {
+                        detectTapGestures(onTap = { tap(token) }, onLongPress = { longPress(token) })
+                    } else Modifier,
+                )
             when (script) {
                 JapaneseScript.ROMAJI -> Text(
                     token.romaji,

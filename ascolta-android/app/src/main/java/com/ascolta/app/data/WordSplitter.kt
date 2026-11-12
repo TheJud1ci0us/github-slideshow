@@ -59,6 +59,16 @@ object WordSplitter {
      * Words of [text] with start times, from timed [pieces] (engine tokens or older,
      * coarser word timings) that together spell the sentence. [endMs] bounds the last piece.
      */
+    /**
+     * The words of [text] with times spread over the sentence by their place in it: for
+     * selecting words when the speech model gave no word times (the audio of a selection is
+     * then approximate).
+     */
+    fun estimatedWords(text: String, startMs: Long, endMs: Long, language: String?): List<Word> {
+        val length = text.length.coerceAtLeast(1)
+        return ranges(text, language).map { r -> Word(startMs + (endMs - startMs) * r.first / length, text.substring(r.first, r.last + 1)) }
+    }
+
     fun timedWords(text: String, pieces: List<Word>?, startMs: Long, endMs: Long, language: String?): List<Word>? {
         if (pieces.isNullOrEmpty()) return pieces
         val times = charTimes(text, pieces, startMs, endMs) ?: return null

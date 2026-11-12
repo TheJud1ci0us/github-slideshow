@@ -333,12 +333,19 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     var editing by remember { mutableStateOf<Int?>(null) }
     // "Words in this episode": how much is known, and the new words to learn first.
     var showEpisodeWords by remember { mutableStateOf(false) }
-    val allRanges = remember(segments, timedWords) { segments.mapIndexed { i, s -> wordRanges(s.text, timedWords.getOrNull(i)) } }
-    val selection = remember(selA, selB, segments, timedWords, allRanges) {
+    // Words to select: the timed ones, or (models without word times) the sentence's words with
+    // estimated times, so words can be selected in every language and with every model.
+    val selectWords = remember(timedWords, segments, textLanguage, jaReady) {
+        segments.mapIndexed { i, s ->
+            timedWords.getOrNull(i)?.takeIf { it.isNotEmpty() } ?: WordSplitter.estimatedWords(s.text, s.startMs, s.endMs, textLanguage).ifEmpty { null }
+        }
+    }
+    val allRanges = remember(segments, selectWords) { segments.mapIndexed { i, s -> wordRanges(s.text, selectWords.getOrNull(i)) } }
+    val selection = remember(selA, selB, segments, selectWords, allRanges) {
         val a = selA
         val b = selB
         if (a == null || b == null || segments.isEmpty()) null
-        else runCatching { com.ascolta.app.data.Selection.of(segments, timedWords, allRanges, a, b) }.getOrNull()
+        else runCatching { com.ascolta.app.data.Selection.of(segments, selectWords, allRanges, a, b) }.getOrNull()
     }
     fun selectWord(segmentIndex: Int, word: Int) {
         val lastWord = (allRanges.getOrNull(segmentIndex)?.size ?: 1) - 1
@@ -426,7 +433,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                                 menu = false
                                 graph.player.pause()
                                 selA = null; selB = null
-                                if (graph.allowPractice()) shadowing = com.ascolta.app.data.Selection.of(segments, timedWords, allRanges,
+                                if (graph.allowPractice()) shadowing = com.ascolta.app.data.Selection.of(segments, selectWords, allRanges,
                                     com.ascolta.app.data.WordPos(navIndex, 0), com.ascolta.app.data.WordPos(navIndex, ((allRanges.getOrNull(navIndex)?.size ?: 1) - 1).coerceAtLeast(0)))
                             })
                         }
@@ -594,6 +601,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     SegmentItem(
                         segment = segment,
                         words = timedWords.getOrNull(i),
+                        selectRanges = allRanges.getOrNull(i).orEmpty(),
                         language = textLanguage,
                         japanese = if (isJapanese && jaReady && jaScript != com.ascolta.app.data.JapaneseScript.KANJI) jaScript else null,
                         active = i == currentIndex,
@@ -923,6 +931,8 @@ private fun SegmentItem(
     words: List<Word>?,
     language: String?,
     japanese: com.ascolta.app.data.JapaneseScript? = null,
+    /** The words that can be selected (character ranges), with or without word times. */
+    selectRanges: List<IntRange> = emptyList(),
     active: Boolean,
     activeWord: Int,
     showOriginal: Boolean,
@@ -967,15 +977,27 @@ private fun SegmentItem(
             color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
         )
         val jaTokens = remember(segment.text, japanese) { japanese?.let { com.ascolta.app.data.Japanese.tokens(segment.text) } }
+        // The learner's selection in this sentence, as characters.
+        val selectedChars: IntRange? = selected?.let { sel ->
+            val from = if (sel.first < 0 || selectRanges.isEmpty()) 0 else selectRanges.getOrNull(sel.first)?.takeIf { !it.isEmpty() }?.first ?: 0
+            val to = if (sel.first < 0 || selectRanges.isEmpty()) segment.text.length
+            else selectRanges.getOrNull(sel.last)?.takeIf { !it.isEmpty() }?.let { it.last + 1 } ?: segment.text.length
+            if (to > from) from until to else null
+        }
         if (showOriginal && japanese != null && jaTokens != null) {
-            JapaneseSentence(jaTokens, japanese, activeWord, textStyle, onWord)
+            JapaneseSentence(
+                jaTokens, japanese, activeWord, textStyle,
+                selectedChars = selectedChars,
+                onTap = { token -> if (selecting) onSelect(wordIndexAt(selectRanges, token.start)) else onWord(token.surface) },
+                onLongPress = { token -> onSelect(wordIndexAt(selectRanges, token.start)) },
+            )
         } else if (showOriginal) {
             val wordRanges = remember(segment, words) { wordRanges(segment.text, words) }
             val highlight = MaterialTheme.colorScheme.primary
             val selectColor = MaterialTheme.colorScheme.tertiary
             val newColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
             val doubtColor = MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
-            val text = remember(segment.text, activeWord, wordRanges, highlight, selected, newWords, newColor, doubtful) {
+            val text = remember(segment.text, activeWord, wordRanges, highlight, selectedChars, newWords, newColor, doubtful) {
                 buildAnnotatedString {
                     append(segment.text)
                     // Probably misheard: underlined, on a faint tint.
@@ -994,12 +1016,7 @@ private fun SegmentItem(
                         )
                     }
                     // The learner's selection.
-                    selected?.let { sel ->
-                        val from = if (sel.first < 0 || wordRanges.isEmpty()) 0 else wordRanges.getOrNull(sel.first)?.takeIf { !it.isEmpty() }?.first ?: 0
-                        val to = if (sel.first < 0 || wordRanges.isEmpty()) segment.text.length
-                        else wordRanges.getOrNull(sel.last)?.takeIf { !it.isEmpty() }?.let { it.last + 1 } ?: segment.text.length
-                        if (to > from) addStyle(SpanStyle(background = selectColor.copy(alpha = 0.35f)), from, to)
-                    }
+                    selectedChars?.let { r -> addStyle(SpanStyle(background = selectColor.copy(alpha = 0.35f)), r.first, r.last + 1) }
                 }
             }
             TappableText(
@@ -1010,12 +1027,12 @@ private fun SegmentItem(
                     color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 ),
                 onTap = { offset ->
-                    if (selecting) onSelect(wordIndexAt(wordRanges, offset))
+                    if (selecting) onSelect(wordIndexAt(selectRanges, offset))
                     // The dictionary word under the finger (not the whole run of letters, which in
                     // Japanese or Chinese would be the whole sentence).
                     else WordSplitter.wordAt(segment.text, offset, language)?.let(onWord)
                 },
-                onLongPress = { offset -> onSelect(wordIndexAt(wordRanges, offset)) },
+                onLongPress = { offset -> onSelect(wordIndexAt(selectRanges, offset)) },
             )
         }
         if (showTranslation) {
