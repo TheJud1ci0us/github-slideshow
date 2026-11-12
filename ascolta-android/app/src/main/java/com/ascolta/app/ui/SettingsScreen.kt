@@ -203,6 +203,15 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                 if (SpeechModel.CANARY_180M.supports(learning) && learning != "en" && SpeechModel.PARAKEET in tiers) {
                     SwitchRow(stringResource(R.string.fix_english_title), stringResource(R.string.fix_english_text), settings.fixEnglish)
                 }
+                // Words that don't exist ("kläddsträger"): heard again by a second model.
+                if (learning in com.ascolta.app.data.DoubtfulWords.LANGUAGES) {
+                    SwitchRow(stringResource(R.string.doubt_title), stringResource(R.string.doubt_text), settings.checkDoubtfulWords)
+                }
+                IntChoiceRow(
+                    stringResource(R.string.ahead_title), settings.transcribeAhead,
+                    listOf(2 to stringResource(R.string.ahead_minutes, 2), 5 to stringResource(R.string.ahead_minutes, 5),
+                        10 to stringResource(R.string.ahead_minutes, 10), 0 to stringResource(R.string.ahead_all)),
+                )
                 // A model chosen earlier that isn't one of the choices stays usable until another is picked.
                 if (current !in tiers && current != SpeechModel.MOST_ACCURATE && current != SpeechModel.OMNILINGUAL) {
                     ModelRow(

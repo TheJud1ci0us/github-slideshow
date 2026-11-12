@@ -175,6 +175,13 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val commonWords by produceState(emptySet<String>(), wordsLanguage, highlightNew) {
         if (highlightNew) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { graph.knownWords.common(wordsLanguage, graph.wordLists) }
     }
+    // Words that don't exist (probably misheard): underlined. Null until the long word list is loaded.
+    val doubtLists by produceState<com.ascolta.app.data.WordLists?>(null, wordsLanguage) {
+        value = if (wordsLanguage !in com.ascolta.app.data.DoubtfulWords.LANGUAGES) null
+        else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            graph.wordLists.takeIf { com.ascolta.app.data.DoubtfulWords.supports(wordsLanguage, it) }
+        }
+    }
 
     // Fill in missing translations (e.g. translation model wasn't available during transcription).
     var translating by remember { mutableStateOf(false) }
@@ -624,6 +631,9 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                             com.ascolta.app.data.KnownWords.newWordRanges(segment.text, knownLevels, commonWords)
                         } else null,
                         isAd = ads.any { segment.startMs >= it.startMs && segment.startMs < it.endMs },
+                        doubtful = doubtLists?.let { lists ->
+                            remember(segment.text, lists) { com.ascolta.app.data.DoubtfulWords.find(segment.text, wordsLanguage, lists) }
+                        },
                     )
                 }
             }
@@ -727,6 +737,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
             },
             canPlayWord = isCurrent || ep?.localPath?.let { java.io.File(it).exists() } == true,
+            wordLists = doubtLists,
             onDismiss = { lookup = null },
         )
     }
@@ -934,6 +945,8 @@ private fun SegmentItem(
     newWords: List<IntRange>? = null,
     /** Part of a detected ad: shown dimmed. */
     isAd: Boolean = false,
+    /** Words that don't exist (probably misheard), underlined. */
+    doubtful: List<IntRange>? = null,
 ) {
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val select by androidx.compose.runtime.rememberUpdatedState(onSelect)
@@ -966,9 +979,17 @@ private fun SegmentItem(
             val highlight = MaterialTheme.colorScheme.primary
             val selectColor = MaterialTheme.colorScheme.tertiary
             val newColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
-            val text = remember(segment.text, activeWord, wordRanges, highlight, selected, newWords, newColor) {
+            val doubtColor = MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
+            val text = remember(segment.text, activeWord, wordRanges, highlight, selected, newWords, newColor, doubtful) {
                 buildAnnotatedString {
                     append(segment.text)
+                    // Probably misheard: underlined, on a faint tint.
+                    doubtful?.forEach { r ->
+                        if (r.last < segment.text.length) addStyle(
+                            SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline, background = doubtColor),
+                            r.first, r.last + 1,
+                        )
+                    }
                     // New words: a light tint, the same for all (not distracting).
                     newWords?.forEach { r -> if (r.last < segment.text.length) addStyle(SpanStyle(background = newColor), r.first, r.last + 1) }
                     wordRanges.getOrNull(activeWord)?.let { range ->
@@ -1142,6 +1163,8 @@ private fun WordSheet(
     onPlayWord: (Long, Long) -> Unit,
     canPlayWord: Boolean,
     onDismiss: () -> Unit,
+    /** The long word lists, to tell whether the word was probably misheard; null for other languages. */
+    wordLists: com.ascolta.app.data.WordLists? = null,
 ) {
     val context = LocalContext.current
     val graph = context.graph
@@ -1154,6 +1177,16 @@ private fun WordSheet(
     val entry by produceState<Pair<com.ascolta.app.data.Dictionary.Entry, List<String>>?>(null, lookup) {
         val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching { graph.dictionary.lookup(lookup.word, language) }.getOrNull()
+                ?: runCatching {
+                    // A compound the dictionary doesn't have: its parts ("hundkläder" = hund + kläder).
+                    val parts = wordLists?.let { com.ascolta.app.data.DoubtfulWords.parts(lookup.word, language, it) } ?: return@runCatching null
+                    val entries = parts.map { graph.dictionary.lookup(it, language) ?: return@runCatching null }
+                    com.ascolta.app.data.Dictionary.Entry(
+                        word = parts.joinToString(" + "), pos = "",
+                        meanings = entries.mapIndexed { i, e -> "${parts[i]}: ${e.meanings.firstOrNull().orEmpty()}" },
+                        romanization = null,
+                    )
+                }.getOrNull()
         } ?: return@produceState
         val native = graph.settings.nativeLanguage.value
         val meanings = if (native == "en") found.meanings else runCatching {
@@ -1165,6 +1198,36 @@ private fun WordSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text(lookup.word, style = MaterialTheme.typography.headlineMedium)
+            // A word that doesn't exist: probably misheard. The nearest real words, to correct the sentence.
+            val doubtful = remember(lookup.word, wordLists) {
+                wordLists != null && com.ascolta.app.data.DoubtfulWords.find(lookup.word.lowercase(), language, wordLists).isNotEmpty()
+            }
+            if (doubtful && wordLists != null) {
+                val suggestions by produceState(emptyList<String>(), lookup.word) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        com.ascolta.app.data.DoubtfulWords.suggestions(lookup.word, language, wordLists)
+                    }
+                }
+                Text(stringResource(R.string.doubt_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                if (suggestions.isNotEmpty()) {
+                    Text(stringResource(R.string.doubt_suggest), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        suggestions.forEach { word ->
+                            val fixed = if (lookup.word.first().isUpperCase()) word.replaceFirstChar { it.uppercaseChar() } else word
+                            AssistChip(
+                                onClick = {
+                                    val text = lookup.segment.text.replaceFirst(lookup.word, fixed)
+                                    scope.launch { graph.repo.editSentence(episode, lookup.segment, text) }
+                                    onDismiss()
+                                },
+                                label = { Text(fixed) },
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                            )
+                        }
+                    }
+                }
+            }
             if (language == "ja") {
                 // Reading and romaji of the Japanese word.
                 val reading = remember(lookup.word) { com.ascolta.app.data.Japanese.reading(lookup.word) }

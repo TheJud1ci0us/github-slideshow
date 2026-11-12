@@ -187,6 +187,10 @@ class Settings(context: Context) {
     val detailedLog = bool("detailed_log", false)
     /** Redo the sentences Parakeet writes in English with Canary (costs a few seconds per block). */
     val fixEnglish = bool("fix_english", true)
+    /** Words that don't exist ("kläddsträger") checked again by a second speech model. */
+    val checkDoubtfulWords = bool("check_doubtful_words", false)
+    /** Minutes transcribed ahead of the listener (0: the whole episode). */
+    val transcribeAhead = int("transcribe_ahead_min", 5)
 
     fun learningList(): List<String> =
         learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }

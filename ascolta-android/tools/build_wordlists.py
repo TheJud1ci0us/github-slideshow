@@ -21,3 +21,13 @@ for lang in PARAKEET:
     total += os.path.getsize(path)
     print(lang, len(words), os.path.getsize(path))
 print("total", total)
+
+# For spotting misheard words (DoubtfulWords): the next 75,000 words of the languages where
+# that leaves under 0.5 % of correct words unexplained (measured on wordfreq's large lists).
+MORE = ["sv", "de", "fr", "es", "it", "nl", "pt", "en"]
+more = os.path.join(out, "..", "words-more")
+os.makedirs(more, exist_ok=True)
+for lang in MORE:
+    words = [w for w in wordfreq.top_n_list(lang, 400_000) if re.fullmatch(r"[^\W\d_]+(['’-][^\W\d_]+)*", w)][COUNT:100_000]
+    with open(os.path.join(more, f"{lang}.txt"), "wb") as f: f.write("\n".join(words).encode())
+    print("more", lang, len(words))

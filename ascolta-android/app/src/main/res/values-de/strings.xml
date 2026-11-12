@@ -659,4 +659,11 @@
     <string name="aq_bg_reef">Riff</string>
     <string name="aq_bg_lagoon">Lagune im Abendrot</string>
     <string name="aq_bg_deep">Tiefsee</string>
+    <string name="doubt_title">Zweifelhafte Wörter prüfen</string>
+    <string name="doubt_text">Wenn ein Wort nicht existiert (wahrscheinlich verhört), wird der Satz von einem zweiten Modell, dem die Sprache vorgegeben wird, noch einmal angehört: NVIDIA Canary für Englisch, Französisch, Spanisch und Deutsch, sonst ein heruntergeladenes Whisper-Modell (Turbo, Small oder Base). Tippfehler von einem Buchstaben in häufigen Wörtern werden korrigiert. Kostet bei manchen Blöcken einige Sekunden.</string>
+    <string name="doubt_note">Dieses Wort gibt es nicht: Es wurde wohl falsch verstanden.</string>
+    <string name="doubt_suggest">Vielleicht war es (tippen, um den Satz zu korrigieren):</string>
+    <string name="ahead_title">Im Voraus transkribieren</string>
+    <string name="ahead_minutes">%d Min.</string>
+    <string name="ahead_all">Ganze Folge</string>
 </resources>

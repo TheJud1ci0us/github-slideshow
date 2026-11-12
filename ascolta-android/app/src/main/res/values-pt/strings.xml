@@ -666,4 +666,11 @@
     <string name="aq_bg_reef">Recife</string>
     <string name="aq_bg_lagoon">Lagoa ao pôr do sol</string>
     <string name="aq_bg_deep">Mar profundo</string>
+    <string name="doubt_title">Verificar palavras duvidosas</string>
+    <string name="doubt_text">Quando uma palavra não existe (provavelmente mal ouvida), a frase é ouvida de novo por um segundo modelo ao qual se indica o idioma: NVIDIA Canary para inglês, francês, espanhol e alemão; senão, um modelo Whisper baixado (Turbo, Small ou Base). Erros de uma letra em palavras comuns são corrigidos. Acrescenta alguns segundos a alguns blocos.</string>
+    <string name="doubt_note">Esta palavra não existe: provavelmente foi mal ouvida.</string>
+    <string name="doubt_suggest">Talvez fosse (toque para corrigir a frase):</string>
+    <string name="ahead_title">Transcrever com antecedência</string>
+    <string name="ahead_minutes">%d min</string>
+    <string name="ahead_all">Episódio inteiro</string>
 </resources>

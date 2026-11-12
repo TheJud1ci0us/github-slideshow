@@ -108,32 +108,41 @@ object TranscriptionPlan {
 
 /**
  * The buffer zone: transcription only covers the stretch from where the listener is in the
- * timeline (playing or not) up to 20% of the episode's duration ahead of it. Once that is
+ * timeline (playing or not) up to the "Transcribe ahead" time ahead of it (20% of the
+ * episode by default here). Once that is
  * transcribed it waits; it continues when the listener has used up part of it (at least one
  * block, or a quarter of the zone for short episodes), or jumps somewhere not yet done.
  */
 object BufferPolicy {
     const val SHARE = 0.20f
     private const val MIN_ZONE_MS = 30_000L
+    /** Shortest zone with a slow model (near real time), so playback can't catch up with it. */
+    const val SLOW_MIN_MS = 5 * 60_000L
 
     /** Length of the zone ahead of the listener: 20% of the episode (at least 30 s). */
     fun zoneMs(totalMs: Long): Long = maxOf(MIN_ZONE_MS, (totalMs * SHARE).toLong()).coerceAtMost(totalMs)
 
+    /**
+     * The zone for the "Transcribe ahead" setting: [minutes] ahead of the listener (0: the
+     * whole episode), at least five minutes with a [slow] model, never past the end.
+     */
+    fun zoneFor(minutes: Int, totalMs: Long, slow: Boolean): Long {
+        val wanted = if (minutes <= 0) totalMs else minutes * 60_000L
+        return maxOf(wanted, if (slow) SLOW_MIN_MS else MIN_ZONE_MS).coerceAtMost(totalMs)
+    }
+
     /** End of the zone for a listener at [positionMs]. */
-    fun zoneEnd(positionMs: Long, totalMs: Long): Long = minOf(totalMs, positionMs + zoneMs(totalMs))
+    fun zoneEnd(positionMs: Long, totalMs: Long, zone: Long = zoneMs(totalMs)): Long = minOf(totalMs, positionMs + zone)
 
     /** After a full zone, work starts again once less than this is transcribed ahead. */
-    fun resumeBelowMs(totalMs: Long, blockMs: Long): Long {
-        val zone = zoneMs(totalMs)
-        return zone - minOf(blockMs, zone / 4)
-    }
+    fun resumeBelowMs(totalMs: Long, blockMs: Long, zone: Long = zoneMs(totalMs)): Long = zone - minOf(blockMs, zone / 4)
 
     /**
      * The next stretch to transcribe for a listener at [positionMs], or null when the zone
      * ahead of them is fully transcribed (nothing beyond the zone, nothing behind them).
      */
-    fun nextBlock(spans: List<Span>, positionMs: Long, totalMs: Long, blockMs: Long): Span? {
-        val end = zoneEnd(positionMs, totalMs)
+    fun nextBlock(spans: List<Span>, positionMs: Long, totalMs: Long, blockMs: Long, zone: Long = zoneMs(totalMs)): Span? {
+        val end = zoneEnd(positionMs, totalMs, zone)
         val gap = Coverage.firstGap(spans, positionMs, totalMs) ?: return null
         if (gap.startMs >= end - 500) return null
         return Span(gap.startMs, minOf(gap.endMs, gap.startMs + blockMs, end))

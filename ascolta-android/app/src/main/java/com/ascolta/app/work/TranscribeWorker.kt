@@ -339,7 +339,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                         }
                                     }
                                     val translation = if (canTranslate) runCatching {
-                                        withTimeoutOrNull(15_000) { graph.translation.translate(segment.text, language, target) }
+                                        translateWithContext(segment.text, t.segments.lastOrNull { it.startMs < segment.startMs }, language, target)
                                     }.getOrNull() else null
                                     val translated = segment.copy(translation = translation)
                                     t = t.copy(
@@ -356,11 +356,13 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 }
                                 is WriterEvent.ReplaceSpan -> {
                                     val kept = t.segments.filter { it.startMs < event.span.startMs || it.startMs >= event.span.endMs }
-                                    val added = event.segments.map { segment ->
+                                    val added = mutableListOf<Segment>()
+                                    for (segment in event.segments) {
+                                        val before = added.lastOrNull() ?: kept.lastOrNull { it.startMs < segment.startMs }
                                         val translation = if (canTranslate) runCatching {
-                                            withTimeoutOrNull(15_000) { graph.translation.translate(segment.text, language, target) }
+                                            translateWithContext(segment.text, before, language, target)
                                         }.getOrNull() else null
-                                        segment.copy(translation = translation)
+                                        added += segment.copy(translation = translation)
                                     }
                                     t = t.copy(
                                         segments = (kept + added).sortedBy { it.startMs },
@@ -458,9 +460,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         if (lastListenPos < 0 || kotlin.math.abs(positionMs - lastListenPos) > 10_000) jumpedToMs = positionMs
                         lastListenPos = positionMs
 
-                        // Buffer zone: only 20% of the episode's duration ahead of the listener.
+                        // Buffer zone: the "Transcribe ahead" time ahead of the listener (at least five
+                        // minutes with a slow model, so playback doesn't catch up with it).
+                        val slow = model.engine == Engine.WHISPER || (speedFactor ?: 10f) < 2f
+                        val zone = BufferPolicy.zoneFor(settings.transcribeAhead.value, totalMs, slow)
                         val ahead = BufferPolicy.aheadMs(spans, positionMs, totalMs)
-                        if (buffered && ahead < BufferPolicy.resumeBelowMs(totalMs, BLOCK_MS)) buffered = false
+                        if (buffered && ahead < BufferPolicy.resumeBelowMs(totalMs, BLOCK_MS, zone)) buffered = false
                         // Free version: 30 minutes of transcription a week; stop (keeping what's done) when used.
                         if (!graph.isPro && graph.limits.transcriptionLeftMs() <= 0) {
                             throw FreeLimitReached(applicationContext.getString(R.string.free_minutes_used))
@@ -468,7 +473,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         val block = if (buffered) null else {
                             // Short first block right after starting or jumping, so text appears within seconds.
                             val nearJump = jumpedToMs >= 0 && Coverage.runEnd(spans, jumpedToMs) - jumpedToMs < FIRST_BLOCK_MS
-                            BufferPolicy.nextBlock(spans, positionMs, totalMs, if (nearJump) FIRST_BLOCK_MS else BLOCK_MS)
+                            BufferPolicy.nextBlock(spans, positionMs, totalMs, if (nearJump) FIRST_BLOCK_MS else BLOCK_MS, zone)
                         }
                         if (block == null) {
                             buffered = true
@@ -479,7 +484,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 AppLog.i(
                                     TAG,
                                     "Zone full: ${ahead / 1000}s transcribed ahead of ${positionMs / 1000}s " +
-                                        "(zone ${BufferPolicy.zoneMs(totalMs) / 1000}s); waiting",
+                                        "(zone ${zone / 1000}s); waiting",
                                 )
                             }
                             update(applicationContext.getString(R.string.status_buffered_ahead, (ahead / 1000).toInt()), progressOf(latest.value))
@@ -505,7 +510,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             continue
                         }
                         // Prepare the following block while this one is recognised.
-                        val nextSpan = BufferPolicy.nextBlock(Coverage.add(spans, prepared.span), positionMs, totalMs, BLOCK_MS)
+                        val nextSpan = BufferPolicy.nextBlock(Coverage.add(spans, prepared.span), positionMs, totalMs, BLOCK_MS, zone)
                         if (nextSpan != null && nextSpan.startMs >= prepared.span.endMs) prefetch = nextSpan to async { prepare(nextSpan) }
 
                         val previous = latest.value.segments.filter { it.endMs <= prepared.span.startMs + 500 }.takeLast(3)
@@ -540,6 +545,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         val rescuedMs = if (prepared.speech != null && regions != null) com.ascolta.app.whisper.SpeechDetection.gapMs(prepared.speech, regions) else 0L
                         // Parakeet can't be told the language: sentences it wrote in English are redone with Canary.
                         val wrongLanguage = mutableListOf<Segment>()
+                        val doubtful = mutableListOf<Segment>() // sentences with words that don't exist
+                        val checkDoubts = settings.checkDoubtfulWords.value && com.ascolta.app.data.DoubtfulWords.supports(language, wordLists)
                         recognizer.setDetectedSpeech(prepared.speech)
                         AppLog.d("Speech") {
                             "block ${clock(blockStartMs)}: ${prepared.speech?.size ?: 0} stretches of speech found " +
@@ -568,6 +575,19 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                             com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
                                             AppLog.d("English?") { "${clock(segment.startMs)} flagged — ${com.ascolta.app.data.SentenceLanguage.why(text, language, wordLists, names)}" }
                                             wrongLanguage += segment
+                                        } else if (checkDoubts) {
+                                            // A one-letter slip of a common word is corrected; other words that
+                                            // don't exist are checked by a second model after the block.
+                                            val (fixedText, changed) = com.ascolta.app.data.DoubtfulWords.correct(text, language, wordLists, names)
+                                            val checked = if (changed.isEmpty()) segment else segment.copy(
+                                                text = fixedText, words = segment.words?.map { w -> w.copy(text = fixWord(w.text, changed)) },
+                                            )
+                                            if (changed.isNotEmpty()) AppLog.d("Doubtful") { "${clock(segment.startMs)} corrected ${changed.entries.joinToString { "${it.key} → ${it.value}" }}" }
+                                            val doubts = com.ascolta.app.data.DoubtfulWords.find(checked.text, language, wordLists, names)
+                                            if (doubts.isNotEmpty()) {
+                                                AppLog.d("Doubtful") { "${clock(segment.startMs)} doubtful: ${doubts.joinToString { checked.text.substring(it) }}" }
+                                                doubtful += checked
+                                            } else events.trySend(WriterEvent.Sentence(checked))
                                         } else {
                                             events.trySend(WriterEvent.Sentence(segment))
                                         }
@@ -592,6 +612,18 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} sentences, $redone redone with Canary in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
                                 wrongLanguage.forEach { events.send(WriterEvent.Sentence(it)) }
                             }
+                        }
+                        if (doubtful.isNotEmpty()) {
+                            // Words that don't exist: the same seconds heard again by a second model, told the language.
+                            val redoStarted = System.currentTimeMillis()
+                            val second = if (isStopped) null else doubtFixer(language, model, options)
+                            val redone = if (second == null) 0 else relisten(
+                                doubtful, prepared.samples, blockStartMs, language, names, second.first, second.second.label,
+                            ) { original, text -> com.ascolta.app.data.DoubtfulWords.rejection(original.text, text, language, wordLists, names) }
+                            AppLog.i(TAG, "Doubtful words: ${doubtful.size} sentences, $redone redone" +
+                                (second?.let { " with ${it.second.label}" } ?: " (no second model on the phone)") +
+                                " in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
+                            doubtful.forEach { events.send(WriterEvent.Sentence(it)) }
                         }
                         if (rescuedMs > 0) AppLog.i(TAG, "Gap check: ${rescuedMs / 1000}s without detected speech also checked")
                         if (!finished) {
@@ -641,6 +673,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         } finally {
             releaseEngine()
             fixer?.let { f -> fixer = null; fixerChecked = false; withContext(NonCancellable + CoreDispatchers.recognition) { f.close() } }
+            doubtEngine?.let { f -> doubtEngine = null; doubtModel = null; withContext(NonCancellable + CoreDispatchers.recognition) { f.close() } }
             withContext(NonCancellable + CoreDispatchers.light) { reader.close() }
         }
         if (stopped) return null
@@ -656,6 +689,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     /** Canary for redoing wrong-language sentences: loaded once per job, freed at the end. */
     private var fixer: SpeechEngine? = null
     private var fixerChecked = false
+    /** Whisper for doubtful words in languages Canary doesn't know: loaded once per job, freed at the end. */
+    private var doubtEngine: SpeechEngine? = null
+    private var doubtModel: SpeechModel? = null
     private val wordLists by lazy { com.ascolta.app.data.WordLists(applicationContext) }
 
     /**
@@ -731,36 +767,79 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         names: List<String>,
         options: EngineOptions,
     ): Int {
-        val whisper = whisperFixer(options) ?: return 0
+        val canary = whisperFixer(options) ?: return 0
+        return relisten(wrong, samples, blockStartMs, language, names, canary, "Canary") { _, text ->
+            if (com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) "Canary heard English too" else null
+        }
+    }
+
+    /**
+     * The second model for doubtful words, told the language: Canary for its languages, else the
+     * Whisper model on the phone that fits best next to the main model (Turbo, Small, Base, then
+     * Large v3, which needs the most memory). Null when none is downloaded (Canary is then
+     * suggested in the player for its languages). Loaded once per job.
+     */
+    private suspend fun doubtFixer(language: String, main: SpeechModel, options: EngineOptions): Pair<SpeechEngine, SpeechModel>? {
+        if (SpeechModel.CANARY_180M.supports(language) && main != SpeechModel.CANARY_180M) {
+            if (graph.models.isDownloaded(SpeechModel.CANARY_180M)) return whisperFixer(options)?.let { it to SpeechModel.CANARY_180M }
+        }
+        doubtEngine?.let { e -> return e to doubtModel!! }
+        val choice = listOf(SpeechModel.TURBO, SpeechModel.SMALL, SpeechModel.BASE, SpeechModel.LARGE_V3)
+            .firstOrNull { it != main && it.supports(language) && graph.models.isDownloaded(it) }
+        if (choice == null) {
+            if (SpeechModel.CANARY_180M.supports(language)) graph.settings.languageFixSuggested.set(true)
+            return null
+        }
+        val engine = runCatching {
+            withContext(CoreDispatchers.recognition) { SpeechEngine.load(applicationContext, choice, graph.models, options.copy(gpu = false)) }
+        }.onFailure { AppLog.w(TAG, "Could not load ${choice.label} to check doubtful words", it) }.getOrNull() ?: return null
+        doubtEngine = engine; doubtModel = choice
+        return engine to choice
+    }
+
+    /**
+     * The sentences of [list] heard again by [second] (one pass over their audio); each is
+     * replaced by the new version unless it's empty, a ghost line or [reject] gives a reason.
+     * Returns how many were replaced; every decision goes to the detailed log under [tag].
+     */
+    private suspend fun relisten(
+        list: MutableList<Segment>,
+        samples: FloatArray,
+        blockStartMs: Long,
+        language: String,
+        names: List<String>,
+        second: SpeechEngine,
+        tag: String,
+        reject: (Segment, String) -> String?,
+    ): Int {
         val pad = 250L
         val lengthMs = samples.size / 16L
-        val regions = wrong.map { (it.startMs - blockStartMs - pad).coerceAtLeast(0) to (it.endMs - blockStartMs + pad).coerceAtMost(lengthMs) }
+        val regions = list.map { (it.startMs - blockStartMs - pad).coerceAtLeast(0) to (it.endMs - blockStartMs + pad).coerceAtMost(lengthMs) }
             .filter { it.second > it.first }
         if (regions.isEmpty()) return 0
         val parts = mutableListOf<com.ascolta.app.whisper.WhisperSegment>()
         withContext(CoreDispatchers.recognition) {
-            whisper.transcribe(samples, com.ascolta.app.whisper.SpeechDetection.merge(regions, 0), language, Names.prompt(names, null), {}, { parts += it })
+            second.transcribe(samples, com.ascolta.app.whisper.SpeechDetection.merge(regions, 0), language, Names.prompt(names, null), {}, { parts += it })
         }
         val texts = TranscriptionPlan.assignByTime(
-            wrong.map { (it.startMs - blockStartMs) to (it.endMs - blockStartMs) },
+            list.map { (it.startMs - blockStartMs) to (it.endMs - blockStartMs) },
             parts.map { Triple(it.startMs, it.endMs, it.text.trim()) },
         )
         var redone = 0
-        wrong.indices.forEach { i ->
-            val text = texts[i].trim()
+        list.indices.forEach { i ->
+            val text = Names.correct(texts[i].trim(), names).first
             val rejected = when {
-                text.isEmpty() -> if (parts.isEmpty()) "Canary returned nothing" else "no Canary text at that time"
+                text.isEmpty() -> if (parts.isEmpty()) "$tag returned nothing" else "no $tag text at that time"
                 isHallucination(text) -> "ghost line"
-                com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names) -> "Canary heard English too"
-                else -> null
+                else -> reject(list[i], text)
             }
-            AppLog.d("Canary") {
-                "${clock(wrong[i].startMs)} \"${wrong[i].text.take(60)}\" → \"${text.take(60)}\" " + (rejected?.let { "rejected: $it" } ?: "used")
+            AppLog.d(tag) {
+                "${clock(list[i].startMs)} \"${list[i].text.take(60)}\" → \"${text.take(60)}\" " + (rejected?.let { "rejected: $it" } ?: "used")
             }
             if (rejected != null) return@forEach
-            val words = parts.filter { p -> (p.startMs + p.endMs) / 2 in (wrong[i].startMs - blockStartMs - pad)..(wrong[i].endMs - blockStartMs + pad) }
+            val words = parts.filter { p -> (p.startMs + p.endMs) / 2 in (list[i].startMs - blockStartMs - pad)..(list[i].endMs - blockStartMs + pad) }
                 .flatMap { it.words.orEmpty() }.map { it.copy(startMs = it.startMs + blockStartMs) }.takeIf { it.isNotEmpty() }
-            wrong[i] = wrong[i].copy(text = Names.correct(text, names).first, words = words)
+            list[i] = list[i].copy(text = text, words = words)
             redone++
         }
         return redone
@@ -824,6 +903,19 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         AppLog.i(TAG, "Model ${model.id} downloaded")
     }
 
+    /**
+     * Translates [text]; a fragment of one or two words ("Nej.") is translated together with
+     * the sentence before it, keeping only its own part, when that sentence is already translated.
+     */
+    private suspend fun translateWithContext(text: String, previous: Segment?, language: String, target: String): String? {
+        val before = previous?.translation
+        if (before != null && com.ascolta.app.data.TranslationContext.isFragment(text) && !com.ascolta.app.data.TranslationContext.isFragment(previous.text)) {
+            val both = withTimeoutOrNull(15_000) { graph.translation.translate(com.ascolta.app.data.TranslationContext.pair(previous.text, text), language, target) }
+            both?.let { com.ascolta.app.data.TranslationContext.ownPart(before, it) }?.let { return it }
+        }
+        return withTimeoutOrNull(15_000) { graph.translation.translate(text, language, target) }
+    }
+
     private suspend fun translateRemaining(transcript: Transcript, target: String): Transcript {
         if (!graph.settings.translate.value) return transcript // transcript only
         if (!graph.translation.isSupported(transcript.language, target)) return transcript
@@ -833,13 +925,12 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         if (!prepareTranslation(transcript.language, target)) return transcript
         return try {
             var done = 0
-            val segments = transcript.segments.map { s ->
-                if (s.translation != null && !stale) s
+            val segments = mutableListOf<Segment>()
+            for (s in transcript.segments) {
+                segments += if (s.translation != null && !stale) s
                 else {
                     update(applicationContext.getString(R.string.status_translating), done++.toFloat() / missing)
-                    s.copy(translation = withTimeoutOrNull(15_000) {
-                        graph.translation.translate(s.text, transcript.language, target)
-                    })
+                    s.copy(translation = translateWithContext(s.text, segments.lastOrNull(), transcript.language, target))
                 }
             }
             transcript.copy(segments = segments, translationLanguage = target)

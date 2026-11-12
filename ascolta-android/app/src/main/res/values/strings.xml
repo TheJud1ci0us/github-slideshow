@@ -686,4 +686,11 @@
     <string name="aq_bg_reef">Reef</string>
     <string name="aq_bg_lagoon">Sunset lagoon</string>
     <string name="aq_bg_deep">Deep sea</string>
+    <string name="doubt_title">Check doubtful words</string>
+    <string name="doubt_text">When a word doesn\'t exist (probably misheard), that sentence is heard again by a second model told the language: NVIDIA Canary for English, French, Spanish and German, otherwise a downloaded Whisper model (Turbo, Small or Base). One-letter slips of common words are corrected. Adds a few seconds to some blocks.</string>
+    <string name="doubt_note">This word doesn\'t exist: it was probably misheard.</string>
+    <string name="doubt_suggest">Maybe it was (tap to correct the sentence):</string>
+    <string name="ahead_title">Transcribe ahead</string>
+    <string name="ahead_minutes">%d min</string>
+    <string name="ahead_all">Whole episode</string>
 </resources>
