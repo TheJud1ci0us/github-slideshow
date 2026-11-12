@@ -242,7 +242,7 @@ report = []
 for rig, ob in FISH:
     bpy.ops.object.select_all(action='DESELECT'); rig.select_set(True); ob.select_set(True); bpy.context.view_layer.objects.active = rig
     path = os.path.join(OUT, ob.name + ".glb")
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_animations=True, export_yup=True, export_apply=False)
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_animations=True, export_animation_mode='ACTIVE_ACTIONS', export_yup=True, export_apply=False)
     ob.data.calc_loop_triangles()
     report.append((ob.name, len(ob.data.loop_triangles), len(ob.data.materials), os.path.getsize(path)))
 for i, (rig, ob) in enumerate(FISH):
