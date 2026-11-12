@@ -70,5 +70,25 @@ class AquariumScreenshotTest {
             MaterialTheme { Surface { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) { GradeButtons {} } } }
         }
     }
+    @Test fun wrongWordPanel() = shot("13-wrong-word") {
+        MaterialTheme { Surface { androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) {
+            WrongWordPanel("and", "en", {}, canSpeak = true, onSpeak = {}, onPlayWord = {}, checking = false,
+                result = WrongWordResult(com.ascolta.app.data.WordCheck.Verdict.PLAUSIBLE, "en", "Selon une étude menée auprès de 690 hommes en public.",
+                    "According to a study of 690 men in public.", coins = 30, learned = listOf("Human"), podcast = "HugoDécrypte"),
+                onCheck = {}, onEditAnyway = {})
+            WrongWordPanel("kläddsträger", "banan", {}, canSpeak = false, onSpeak = {}, onPlayWord = null, checking = false,
+                result = WrongWordResult(com.ascolta.app.data.WordCheck.Verdict.TOO_DIFFERENT, "banan"), onCheck = {}, onEditAnyway = {})
+        } } }
+    }
+    @Test @Config(qualifiers = "w360dp-h780dp-xxhdpi") fun bigFontWrongWord() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+        shot("14-big-wrong-word") {
+            MaterialTheme { Surface { androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) {
+                WrongWordPanel("kläddsträger", "klädstilar", {}, canSpeak = true, onSpeak = {}, onPlayWord = {}, checking = false, result = null, onCheck = {}, onEditAnyway = {})
+                WrongWordPanel("croissance", "crocodiles", {}, canSpeak = true, onSpeak = {}, onPlayWord = {}, checking = false,
+                    result = WrongWordResult(com.ascolta.app.data.WordCheck.Verdict.DOESNT_FIT, "crocodiles", newTranslation = "The growth of crocodiles slows down."), onCheck = {}, onEditAnyway = {})
+            } } }
+        }
+    }
     @Test fun shop() = shot("7-shop") { Screen(rich.copy(decorations = setOf(FishGame.Decoration.SEAWEED)), dark = true, sheet = "shop") }
 }

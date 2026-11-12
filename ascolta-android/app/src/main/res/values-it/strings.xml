@@ -684,4 +684,24 @@
     <string name="frequency_band_1">Prime 1.000</string>
     <string name="frequency_band_2">Fino a 5.000</string>
     <string name="frequency_band_3">Fino a 15.000</string>
+    <string name="wrong_word">Parola sbagliata?</string>
+    <string name="wrong_word_prompt">Cosa hai sentito?</string>
+    <string name="wrong_word_hint">Invece di «%s»</string>
+    <string name="wrong_word_speak">Dillo</string>
+    <string name="wrong_word_check">Controlla</string>
+    <string name="wrong_word_checking">Controllo dell\'intera frase…</string>
+    <string name="wrong_word_small_print">Controllato sul telefono: una parola vera, vicina a ciò che è stato sentito, che ha senso nell\'intera frase (tradotta andata e ritorno). Un buon segno, non una prova.</string>
+    <string name="wrong_ok_title">Orecchio fino! Hai trovato un errore di trascrizione.</string>
+    <string name="wrong_ok_coins">+%d monete</string>
+    <string name="wrong_ok_no_coins">Corretto. (Questa parola è già stata premiata, o i 20 premi di oggi sono finiti.)</string>
+    <string name="wrong_ok_learned">I prossimi episodi di %s lo scriveranno correttamente.</string>
+    <string name="wrong_ok_unchecked">Il senso non è stato verificato: nessuna traduzione per questa lingua sul telefono.</string>
+    <string name="wrong_same">È già ciò che è scritto.</string>
+    <string name="wrong_not_word">«%1$s» non è una parola che l\'app conosce in %2$s.</string>
+    <string name="wrong_too_different">Suona troppo diverso da ciò che è stato sentito qui.</string>
+    <string name="wrong_not_understood">Il traduttore non conosce questa parola in questa frase.</string>
+    <string name="wrong_doesnt_fit">La frase non ha senso con questa parola (verificato traducendola andata e ritorno).</string>
+    <string name="wrong_edit_anyway">Modifica comunque</string>
+    <string name="badge_sharp_ear_title">Orecchio fino ×%1$d</string>
+    <string name="badge_sharp_ear_desc">Trova %1$d errori di trascrizione</string>
 </resources>

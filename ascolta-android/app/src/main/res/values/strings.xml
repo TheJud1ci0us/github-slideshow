@@ -704,4 +704,24 @@
     <string name="frequency_band_1">Top 1,000</string>
     <string name="frequency_band_2">Up to 5,000</string>
     <string name="frequency_band_3">Up to 15,000</string>
+    <string name="wrong_word">Wrong word?</string>
+    <string name="wrong_word_prompt">What did you hear?</string>
+    <string name="wrong_word_hint">Instead of “%s”</string>
+    <string name="wrong_word_speak">Say it</string>
+    <string name="wrong_word_check">Check</string>
+    <string name="wrong_word_checking">Checking the whole sentence…</string>
+    <string name="wrong_word_small_print">Checked on your phone: a real word, close to what was heard, that makes sense in the whole sentence (translated there and back). A good sign, not a proof.</string>
+    <string name="wrong_ok_title">Sharp ear! You caught a transcription mistake.</string>
+    <string name="wrong_ok_coins">+%d coins</string>
+    <string name="wrong_ok_no_coins">Corrected. (This word was already rewarded, or today\'s 20 rewards are used.)</string>
+    <string name="wrong_ok_learned">Future episodes of %s will write it right.</string>
+    <string name="wrong_ok_unchecked">The meaning couldn\'t be checked: no translation for this language on the phone yet.</string>
+    <string name="wrong_same">That\'s already what is written.</string>
+    <string name="wrong_not_word">“%1$s” isn\'t a word the app knows in %2$s.</string>
+    <string name="wrong_too_different">That sounds too different from what was heard here.</string>
+    <string name="wrong_not_understood">The translator doesn\'t know this word in this sentence.</string>
+    <string name="wrong_doesnt_fit">The sentence doesn\'t make sense with this word (checked by translating it there and back).</string>
+    <string name="wrong_edit_anyway">Edit anyway</string>
+    <string name="badge_sharp_ear_title">Sharp ear ×%1$d</string>
+    <string name="badge_sharp_ear_desc">Catch %1$d transcription mistakes</string>
 </resources>

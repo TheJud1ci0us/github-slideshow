@@ -18,6 +18,8 @@ data class Stats(
     val wordsSaved: Int = 0,
     val transcribed: Int = 0,
     val languages: Int = 1,
+    /** Transcription mistakes the learner caught ("Wrong word?", accepted). */
+    val mistakesCaught: Int = 0,
     val earned: Map<String, Long> = emptyMap(),
 ) {
     val totalListenedMs: Long get() = listenedMs.values.sum()
@@ -55,6 +57,8 @@ object Badges {
             Badge("reviews-$n", "🧠", R.string.badge_reviews_title, R.string.badge_reviews_desc, n) { it.cardsReviewed >= n }
         } + listOf(1, 10, 50).map { n ->
             Badge("transcripts-$n", "📜", R.string.badge_transcripts_title, R.string.badge_transcripts_desc, n) { it.transcribed >= n }
+        } + listOf(1, 10, 50).map { n ->
+            Badge("sharp-ear-$n", "👂", R.string.badge_sharp_ear_title, R.string.badge_sharp_ear_desc, n) { it.mistakesCaught >= n }
         } + listOf(2, 3).map { n ->
             Badge("polyglot-$n", "🌍", R.string.badge_polyglot_title, R.string.badge_polyglot_desc, n) { it.languages >= n }
         }
@@ -86,6 +90,7 @@ class ProgressStore(context: Context) {
             streakDays = currentStreak(),
             bestStreak = prefs.getInt("best_streak", 0),
             cardsReviewed = prefs.getInt("reviews", 0),
+            mistakesCaught = prefs.getInt("mistakes_caught", 0),
             earned = earned,
         )
     }
@@ -124,6 +129,12 @@ class ProgressStore(context: Context) {
         pendingMs.forEach { (lang, ms) -> Analytics.track("Listening.time", mapOf("language" to lang), value = ms / 60_000.0) }
         pendingMs = mutableMapOf()
         update { load().copy(wordsSaved = it.wordsSaved, transcribed = it.transcribed, languages = it.languages) }
+    }
+
+    /** A transcription mistake caught by the learner. */
+    fun recordCatch() {
+        prefs.edit().putInt("mistakes_caught", prefs.getInt("mistakes_caught", 0) + 1).apply()
+        update { it.copy(mistakesCaught = it.mistakesCaught + 1) }
     }
 
     fun recordReview() {

@@ -752,6 +752,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             },
             canPlayWord = isCurrent || ep?.localPath?.let { java.io.File(it).exists() } == true,
             wordLists = doubtLists,
+            podcastTitle = podcast?.title,
+            onEditSentence = { editing = segments.indexOf(l.segment).takeIf { it >= 0 }; lookup = null },
             onDismiss = { lookup = null },
         )
     }
@@ -1096,6 +1098,55 @@ private fun wordIndexAt(ranges: List<IntRange>, offset: Int): Int {
     return ranges.indexOfLast { !it.isEmpty() && it.first <= offset }.coerceAtLeast(0)
 }
 
+/**
+ * Checks the learner's word [suggested] in place of [lookup]'s word: real, close to what was
+ * heard, different, and making sense in the whole sentence (translated there and back). A
+ * plausible one corrects the sentence and is rewarded (once per word, 20 a day).
+ */
+private suspend fun checkSuggestion(
+    context: android.content.Context,
+    lookup: WordLookup,
+    suggested: String,
+    language: String,
+    episode: EpisodeEntity?,
+    podcastTitle: String?,
+): WrongWordResult {
+    val graph = context.graph
+    val lists = graph.wordLists
+    val sentence = lookup.segment.text
+    val at = sentence.indexOf(lookup.word).takeIf { it >= 0 } ?: sentence.lowercase().indexOf(lookup.word.lowercase())
+    val languageName = com.ascolta.app.data.languageName(language)
+    if (at < 0) return WrongWordResult(com.ascolta.app.data.WordCheck.Verdict.EMPTY, suggested, languageName = languageName)
+    val range = at until at + lookup.word.length
+    val quick = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        com.ascolta.app.data.WordCheck.quick(lookup.word, suggested, language, lists) { w -> runCatching { graph.dictionary.lookup(w, language) }.getOrNull() != null }
+    }
+    if (quick != null) return WrongWordResult(quick, suggested.trim(), languageName = languageName)
+    val newSentence = com.ascolta.app.data.WordCheck.replace(sentence, range, suggested)
+    val native = graph.settings.nativeLanguage.value
+    // The whole new sentence translated, then back; and the old one's round trip, to compare.
+    val there = if (native == language) null else runCatching { graph.repo.translateText(newSentence, language, native) }.getOrNull()
+    val back = there?.let { runCatching { graph.repo.translateText(it, native, language) }.getOrNull() }
+    val backOld = if (back == null) null else runCatching {
+        graph.repo.translateText(lookup.segment.translation ?: graph.repo.translateText(sentence, language, native), native, language)
+    }.getOrNull()
+    val meaning = if (there == null) null else com.ascolta.app.data.WordCheck.meaning(suggested, newSentence, sentence, there, back, backOld, native, lists)
+    com.ascolta.app.data.AppLog.d("WrongWord") {
+        "\"${lookup.word}\" → \"$suggested\": ${meaning ?: "plausible"}; there \"${there?.take(80)}\"; back \"${back?.take(80)}\"; old back \"${backOld?.take(80)}\""
+    }
+    if (meaning != null) return WrongWordResult(meaning, suggested.trim(), newSentence, there, languageName = languageName)
+    val learned = graph.repo.editSentence(episode, lookup.segment, newSentence)
+    val key = "${episode?.id}:${lookup.segment.startMs}:${range.first}"
+    val rewarded = graph.fish.rewardCatch(key)
+    if (rewarded) graph.progress.recordCatch()
+    com.ascolta.app.data.Analytics.track("Transcript.mistakeCaught", mapOf("language" to language, "rewarded" to rewarded.toString()))
+    return WrongWordResult(
+        com.ascolta.app.data.WordCheck.Verdict.PLAUSIBLE, suggested.trim(), newSentence, there,
+        coins = if (rewarded) com.ascolta.app.data.FishGame.CATCH_COINS else 0,
+        learned = learned, podcast = podcastTitle, meaningUnchecked = there == null || back == null, languageName = languageName,
+    )
+}
+
 /** Colours of the frequency bands (top 1,000 · up to 5,000 · up to 15,000), lighter on a dark theme. */
 @Composable
 internal fun frequencyColors(): List<Color> {
@@ -1216,6 +1267,9 @@ private fun WordSheet(
     onDismiss: () -> Unit,
     /** The long word lists, to tell whether the word was probably misheard; null for other languages. */
     wordLists: com.ascolta.app.data.WordLists? = null,
+    podcastTitle: String? = null,
+    /** Opens the sentence's edit dialog ("Edit anyway"). */
+    onEditSentence: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val graph = context.graph
@@ -1328,6 +1382,53 @@ private fun WordSheet(
                     label = { Text(stringResource(R.string.web_search)) },
                     leadingIcon = { Icon(Icons.Filled.Search, null, Modifier.size(18.dp)) },
                     shape = androidx.compose.foundation.shape.CircleShape,
+                )
+            }
+            // "Wrong word?": the learner says what they heard; a plausible correction is rewarded.
+            var wrongOpen by remember(lookup) { mutableStateOf(false) }
+            var suggestion by remember(lookup) { mutableStateOf("") }
+            var checking by remember(lookup) { mutableStateOf(false) }
+            var checked by remember(lookup) { mutableStateOf<WrongWordResult?>(null) }
+            val speak = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+            ) { r ->
+                r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { suggestion = it.trim().trimEnd('.', '!', '?'); checked = null }
+            }
+            val canSpeak = remember { android.speech.SpeechRecognizer.isRecognitionAvailable(context) }
+            val isDoubtful = wordLists != null && remember(lookup.word, wordLists) {
+                com.ascolta.app.data.DoubtfulWords.find(lookup.word.lowercase(), language, wordLists).isNotEmpty()
+            }
+            if (!wrongOpen) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { wrongOpen = true },
+                    modifier = Modifier.padding(top = 4.dp),
+                    colors = if (isDoubtful) androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    else androidx.compose.material3.ButtonDefaults.outlinedButtonColors(),
+                ) { Text(stringResource(R.string.wrong_word)) }
+            } else {
+                WrongWordPanel(
+                    heard = lookup.word, input = suggestion, onInput = { suggestion = it; checked = null },
+                    canSpeak = canSpeak,
+                    onSpeak = {
+                        runCatching {
+                            speak.launch(
+                                android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, language)
+                                    .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, context.getString(R.string.wrong_word_prompt)),
+                            )
+                        }
+                    },
+                    onPlayWord = timing?.takeIf { canPlayWord }?.let { (from, to) -> { onPlayWord(from, to) } },
+                    checking = checking, result = checked,
+                    onCheck = {
+                        checking = true
+                        scope.launch {
+                            checked = checkSuggestion(context, lookup, suggestion, language, episode, podcastTitle)
+                            checking = false
+                        }
+                    },
+                    onEditAnyway = onEditSentence,
                 )
             }
             if (noVoice) {

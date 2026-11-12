@@ -16,6 +16,13 @@
 
     <!-- The phone's text-to-speech engine (to pronounce words); needed to see it on Android 11+. -->
     <queries>
+        <!-- Voice typing, to say a word ("Wrong word?"). -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>

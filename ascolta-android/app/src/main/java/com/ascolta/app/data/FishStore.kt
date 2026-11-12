@@ -43,6 +43,8 @@ class FishStore(private val context: Context) {
                 gifted = o.optBoolean("gifted"), unseenMs = o.optLong("unseen"),
                 episodeId = o.optLong("episode"), episodeMs = o.optLong("episodeMs"),
                 rewarded = (0 until rewarded.length()).map { rewarded.getLong(it) },
+                catchDay = o.optLong("catchDay"), catchesToday = o.optInt("catchesToday"),
+                caught = o.optJSONArray("caught")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
             )
         }.onFailure { AppLog.w("Aquarium", "Saved game unreadable: $it") }.getOrNull() ?: State()
     }
@@ -67,6 +69,7 @@ class FishStore(private val context: Context) {
             .put("day", s.day).put("dayMs", s.dayMs)
             .put("gifted", s.gifted).put("unseen", s.unseenMs).put("episode", s.episodeId).put("episodeMs", s.episodeMs)
             .put("rewarded", JSONArray(s.rewarded))
+            .put("catchDay", s.catchDay).put("catchesToday", s.catchesToday).put("caught", JSONArray(s.caught))
         prefs.edit().putString("state", o.toString()).apply()
     }
 
@@ -111,6 +114,9 @@ class FishStore(private val context: Context) {
         count()
         change { s -> FishGame.gift(s, pastListeningMs).copy(unseenMs = 0) to Unit }
     }
+
+    /** Coins for a caught transcription mistake; false when already rewarded or the daily limit is reached. */
+    fun rewardCatch(key: String): Boolean = change { s -> FishGame.rewardCatch(s, key, today)?.let { it to true } } ?: false
 
     fun cast(bait: FishGame.Bait): FishGame.Catch? = change { s -> FishGame.cast(s, bait, today)?.let { it.state to it } }
     fun merge(fish: FishGame.Fish): Boolean = change { s -> FishGame.merge(s, fish)?.let { it to true } } ?: false

@@ -677,4 +677,24 @@
     <string name="frequency_band_1">Top 1.000</string>
     <string name="frequency_band_2">Bis 5.000</string>
     <string name="frequency_band_3">Bis 15.000</string>
+    <string name="wrong_word">Falsches Wort?</string>
+    <string name="wrong_word_prompt">Was hast du gehört?</string>
+    <string name="wrong_word_hint">Statt „%s“</string>
+    <string name="wrong_word_speak">Sag es</string>
+    <string name="wrong_word_check">Prüfen</string>
+    <string name="wrong_word_checking">Der ganze Satz wird geprüft…</string>
+    <string name="wrong_word_small_print">Auf deinem Handy geprüft: ein echtes Wort, nah am Gehörten, das im ganzen Satz Sinn ergibt (hin und zurück übersetzt). Ein gutes Zeichen, kein Beweis.</string>
+    <string name="wrong_ok_title">Gutes Gehör! Du hast einen Transkriptionsfehler entdeckt.</string>
+    <string name="wrong_ok_coins">+%d Münzen</string>
+    <string name="wrong_ok_no_coins">Korrigiert. (Dieses Wort wurde schon belohnt, oder die 20 Belohnungen von heute sind aufgebraucht.)</string>
+    <string name="wrong_ok_learned">Künftige Folgen von %s schreiben es richtig.</string>
+    <string name="wrong_ok_unchecked">Der Sinn konnte nicht geprüft werden: noch keine Übersetzung für diese Sprache auf dem Handy.</string>
+    <string name="wrong_same">Das steht schon da.</string>
+    <string name="wrong_not_word">„%1$s“ ist kein Wort, das die App auf %2$s kennt.</string>
+    <string name="wrong_too_different">Das klingt zu anders als das, was hier gehört wurde.</string>
+    <string name="wrong_not_understood">Der Übersetzer kennt dieses Wort in diesem Satz nicht.</string>
+    <string name="wrong_doesnt_fit">Der Satz ergibt mit diesem Wort keinen Sinn (geprüft durch Hin- und Rückübersetzung).</string>
+    <string name="wrong_edit_anyway">Trotzdem bearbeiten</string>
+    <string name="badge_sharp_ear_title">Gutes Gehör ×%1$d</string>
+    <string name="badge_sharp_ear_desc">Entdecke %1$d Transkriptionsfehler</string>
 </resources>

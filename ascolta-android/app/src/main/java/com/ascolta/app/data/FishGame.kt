@@ -19,6 +19,9 @@ object FishGame {
     const val GUARANTEE_AFTER = 10
     const val MERGE = 3
     const val TANK_SIZE = 18
+    /** Coins for a caught transcription mistake, and how many are rewarded a day. */
+    const val CATCH_COINS = 30
+    const val CATCHES_PER_DAY = 20
     private const val COMBO_BREAK_MS = 2 * MINUTE
 
     enum class Tier { COMMON, UNCOMMON, RARE, VERY_RARE, LEGENDARY }
@@ -87,6 +90,10 @@ object FishGame {
         val episodeMs: Long = 0,
         /** Episodes whose "finished" free cast was given (the latest 300). */
         val rewarded: List<Long> = emptyList(),
+        /** Caught mistakes rewarded on [catchDay], and which ones (the latest 500), so each counts once. */
+        val catchDay: Long = 0,
+        val catchesToday: Int = 0,
+        val caught: List<String> = emptyList(),
     ) {
         val coins: Int get() = (coinMs / COIN_MS).toInt()
         val multiplier: Double get() = multiplier(comboMs)
@@ -156,6 +163,20 @@ object FishGame {
             fish = s.fish + (fish.key to s.count(fish) + 1),
         )
         return Catch(next, fish, s.count(fish) == 0, guaranteed, free)
+    }
+
+    /**
+     * Coins for a transcription mistake caught on [day] ([key]: episode, sentence and word),
+     * or null when this one was already rewarded or today's [CATCHES_PER_DAY] are used.
+     */
+    fun rewardCatch(s: State, key: String, day: Long): State? {
+        if (key in s.caught) return null
+        val today = if (s.catchDay == day) s.catchesToday else 0
+        if (today >= CATCHES_PER_DAY) return null
+        return s.copy(
+            coinMs = s.coinMs + CATCH_COINS * COIN_MS, unseenMs = s.unseenMs + CATCH_COINS * COIN_MS,
+            catchDay = day, catchesToday = today + 1, caught = (s.caught + key).takeLast(500),
+        )
     }
 
     /** Three of [fish] become one of the next tier, or null when there aren't three (or it's Legendary). */

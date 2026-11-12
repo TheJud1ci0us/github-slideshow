@@ -684,4 +684,24 @@
     <string name="frequency_band_1">Top 1 000</string>
     <string name="frequency_band_2">Jusqu\'à 5 000</string>
     <string name="frequency_band_3">Jusqu\'à 15 000</string>
+    <string name="wrong_word">Mot erroné ?</string>
+    <string name="wrong_word_prompt">Qu\'avez-vous entendu ?</string>
+    <string name="wrong_word_hint">Au lieu de « %s »</string>
+    <string name="wrong_word_speak">Le dire</string>
+    <string name="wrong_word_check">Vérifier</string>
+    <string name="wrong_word_checking">Vérification de toute la phrase…</string>
+    <string name="wrong_word_small_print">Vérifié sur votre téléphone : un vrai mot, proche de ce qui a été entendu, qui a du sens dans toute la phrase (traduite aller-retour). Un bon signe, pas une preuve.</string>
+    <string name="wrong_ok_title">Bonne oreille ! Vous avez repéré une erreur de transcription.</string>
+    <string name="wrong_ok_coins">+%d pièces</string>
+    <string name="wrong_ok_no_coins">Corrigé. (Ce mot a déjà été récompensé, ou les 20 récompenses du jour sont utilisées.)</string>
+    <string name="wrong_ok_learned">Les prochains épisodes de %s l\'écriront correctement.</string>
+    <string name="wrong_ok_unchecked">Le sens n\'a pas pu être vérifié : pas encore de traduction pour cette langue sur le téléphone.</string>
+    <string name="wrong_same">C\'est déjà ce qui est écrit.</string>
+    <string name="wrong_not_word">« %1$s » n\'est pas un mot que l\'app connaît en %2$s.</string>
+    <string name="wrong_too_different">Cela sonne trop différemment de ce qui a été entendu ici.</string>
+    <string name="wrong_not_understood">Le traducteur ne connaît pas ce mot dans cette phrase.</string>
+    <string name="wrong_doesnt_fit">La phrase n\'a pas de sens avec ce mot (vérifié en la traduisant aller-retour).</string>
+    <string name="wrong_edit_anyway">Modifier quand même</string>
+    <string name="badge_sharp_ear_title">Bonne oreille ×%1$d</string>
+    <string name="badge_sharp_ear_desc">Repérez %1$d erreurs de transcription</string>
 </resources>

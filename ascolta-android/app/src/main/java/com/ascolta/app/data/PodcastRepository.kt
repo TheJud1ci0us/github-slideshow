@@ -482,16 +482,17 @@ class PodcastRepository(
      * The learner corrects a sentence. Names they fixed (capitalised words that weren't there
      * before) are added to the podcast's names list, so the next episodes get them right.
      */
-    suspend fun editSentence(episode: EpisodeEntity?, segment: Segment, text: String) {
-        val id = episode?.id ?: return
-        if (text.isBlank() || text.trim() == segment.text.trim()) return
+    suspend fun editSentence(episode: EpisodeEntity?, segment: Segment, text: String): List<String> {
+        val id = episode?.id ?: return emptyList()
+        if (text.isBlank() || text.trim() == segment.text.trim()) return emptyList()
         transcripts.edit(id, segment.startMs, text)
-        val podcastId = episode.podcastId ?: return
+        val podcastId = episode.podcastId ?: return emptyList()
         val before = Regex("""[\p{L}][\p{L}\p{M}'’\-]*""").findAll(segment.text).map { it.value }.toSet()
         val added = Regex("""[\p{L}][\p{L}\p{M}'’\-]*""").findAll(text).map { it.value }
             .filterIndexed { i, w -> i > 0 && w[0].isUpperCase() && w.length >= 3 && w !in before }
             .toList()
         addPodcastNames(podcastId, added)
+        return added
     }
 
     /**
