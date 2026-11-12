@@ -690,7 +690,7 @@
     <string name="wrong_word_speak">Le dire</string>
     <string name="wrong_word_check">Vérifier</string>
     <string name="wrong_word_checking">Vérification de toute la phrase…</string>
-    <string name="wrong_word_small_print">Vérifié sur votre téléphone : un vrai mot, proche de ce qui a été entendu, qui a du sens dans toute la phrase (traduite aller-retour). Un bon signe, pas une preuve.</string>
+    <string name="wrong_word_small_print">Vérifié sur votre téléphone : un vrai mot qui a du sens dans toute la phrase (traduite aller-retour). Un bon signe, pas une preuve.</string>
     <string name="wrong_ok_title">Bonne oreille ! Vous avez repéré une erreur de transcription.</string>
     <string name="wrong_ok_coins">+%d pièces</string>
     <string name="wrong_ok_no_coins">Corrigé. (Ce mot a déjà été récompensé, ou les 20 récompenses du jour sont utilisées.)</string>

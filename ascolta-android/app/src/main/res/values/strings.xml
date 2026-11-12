@@ -710,7 +710,7 @@
     <string name="wrong_word_speak">Say it</string>
     <string name="wrong_word_check">Check</string>
     <string name="wrong_word_checking">Checking the whole sentence…</string>
-    <string name="wrong_word_small_print">Checked on your phone: a real word, close to what was heard, that makes sense in the whole sentence (translated there and back). A good sign, not a proof.</string>
+    <string name="wrong_word_small_print">Checked on your phone: a real word that makes sense in the whole sentence (translated there and back). A good sign, not a proof.</string>
     <string name="wrong_ok_title">Sharp ear! You caught a transcription mistake.</string>
     <string name="wrong_ok_coins">+%d coins</string>
     <string name="wrong_ok_no_coins">Corrected. (This word was already rewarded, or today\'s 20 rewards are used.)</string>

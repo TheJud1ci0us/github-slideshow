@@ -16,7 +16,8 @@ class WordCheckTest {
     @Test
     fun aRealCloseDifferentWordPassesTheQuickChecks() {
         assertNull(WordCheck.quick("kläddsträger", "klädstilar", "sv", lists))
-        assertEquals(Verdict.TOO_DIFFERENT, WordCheck.quick("kläddsträger", "banan", "sv", lists))
+        // Any real word goes on to the sentence check, however different it sounds.
+        assertNull(WordCheck.quick("kläddsträger", "banan", "sv", lists))
         assertEquals(Verdict.NOT_A_WORD, WordCheck.quick("kläddsträger", "klädstrarg", "sv", lists))
         assertEquals(Verdict.SAME, WordCheck.quick("Associée", "associee", "fr", lists)) // accents and case aside
         assertEquals(Verdict.EMPTY, WordCheck.quick("and", " … ", "fr", lists))

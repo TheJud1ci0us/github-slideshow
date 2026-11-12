@@ -683,7 +683,7 @@
     <string name="wrong_word_speak">Sag es</string>
     <string name="wrong_word_check">Prüfen</string>
     <string name="wrong_word_checking">Der ganze Satz wird geprüft…</string>
-    <string name="wrong_word_small_print">Auf deinem Handy geprüft: ein echtes Wort, nah am Gehörten, das im ganzen Satz Sinn ergibt (hin und zurück übersetzt). Ein gutes Zeichen, kein Beweis.</string>
+    <string name="wrong_word_small_print">Auf deinem Handy geprüft: ein echtes Wort, das im ganzen Satz Sinn ergibt (hin und zurück übersetzt). Ein gutes Zeichen, kein Beweis.</string>
     <string name="wrong_ok_title">Gutes Gehör! Du hast einen Transkriptionsfehler entdeckt.</string>
     <string name="wrong_ok_coins">+%d Münzen</string>
     <string name="wrong_ok_no_coins">Korrigiert. (Dieses Wort wurde schon belohnt, oder die 20 Belohnungen von heute sind aufgebraucht.)</string>

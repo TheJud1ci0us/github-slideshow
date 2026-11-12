@@ -690,7 +690,7 @@
     <string name="wrong_word_speak">Dilo</string>
     <string name="wrong_word_check">Comprobar</string>
     <string name="wrong_word_checking">Comprobando toda la frase…</string>
-    <string name="wrong_word_small_print">Comprobado en tu teléfono: una palabra real, parecida a lo que se oyó, que tiene sentido en toda la frase (traducida de ida y vuelta). Una buena señal, no una prueba.</string>
+    <string name="wrong_word_small_print">Comprobado en tu teléfono: una palabra real que tiene sentido en toda la frase (traducida de ida y vuelta). Una buena señal, no una prueba.</string>
     <string name="wrong_ok_title">¡Buen oído! Has detectado un error de transcripción.</string>
     <string name="wrong_ok_coins">+%d monedas</string>
     <string name="wrong_ok_no_coins">Corregido. (Esta palabra ya fue premiada, o se usaron las 20 recompensas de hoy.)</string>

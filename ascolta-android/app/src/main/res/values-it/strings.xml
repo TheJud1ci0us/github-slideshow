@@ -690,7 +690,7 @@
     <string name="wrong_word_speak">Dillo</string>
     <string name="wrong_word_check">Controlla</string>
     <string name="wrong_word_checking">Controllo dell\'intera frase…</string>
-    <string name="wrong_word_small_print">Controllato sul telefono: una parola vera, vicina a ciò che è stato sentito, che ha senso nell\'intera frase (tradotta andata e ritorno). Un buon segno, non una prova.</string>
+    <string name="wrong_word_small_print">Controllato sul telefono: una parola vera che ha senso nell\'intera frase (tradotta andata e ritorno). Un buon segno, non una prova.</string>
     <string name="wrong_ok_title">Orecchio fino! Hai trovato un errore di trascrizione.</string>
     <string name="wrong_ok_coins">+%d monete</string>
     <string name="wrong_ok_no_coins">Corretto. (Questa parola è già stata premiata, o i 20 premi di oggi sono finiti.)</string>

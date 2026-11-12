@@ -4,8 +4,8 @@ import java.text.Normalizer
 
 /**
  * Whether a word the learner heard instead of the transcribed one is a plausible correction
- * (pure, unit-tested): a real word, close to what was transcribed (what the model heard),
- * different from it, and making sense in the whole sentence, judged with the translator both
+ * (pure, unit-tested): a real word, different from the transcribed one, and making sense in
+ * the whole sentence, judged with the translator both
  * ways (the new sentence translated, then translated back).
  */
 object WordCheck {
@@ -52,7 +52,7 @@ object WordCheck {
                 if (!real) return Verdict.NOT_A_WORD
             }
         }
-        if (!close(heard, suggested)) return Verdict.TOO_DIFFERENT
+        // No "sounds alike" rule: what counts is that the sentence makes sense with the new word.
         return null
     }
 

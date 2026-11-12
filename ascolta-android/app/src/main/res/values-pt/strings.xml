@@ -690,7 +690,7 @@
     <string name="wrong_word_speak">Diga</string>
     <string name="wrong_word_check">Verificar</string>
     <string name="wrong_word_checking">Verificando a frase inteira…</string>
-    <string name="wrong_word_small_print">Verificado no seu celular: uma palavra real, parecida com o que foi ouvido, que faz sentido na frase inteira (traduzida ida e volta). Um bom sinal, não uma prova.</string>
+    <string name="wrong_word_small_print">Verificado no seu celular: uma palavra real que faz sentido na frase inteira (traduzida ida e volta). Um bom sinal, não uma prova.</string>
     <string name="wrong_ok_title">Ouvido afiado! Você pegou um erro de transcrição.</string>
     <string name="wrong_ok_coins">+%d moedas</string>
     <string name="wrong_ok_no_coins">Corrigido. (Esta palavra já foi premiada, ou as 20 recompensas de hoje acabaram.)</string>
