@@ -666,4 +666,6 @@
     <string name="ahead_title">Im Voraus transkribieren</string>
     <string name="ahead_minutes">%d Min.</string>
     <string name="ahead_all">Ganze Folge</string>
+    <string name="google_translate">Google Übersetzer</string>
+    <string name="web_search">Bei Google suchen</string>
 </resources>

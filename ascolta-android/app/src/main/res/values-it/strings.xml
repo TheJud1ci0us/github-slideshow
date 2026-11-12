@@ -673,4 +673,6 @@
     <string name="ahead_title">Trascrivi in anticipo</string>
     <string name="ahead_minutes">%d min</string>
     <string name="ahead_all">Episodio intero</string>
+    <string name="google_translate">Google Traduttore</string>
+    <string name="web_search">Cerca su Google</string>
 </resources>

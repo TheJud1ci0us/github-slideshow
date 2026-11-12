@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.MoreVert
@@ -453,6 +455,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             val sel = if (raw != null && raw.canJoin && joinPref) raw.joined() else raw
             if (sel != null && raw != null) SelectionBar(
                 text = sel.text,
+                onTranslate = { WebLookup.translate(context, sel.text, transcript?.language ?: settings.learningLanguage.value, settings.nativeLanguage.value) },
+                onSearch = { WebLookup.search(context, sel.text) },
                 canJoin = raw.canJoin,
                 joined = joinPref,
                 onJoin = { settings.joinSelection.set(it) },
@@ -1255,6 +1259,21 @@ private fun WordSheet(
                     shape = androidx.compose.foundation.shape.CircleShape,
                 )
             }
+            // The word on Google: Translate (the app if installed) or a search.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = { WebLookup.translate(context, lookup.word, language, graph.settings.nativeLanguage.value) },
+                    label = { Text(stringResource(R.string.google_translate)) },
+                    leadingIcon = { Icon(Icons.Filled.Translate, null, Modifier.size(18.dp)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                )
+                AssistChip(
+                    onClick = { WebLookup.search(context, lookup.word) },
+                    label = { Text(stringResource(R.string.web_search)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, null, Modifier.size(18.dp)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                )
+            }
             if (noVoice) {
                 // No phone voice for this language: explain and offer to install one.
                 Text(stringResource(R.string.no_tts_voice, com.ascolta.app.data.languageName(language)),
@@ -1443,6 +1462,8 @@ private fun SelectionBar(
     onCopy: () -> Unit,
     onEdit: () -> Unit,
     onClose: () -> Unit,
+    onTranslate: () -> Unit = {},
+    onSearch: () -> Unit = {},
 ) {
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -1451,6 +1472,8 @@ private fun SelectionBar(
                     "“$text”", style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(onClick = onTranslate) { Icon(Icons.Filled.Translate, stringResource(R.string.google_translate)) }
+                IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, stringResource(R.string.web_search)) }
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.action_close)) }
             }
             Text(stringResource(R.string.select_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
