@@ -177,7 +177,7 @@ class Settings(context: Context) {
     /** Softly highlight words not yet marked Familiar or Known (optional). */
     val highlightNewWords = bool("highlight_new_words", false)
     /** Jump over detected ads by itself (otherwise a "Skip ad" button is offered). */
-    val skipAdsAutomatically = bool("skip_ads_auto", false)
+    val skipAdsAutomatically = bool("skip_ads_auto", true)
     /** The note about transcription accuracy was read. */
     val accuracyNoteSeen = bool("accuracy_note_seen", false)
     /** Flashcards reviewed in total, and whether the store rating was asked. */

@@ -520,18 +520,9 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ep != null) StatusBanner(ep, transcript, translating)
             if (ep != null) LanguageFixBanner()
-            // In an ad: skip it (or it is skipped by itself, if chosen in Settings).
+            // In an ad: a button to skip it. Skipping by itself (Settings) is done by the player
+            // service, so it also works with the screen off.
             val currentAd = com.ascolta.app.data.AdDetector.at(ads, position)
-            val autoSkip by settings.skipAdsAutomatically.flow.collectAsState()
-            var skipped by remember { mutableStateOf(setOf<Long>()) }
-            LaunchedEffect(currentAd, autoSkip, player.isPlaying) {
-                val ad = currentAd ?: return@LaunchedEffect
-                if (autoSkip && isCurrent && player.isPlaying && ad.startMs !in skipped) {
-                    skipped = skipped + ad.startMs
-                    seek(ad.endMs)
-                    Toast.makeText(context, context.getString(R.string.ad_skipped), Toast.LENGTH_SHORT).show()
-                }
-            }
             if (currentAd != null && segments.isNotEmpty()) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -539,7 +530,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 ) {
                     Text(stringResource(R.string.ad_now), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    FilledTonalButton(onClick = { skipped = skipped + currentAd.startMs; seek(currentAd.endMs) }) {
+                    FilledTonalButton(onClick = { seek(currentAd.endMs) }) {
                         Icon(Icons.Filled.SkipNext, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.ad_skip))
                     }

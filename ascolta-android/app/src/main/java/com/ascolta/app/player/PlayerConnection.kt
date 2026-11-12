@@ -107,6 +107,44 @@ class PlayerConnection(
 
     /** Sentence end times of the current episode, used for auto-pause. */
     @Volatile var sentenceEnds: LongArray = LongArray(0)
+
+    // Ads of the episode playing (found in its transcript), skipped here so it works with the
+    // screen off or the app in the background, not only while the player screen is open.
+    @Volatile private var ads: List<com.ascolta.app.data.AdDetector.Ad> = emptyList()
+    private var adsEpisode = 0L
+    private var adsJob: kotlinx.coroutines.Job? = null
+    private val skippedAds = HashSet<Long>()
+
+    /** Keeps [ads] up to date for [episodeId], as its transcript is written. */
+    private fun watchAds(episodeId: Long) {
+        if (episodeId == adsEpisode) return
+        adsEpisode = episodeId
+        ads = emptyList()
+        skippedAds.clear()
+        adsJob?.cancel()
+        val graph = (context.applicationContext as com.ascolta.app.AscoltaApp).graph
+        adsJob = scope.launch(Dispatchers.Default) {
+            suspend fun refresh() {
+                val t = runCatching { graph.repo.loadTranscript(episodeId) }.getOrNull() ?: return
+                ads = runCatching { com.ascolta.app.data.AdDetector.detect(t.segments.sortedBy { it.startMs }) }.getOrDefault(emptyList())
+            }
+            refresh()
+            graph.transcripts.updates.collect { id ->
+                if (id == episodeId) { refresh(); delay(3_000) } // the transcript is saved often while being written
+            }
+        }
+    }
+
+    /** Jumps over the ad playing at [position] (once per ad), when the learner chose it. */
+    private fun checkAds(c: MediaController, position: Long) {
+        if (!settings.skipAdsAutomatically.value) return
+        val ad = com.ascolta.app.data.AdDetector.at(ads, position) ?: return
+        if (!skippedAds.add(ad.startMs)) return // skipped once already: the learner went back to it
+        c.seekTo(ad.endMs)
+        lastTickPosition = ad.endMs
+        com.ascolta.app.data.AppLog.i("Ads", "Skipped ad ${ad.startMs / 1000}s–${ad.endMs / 1000}s")
+        android.widget.Toast.makeText(context, com.ascolta.app.R.string.ad_skipped, android.widget.Toast.LENGTH_SHORT).show()
+    }
     private var lastTickPosition = 0L
     private var lastSavedAt = 0L
 
@@ -300,7 +338,8 @@ class PlayerConnection(
                     if (length > 60_000 && position >= length - 5_000) fish.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
                     checkAutoPause(c, position)
                     checkSleep(c, position)
-                    lastTickPosition = position
+                    c.currentMediaItem?.mediaId?.toLongOrNull()?.let { id -> watchAds(id); checkAds(c, position) }
+                    lastTickPosition = c.currentPosition
                     syncState()
                     if (System.currentTimeMillis() - lastSavedAt > 5_000) saveCurrentPosition()
                 }
