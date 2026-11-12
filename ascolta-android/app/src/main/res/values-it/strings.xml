@@ -675,4 +675,13 @@
     <string name="ahead_all">Episodio intero</string>
     <string name="google_translate">Google Traduttore</string>
     <string name="web_search">Cerca su Google</string>
+    <string name="cards_direction">Direzione delle carte</string>
+    <string name="cards_direction_word">Parola → significato</string>
+    <string name="cards_direction_meaning">Significato → parola</string>
+    <string name="cards_direction_mixed">Misto</string>
+    <string name="frequency_title">Colora le parole in base alla frequenza</string>
+    <string name="frequency_text">Verde: le 1.000 parole più comuni della lingua. Blu: fino a 5.000. Viola: fino a 15.000. Le parole più rare restano normali: impara prima quelle colorate.</string>
+    <string name="frequency_band_1">Prime 1.000</string>
+    <string name="frequency_band_2">Fino a 5.000</string>
+    <string name="frequency_band_3">Fino a 15.000</string>
 </resources>

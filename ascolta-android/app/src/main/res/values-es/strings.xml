@@ -675,4 +675,13 @@
     <string name="ahead_all">Episodio entero</string>
     <string name="google_translate">Traductor de Google</string>
     <string name="web_search">Buscar en Google</string>
+    <string name="cards_direction">Sentido de las tarjetas</string>
+    <string name="cards_direction_word">Palabra → significado</string>
+    <string name="cards_direction_meaning">Significado → palabra</string>
+    <string name="cards_direction_mixed">Mezclado</string>
+    <string name="frequency_title">Colorear las palabras según su frecuencia</string>
+    <string name="frequency_text">Verde: las 1.000 palabras más comunes del idioma. Azul: hasta 5.000. Morado: hasta 15.000. Las más raras quedan sin color: aprende primero las de color.</string>
+    <string name="frequency_band_1">Top 1.000</string>
+    <string name="frequency_band_2">Hasta 5.000</string>
+    <string name="frequency_band_3">Hasta 15.000</string>
 </resources>

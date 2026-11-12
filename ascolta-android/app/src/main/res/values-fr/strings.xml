@@ -675,4 +675,13 @@
     <string name="ahead_all">Épisode entier</string>
     <string name="google_translate">Google Traduction</string>
     <string name="web_search">Rechercher sur Google</string>
+    <string name="cards_direction">Sens des cartes</string>
+    <string name="cards_direction_word">Mot → sens</string>
+    <string name="cards_direction_meaning">Sens → mot</string>
+    <string name="cards_direction_mixed">Mélangé</string>
+    <string name="frequency_title">Colorer les mots selon leur fréquence</string>
+    <string name="frequency_text">Vert : les 1 000 mots les plus courants de la langue. Bleu : jusqu\'à 5 000. Violet : jusqu\'à 15 000. Les mots plus rares restent normaux : apprenez d\'abord les mots colorés.</string>
+    <string name="frequency_band_1">Top 1 000</string>
+    <string name="frequency_band_2">Jusqu\'à 5 000</string>
+    <string name="frequency_band_3">Jusqu\'à 15 000</string>
 </resources>

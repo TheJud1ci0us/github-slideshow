@@ -668,4 +668,13 @@
     <string name="ahead_all">Ganze Folge</string>
     <string name="google_translate">Google Übersetzer</string>
     <string name="web_search">Bei Google suchen</string>
+    <string name="cards_direction">Kartenrichtung</string>
+    <string name="cards_direction_word">Wort → Bedeutung</string>
+    <string name="cards_direction_meaning">Bedeutung → Wort</string>
+    <string name="cards_direction_mixed">Gemischt</string>
+    <string name="frequency_title">Wörter nach Häufigkeit färben</string>
+    <string name="frequency_text">Grün: die 1.000 häufigsten Wörter der Sprache. Blau: bis 5.000. Lila: bis 15.000. Seltenere Wörter bleiben normal: Lerne zuerst die farbigen.</string>
+    <string name="frequency_band_1">Top 1.000</string>
+    <string name="frequency_band_2">Bis 5.000</string>
+    <string name="frequency_band_3">Bis 15.000</string>
 </resources>

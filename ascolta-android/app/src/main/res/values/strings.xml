@@ -695,4 +695,13 @@
     <string name="ahead_all">Whole episode</string>
     <string name="google_translate">Google Translate</string>
     <string name="web_search">Search on Google</string>
+    <string name="cards_direction">Card direction</string>
+    <string name="cards_direction_word">Word → meaning</string>
+    <string name="cards_direction_meaning">Meaning → word</string>
+    <string name="cards_direction_mixed">Mixed</string>
+    <string name="frequency_title">Colour words by how common they are</string>
+    <string name="frequency_text">Green: the 1,000 most common words of the language. Blue: up to 5,000. Purple: up to 15,000. Rarer words stay plain: learn the coloured ones first.</string>
+    <string name="frequency_band_1">Top 1,000</string>
+    <string name="frequency_band_2">Up to 5,000</string>
+    <string name="frequency_band_3">Up to 15,000</string>
 </resources>

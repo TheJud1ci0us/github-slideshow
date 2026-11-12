@@ -440,10 +440,12 @@ internal fun AquariumContent(
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { sheet = "collection" }, modifier = Modifier.weight(1f)) {
-                    Text("${stringResource(R.string.aq_collection)} · ${state.collected}/${FishGame.ALL.size}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                OutlinedButton(onClick = { sheet = "collection" }, modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) {
+                    FitText("${stringResource(R.string.aq_collection)} · ${state.collected}/${FishGame.ALL.size}", style = MaterialTheme.typography.labelLarge)
                 }
-                OutlinedButton(onClick = { sheet = "shop" }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.aq_shop), maxLines = 1) }
+                OutlinedButton(onClick = { sheet = "shop" }, modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) {
+                    FitText(stringResource(R.string.aq_shop), style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
     }
@@ -573,8 +575,8 @@ private fun Fishing(
             Image(painterResource(baitArt(b)), null, Modifier.size(40.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(baitName(b)), style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FitText(stringResource(baitName(b)), style = MaterialTheme.typography.titleSmall)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     b.odds.forEachIndexed { i, odds ->
                         if (odds > 0) Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(8.dp).background(tierColor(Tier.entries[i]), CircleShape))
@@ -584,7 +586,7 @@ private fun Fishing(
                 }
             }
             Image(painterResource(R.drawable.aq_coin), null, Modifier.size(18.dp))
-            Text(" ${b.price}", style = MaterialTheme.typography.labelLarge)
+            Text(" ${b.price}", style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false)
         }
     }
     val free = bait == Bait.WORM && state.freeCasts > 0
@@ -625,9 +627,9 @@ private fun CollectionSheet(state: FishGame.State, time: Float, onMerge: (Fish) 
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (tier in Tier.entries) {
-                Text(
-                    stringResource(tierName(tier)), color = tierColor(tier), fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
+                FitText(
+                    stringResource(tierName(tier)), color = tierColor(tier), textAlign = TextAlign.Center, modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), minSize = 6.sp,
                 )
             }
         }
@@ -666,7 +668,7 @@ private fun ShopSheet(state: FishGame.State, onBuy: (Decoration) -> Unit, onChoo
             for (bg in Background.entries) {
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.fillMaxWidth().height(56.dp).clip(MaterialTheme.shapes.medium).background(Brush.verticalGradient(water(bg))))
-                    Text(stringResource(backgroundName(bg)), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    FitText(stringResource(backgroundName(bg)), style = MaterialTheme.typography.labelMedium)
                     when {
                         bg == state.background -> Text(stringResource(R.string.aq_in_use), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 12.dp))
                         bg in state.backgrounds -> OutlinedButton(onClick = { onChoose(bg) }) { Text(stringResource(R.string.aq_use)) }
@@ -685,9 +687,9 @@ private fun ShopSheet(state: FishGame.State, onBuy: (Decoration) -> Unit, onChoo
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Image(painterResource(art.art), null, Modifier.size(64.dp))
-                        Text(stringResource(art.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        FitText(stringResource(art.name), style = MaterialTheme.typography.labelMedium)
                         if (item in state.decorations) {
-                            Text("✓ " + stringResource(R.string.aq_in_tank), fontSize = 11.sp, color = tierColor(Tier.UNCOMMON), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(vertical = 14.dp))
+                            FitText("✓ " + stringResource(R.string.aq_in_tank), style = MaterialTheme.typography.labelSmall, color = tierColor(Tier.UNCOMMON), modifier = Modifier.padding(vertical = 14.dp))
                         } else PriceButton(item.price, state.coins) { onBuy(item) }
                     }
                 }
@@ -700,6 +702,6 @@ private fun ShopSheet(state: FishGame.State, onBuy: (Decoration) -> Unit, onChoo
 private fun PriceButton(price: Int, coins: Int, onClick: () -> Unit) {
     Button(onClick = onClick, enabled = coins >= price, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp)) {
         Image(painterResource(R.drawable.aq_coin), null, Modifier.size(16.dp))
-        Text(" $price", maxLines = 1)
+        Text(" $price", maxLines = 1, softWrap = false)
     }
 }

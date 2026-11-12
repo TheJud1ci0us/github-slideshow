@@ -11,6 +11,8 @@ import com.ascolta.app.data.FishGame.Species
 import com.ascolta.app.data.FishGame.Tier
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Test
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -57,5 +59,16 @@ class AquariumScreenshotTest {
         Screen(rich, sheet = "fishing", caught = FishGame.Catch(rich, Fish(Species.BUTTERFLYFISH, Tier.LEGENDARY), isNew = true, guaranteed = false, free = false))
     }
     @Test fun collection() = shot("6-collection") { Screen(rich, sheet = "collection") }
+    // Large text (the phone's font size setting) on a narrower phone: nothing may wrap letter by letter.
+    @Test @Config(qualifiers = "w360dp-h780dp-xxhdpi") fun bigFontTank() { org.robolectric.RuntimeEnvironment.setFontScale(1.3f); shot("8-big-tank") { Screen(rich) } }
+    @Test @Config(qualifiers = "w360dp-h780dp-xxhdpi") fun bigFontFishing() { org.robolectric.RuntimeEnvironment.setFontScale(1.3f); shot("9-big-fishing") { Screen(rich, sheet = "fishing") } }
+    @Test @Config(qualifiers = "w360dp-h780dp-xxhdpi") fun bigFontCollection() { org.robolectric.RuntimeEnvironment.setFontScale(1.3f); shot("10-big-collection") { Screen(rich, sheet = "collection") } }
+    @Test @Config(qualifiers = "w360dp-h780dp-xxhdpi") fun bigFontShop() { org.robolectric.RuntimeEnvironment.setFontScale(1.3f); shot("11-big-shop") { Screen(rich, sheet = "shop") } }
+    @Test @Config(qualifiers = "w360dp-h300dp-xxhdpi") fun bigFontGradeButtons() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+        shot("12-big-grades") {
+            MaterialTheme { Surface { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.padding(16.dp)) { GradeButtons {} } } }
+        }
+    }
     @Test fun shop() = shot("7-shop") { Screen(rich.copy(decorations = setOf(FishGame.Decoration.SEAWEED)), dark = true, sheet = "shop") }
 }

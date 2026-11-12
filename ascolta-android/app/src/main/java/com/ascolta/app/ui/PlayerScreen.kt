@@ -101,6 +101,8 @@ import com.ascolta.app.data.indexAt
 import com.ascolta.app.data.Word
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import com.ascolta.app.data.languageName
@@ -176,6 +178,11 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val knownLevels by remember(wordsLanguage) { graph.knownWords.levels(wordsLanguage) }.collectAsState()
     val commonWords by produceState(emptySet<String>(), wordsLanguage, highlightNew) {
         if (highlightNew) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { graph.knownWords.common(wordsLanguage, graph.wordLists) }
+    }
+    // Words coloured by how common they are (optional): the word list of the language.
+    val frequencyOn by settings.frequencyColors.flow.collectAsState()
+    val frequencyRanks by produceState<Map<String, Int>?>(null, wordsLanguage, frequencyOn) {
+        value = if (!frequencyOn) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { graph.wordLists.ranks(wordsLanguage) }
     }
     // Words that don't exist (probably misheard): underlined. Null until the long word list is loaded.
     val doubtLists by produceState<com.ascolta.app.data.WordLists?>(null, wordsLanguage) {
@@ -531,6 +538,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (ep != null) StatusBanner(ep, transcript, translating)
             if (ep != null) LanguageFixBanner()
+            if (frequencyRanks != null && segments.isNotEmpty()) FrequencyLegend()
             // In an ad: a button to skip it. Skipping by itself (Settings) is done by the player
             // service, so it also works with the screen off.
             val currentAd = com.ascolta.app.data.AdDetector.at(ads, position)
@@ -634,6 +642,9 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                             com.ascolta.app.data.KnownWords.newWordRanges(segment.text, knownLevels, commonWords)
                         } else null,
                         isAd = ads.any { segment.startMs >= it.startMs && segment.startMs < it.endMs },
+                        frequency = frequencyRanks?.let { ranks ->
+                            remember(segment.text, ranks, jaReady) { com.ascolta.app.data.WordFrequency.of(segment.text, wordsLanguage, ranks) }
+                        },
                         doubtful = doubtLists?.let { lists ->
                             remember(segment.text, lists) { com.ascolta.app.data.DoubtfulWords.find(segment.text, wordsLanguage, lists) }
                         },
@@ -952,7 +963,10 @@ private fun SegmentItem(
     isAd: Boolean = false,
     /** Words that don't exist (probably misheard), underlined. */
     doubtful: List<IntRange>? = null,
+    /** Words by how common they are (character ranges and band), coloured; null when the option is off. */
+    frequency: List<Pair<IntRange, Int>>? = null,
 ) {
+    val bandColors = frequencyColors()
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val select by androidx.compose.runtime.rememberUpdatedState(onSelect)
     val seek by androidx.compose.runtime.rememberUpdatedState(onSeek)
@@ -988,6 +1002,7 @@ private fun SegmentItem(
             JapaneseSentence(
                 jaTokens, japanese, activeWord, textStyle,
                 selectedChars = selectedChars,
+                tokenColor = frequency?.let { f -> { token: com.ascolta.app.data.JaToken -> f.firstOrNull { it.first.first == token.start }?.let { bandColors[it.second] } } },
                 onTap = { token -> if (selecting) onSelect(wordIndexAt(selectRanges, token.start)) else onWord(token.surface) },
                 onLongPress = { token -> onSelect(wordIndexAt(selectRanges, token.start)) },
             )
@@ -997,9 +1012,11 @@ private fun SegmentItem(
             val selectColor = MaterialTheme.colorScheme.tertiary
             val newColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
             val doubtColor = MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
-            val text = remember(segment.text, activeWord, wordRanges, highlight, selectedChars, newWords, newColor, doubtful) {
+            val text = remember(segment.text, activeWord, wordRanges, highlight, selectedChars, newWords, newColor, doubtful, frequency, bandColors) {
                 buildAnnotatedString {
                     append(segment.text)
+                    // How common each word is: coloured text.
+                    frequency?.forEach { (r, band) -> if (r.last < segment.text.length) addStyle(SpanStyle(color = bandColors[band]), r.first, r.last + 1) }
                     // Probably misheard: underlined, on a faint tint.
                     doubtful?.forEach { r ->
                         if (r.last < segment.text.length) addStyle(
@@ -1077,6 +1094,28 @@ private fun wordIndexAt(ranges: List<IntRange>, offset: Int): Int {
     val hit = ranges.indexOfFirst { !it.isEmpty() && offset in it }
     if (hit >= 0) return hit
     return ranges.indexOfLast { !it.isEmpty() && it.first <= offset }.coerceAtLeast(0)
+}
+
+/** Colours of the frequency bands (top 1,000 · up to 5,000 · up to 15,000), lighter on a dark theme. */
+@Composable
+internal fun frequencyColors(): List<Color> {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    return if (dark) listOf(Color(0xFF6FDC97), Color(0xFF7DB8FF), Color(0xFFD29BFF))
+    else listOf(Color(0xFF1E8A4C), Color(0xFF1F63C2), Color(0xFF8A3FC4))
+}
+
+/** What the colours mean, above the transcript. */
+@Composable
+private fun FrequencyLegend() {
+    val colors = frequencyColors()
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf(R.string.frequency_band_1, R.string.frequency_band_2, R.string.frequency_band_3).forEachIndexed { i, label ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(9.dp).background(colors[i], androidx.compose.foundation.shape.CircleShape))
+                Text(" " + stringResource(label), style = MaterialTheme.typography.labelSmall, color = colors[i])
+            }
+        }
+    }
 }
 
 /** Keeps a sentence highlighted this long after it ends, then clears it (music, pauses). */

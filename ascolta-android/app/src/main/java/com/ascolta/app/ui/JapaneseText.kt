@@ -37,6 +37,8 @@ fun JapaneseSentence(
     style: TextStyle,
     /** The learner's selection in this sentence (characters), or null. */
     selectedChars: IntRange? = null,
+    /** A colour for a word (how common it is), or null. */
+    tokenColor: ((JaToken) -> androidx.compose.ui.graphics.Color?)? = null,
     /** Tap on a token: the dictionary, or extending a selection. */
     onTap: (JaToken) -> Unit,
     /** Long press on a token: starts (or extends) a selection. */
@@ -66,13 +68,13 @@ fun JapaneseSentence(
             when (script) {
                 JapaneseScript.ROMAJI -> Text(
                     token.romaji,
-                    style = if (active) style.copy(fontWeight = FontWeight.SemiBold) else style,
+                    style = (if (active) style.copy(fontWeight = FontWeight.SemiBold) else style).let { st -> tokenColor?.invoke(token)?.let { st.copy(color = it) } ?: st },
                     modifier = mod.padding(horizontal = 1.dp),
                 )
                 else -> Column(mod, horizontalAlignment = Alignment.CenterHorizontally) {
                     // Reading above words with kanji; an empty line elsewhere keeps the baseline even.
                     Text(if (token.hasKanji) token.reading else " ", style = rubyStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(token.surface, style = if (active) style.copy(fontWeight = FontWeight.SemiBold) else style)
+                    Text(token.surface, style = (if (active) style.copy(fontWeight = FontWeight.SemiBold) else style).let { st -> tokenColor?.invoke(token)?.let { st.copy(color = it) } ?: st })
                 }
             }
         }

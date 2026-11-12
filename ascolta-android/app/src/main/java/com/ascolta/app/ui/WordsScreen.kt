@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -326,10 +328,28 @@ fun ReviewScreen(onBack: () -> Unit) {
             TopAppBar(
                 title = { Text(stringResource(R.string.cards_review_title, reviewed, reviewed + (queue?.size ?: 0))) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
+                actions = {
+                    // Which side comes first: the word, its meaning, or a mix.
+                    var open by remember { mutableStateOf(false) }
+                    val direction by graph.settings.cardsDirection.flow.collectAsState()
+                    Box {
+                        IconButton(onClick = { open = true }) { Icon(Icons.Filled.SwapHoriz, stringResource(R.string.cards_direction)) }
+                        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            listOf(R.string.cards_direction_word, R.string.cards_direction_meaning, R.string.cards_direction_mixed).forEachIndexed { i, label ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(label)) },
+                                    leadingIcon = { if (i == direction) Icon(Icons.Filled.Check, null) },
+                                    onClick = { graph.settings.cardsDirection.set(i); flipped = false; open = false },
+                                )
+                            }
+                        }
+                    }
+                },
             )
         },
     ) { padding ->
         val card = queue?.firstOrNull()
+        val direction by graph.settings.cardsDirection.flow.collectAsState()
         // After a good session (20+ cards reviewed in total), ask once for a rating on Google Play.
         LaunchedEffect(queue != null && card == null) {
             if (queue == null || card != null || reviewed == 0) return@LaunchedEffect
@@ -356,9 +376,20 @@ fun ReviewScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Card(Modifier.fillMaxWidth().weight(1f).clickable { flipped = !flipped }) {
                 Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    // Reversed: the meaning first, and the learner says the word in the language.
+                    val reversed = direction == 1 || (direction == 2 && (card.id + reviewed) % 2 == 1L)
                     AnimatedContent(targetState = flipped, label = "flip") { showBack ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(card.word, style = if (card.isSentence) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+                            if (reversed) {
+                                Text(card.translation, style = if (card.isSentence) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+                                if (showBack) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(card.word, style = if (card.isSentence) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                                        color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                                }
+                            } else {
+                                Text(card.word, style = if (card.isSentence) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+                            }
                             if (showBack) {
                                 LaunchedEffect(card.id) { if (card.audioPath == null) com.ascolta.app.data.Speech.speak(context, card.word, card.language) }
                                 if (card.language == "ja") {
@@ -370,8 +401,10 @@ fun ReviewScreen(onBack: () -> Unit) {
                                             color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                                     }
                                 }
-                                Spacer(Modifier.height(16.dp))
-                                Text(card.translation, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                                if (!reversed) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(card.translation, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                                }
                                 if (!card.isSentence) {
                                     card.sentence?.let {
                                         Spacer(Modifier.height(16.dp))
@@ -407,27 +440,47 @@ fun ReviewScreen(onBack: () -> Unit) {
             if (!flipped) {
                 Button(onClick = { flipped = true }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cards_show_answer)) }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    fun answer(grade: Flashcards.Grade) {
-                        scope.launch {
-                            graph.repo.review(card, grade)
-                            reviewed++
-                            flipped = false
-                            val rest = queue.orEmpty().drop(1)
-                            // Forgotten cards come back at the end of this session.
-                            queue = if (grade == Flashcards.Grade.AGAIN) rest + card.copy(reps = 0, intervalDays = 0f) else rest
-                        }
+                fun answer(grade: Flashcards.Grade) {
+                    scope.launch {
+                        graph.repo.review(card, grade)
+                        reviewed++
+                        flipped = false
+                        val rest = queue.orEmpty().drop(1)
+                        // Forgotten cards come back at the end of this session.
+                        queue = if (grade == Flashcards.Grade.AGAIN) rest + card.copy(reps = 0, intervalDays = 0f) else rest
                     }
-                    OutlinedButton(onClick = { answer(Flashcards.Grade.AGAIN) }, modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                        Text(stringResource(R.string.cards_again))
-                    }
-                    OutlinedButton(onClick = { answer(Flashcards.Grade.HARD) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cards_hard)) }
-                    FilledTonalButton(onClick = { answer(Flashcards.Grade.GOOD) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cards_good)) }
-                    Button(onClick = { answer(Flashcards.Grade.EASY) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cards_easy)) }
                 }
+                GradeButtons(::answer)
             }
             Spacer(Modifier.height(8.dp).size(0.dp))
+        }
+    }
+}
+
+/**
+ * Again · Hard · Good · Easy, in two rows of two so each label has room (one row of four
+ * squeezed "Good" to a letter per line on narrow phones or with large text).
+ */
+@Composable
+internal fun GradeButtons(answer: (Flashcards.Grade) -> Unit) {
+    val pad = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { answer(Flashcards.Grade.AGAIN) }, modifier = Modifier.weight(1f), contentPadding = pad,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                FitText(stringResource(R.string.cards_again), style = MaterialTheme.typography.labelLarge)
+            }
+            OutlinedButton(onClick = { answer(Flashcards.Grade.HARD) }, modifier = Modifier.weight(1f), contentPadding = pad) {
+                FitText(stringResource(R.string.cards_hard), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            FilledTonalButton(onClick = { answer(Flashcards.Grade.GOOD) }, modifier = Modifier.weight(1f), contentPadding = pad) {
+                FitText(stringResource(R.string.cards_good), style = MaterialTheme.typography.labelLarge)
+            }
+            Button(onClick = { answer(Flashcards.Grade.EASY) }, modifier = Modifier.weight(1f), contentPadding = pad) {
+                FitText(stringResource(R.string.cards_easy), style = MaterialTheme.typography.labelLarge)
+            }
         }
     }
 }

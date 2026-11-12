@@ -182,6 +182,10 @@ class Settings(context: Context) {
     val accuracyNoteSeen = bool("accuracy_note_seen", false)
     /** Flashcards reviewed in total, and whether the store rating was asked. */
     val cardsReviewed = int("cards_reviewed", 0)
+    /** Flashcards: 0 the word on the front, 1 the meaning on the front, 2 mixed. */
+    val cardsDirection = int("cards_direction", 0)
+    /** Transcript words coloured by how common they are in the language. */
+    val frequencyColors = bool("frequency_colors", false)
     val ratingAsked = bool("rating_asked", false)
     /** Diagnostics: log every sentence, why it was flagged and what was redone (stays on the phone). */
     val detailedLog = bool("detailed_log", false)

@@ -6,6 +6,8 @@ import os, re, wordfreq
 
 PARAKEET = ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
             "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
+# Also Japanese, Chinese and Korean: for colouring transcript words by how common they are.
+PARAKEET += ["ja", "zh", "ko"]
 COUNT = 25_000
 out = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets", "words")
 os.makedirs(out, exist_ok=True)

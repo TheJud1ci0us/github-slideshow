@@ -237,6 +237,7 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                 SwitchRow(stringResource(R.string.highlight_words), stringResource(R.string.highlight_words_text), settings.wordHighlight)
                 SwitchRow(stringResource(R.string.pause_each_sentence), stringResource(R.string.pause_each_sentence_text), settings.autoPause)
                 SwitchRow(stringResource(R.string.highlight_new_words), stringResource(R.string.highlight_new_words_text), settings.highlightNewWords)
+                SwitchRow(stringResource(R.string.frequency_title), stringResource(R.string.frequency_text), settings.frequencyColors)
                 SwitchRow(stringResource(R.string.skip_ads_title), stringResource(R.string.skip_ads_text), settings.skipAdsAutomatically)
                 SwitchRow(stringResource(R.string.show_original_title), stringResource(R.string.show_original_text), settings.showOriginal)
                 SwitchRow(stringResource(R.string.show_translation_title), stringResource(R.string.show_translation_text), settings.showTranslation)
