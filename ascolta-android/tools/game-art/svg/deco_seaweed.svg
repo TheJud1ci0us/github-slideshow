@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<path d="M22,60C14,50 30,42 22,32C16,24 28,18 23,8" fill="none" stroke="#33261F" stroke-width="8.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M22,60C14,50 30,42 22,32C16,24 28,18 23,8" fill="none" stroke="#2E8B57" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M22,60C14,50 30,42 22,32C16,24 28,18 23,8" fill="none" stroke="#77B492" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>
+<path d="M32,60C24,50 40,42 32,32C26,24 38,18 33,4" fill="none" stroke="#33261F" stroke-width="8.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,60C24,50 40,42 32,32C26,24 38,18 33,4" fill="none" stroke="#3FA35B" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,60C24,50 40,42 32,32C26,24 38,18 33,4" fill="none" stroke="#82C394" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>
+<path d="M42,60C34,50 50,42 42,32C36,24 48,18 43,12" fill="none" stroke="#33261F" stroke-width="8.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M42,60C34,50 50,42 42,32C36,24 48,18 43,12" fill="none" stroke="#2E8B57" stroke-width="4.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M42,60C34,50 50,42 42,32C36,24 48,18 43,12" fill="none" stroke="#77B492" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity="0.7"/>
+</svg>

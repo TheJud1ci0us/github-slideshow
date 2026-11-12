@@ -24,8 +24,8 @@ android {
         applicationId = "app.lingopod"
         minSdk = 26
         targetSdk = 35
-        versionCode = 150
-        versionName = "1.5.0"
+        versionCode = 160
+        versionName = "1.6.0"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
@@ -95,8 +95,15 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Screenshot tests (Robolectric + Roborazzi) draw real screens with the app's resources.
+        unitTests.isIncludeAndroidResources = true
         unitTests.all { test ->
             test.maxHeapSize = "6g"
+            test.systemProperty("roborazzi.test.record", "true")
+            // Robolectric's Android runtime comes through Gradle (its own downloader is not used).
+            test.dependsOn("robolectricAndroid")
+            test.systemProperty("robolectric.offline", "true")
+            test.systemProperty("robolectric.dependency.dir", layout.buildDirectory.dir("robolectric").get().asFile.absolutePath)
         }
     }
 
@@ -154,7 +161,15 @@ tasks.withType<Test>().configureEach {
     System.getenv("OPUS_DIR")?.let { systemProperty("opus.dir", it) }
 }
 
+val robolectricAndroid: Configuration by configurations.creating
+tasks.register<Copy>("robolectricAndroid") {
+    from(robolectricAndroid)
+    into(layout.buildDirectory.dir("robolectric"))
+}
+
 dependencies {
+    robolectricAndroid("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
+    robolectricAndroid("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
     implementation(files(sherpaAar))
     implementation("androidx.appcompat:appcompat:1.7.1")
 
@@ -202,5 +217,11 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.43.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.43.1")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("net.sf.kxml:kxml2:2.3.0")
 }

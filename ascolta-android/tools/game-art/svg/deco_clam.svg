@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<path d="M8,50C8,34 20,26 32,26C44,26 56,34 56,50Z" fill="#C9B8D8" stroke="#33261F" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,48L16,37.4" fill="none" stroke="#9A86AE" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,48L24,34.2" fill="none" stroke="#9A86AE" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,48L32,31.0" fill="none" stroke="#9A86AE" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,48L40,34.2" fill="none" stroke="#9A86AE" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M32,48L48,37.4" fill="none" stroke="#9A86AE" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M8,50H56C56,56 46,60 32,60C18,60 8,56 8,50Z" fill="#A892BC" stroke="#33261F" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M26,50A6,6 0 1,0 38,50A6,6 0 1,0 26,50Z" fill="#FBF6F0" stroke="#33261F" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M28.2,48A1.8,1.8 0 1,0 31.8,48A1.8,1.8 0 1,0 28.2,48Z" fill="#FFFFFF" opacity="0.95"/>
+<path d="M44,36.5L44.77,39.23L47.5,40L44.77,40.77L44,43.5L43.23,40.77L40.5,40L43.23,39.23Z" fill="#FFFFFF" opacity="0.95"/>
+</svg>

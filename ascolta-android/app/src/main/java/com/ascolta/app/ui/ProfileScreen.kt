@@ -54,7 +54,7 @@ import com.ascolta.app.graph
  * in rounded cards, each opening its own page.
  */
 @Composable
-fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, openPersonalize: () -> Unit, openPaywall: () -> Unit = {}, openDig: () -> Unit = {}) {
+fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, openPersonalize: () -> Unit, openPaywall: () -> Unit = {}, openAquarium: () -> Unit = {}) {
     val proActive by LocalContext.current.graph.billing.isPro.collectAsState()
     val graph = LocalContext.current.graph
     val settings = graph.settings
@@ -62,7 +62,7 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
     val levels by settings.levels.flow.collectAsState()
     val all by settings.learningLanguages.flow.collectAsState()
     val stats by graph.progress.stats.collectAsState()
-    LaunchedEffect(Unit) { graph.progress.flush(); graph.dig.flush(); graph.repo.refreshProgressCounts() }
+    LaunchedEffect(Unit) { graph.progress.flush(); graph.fish.flush(); graph.repo.refreshProgressCounts() }
     val level = remember(levels, learning) { settings.levelFor(learning) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -91,21 +91,21 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
             Stat("${stats.earned.size}/${Badges.all().size}", stringResource(R.string.profile_badges), Modifier.weight(1f), openProgress)
         }
 
-        // The Dig site: a game paid for with listening minutes.
-        val dig by graph.dig.state.collectAsState()
+        // The Aquarium: a fishing game paid for with listening coins.
+        val aquarium by graph.fish.state.collectAsState()
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(MaterialTheme.shapes.large)
-                .background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = openDig).padding(horizontal = 14.dp, vertical = 10.dp),
+                .background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = openAquarium).padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.dig_site), null, Modifier.size(48.dp))
+            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.aq_tank), null, Modifier.size(48.dp))
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.dig_title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.dig_card_text, dig.minutes), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.aq_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.aq_card_text, aquarium.coins), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            val fresh = (dig.unseenMs / 60_000).toInt()
-            if (fresh >= 5) {
+            val fresh = (aquarium.unseenMs / com.ascolta.app.data.FishGame.COIN_MS).toInt()
+            if (fresh >= 50) {
                 Text(
                     "+$fresh", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(androidx.compose.ui.graphics.Color(0xFFD9453C)).padding(horizontal = 9.dp, vertical = 2.dp),

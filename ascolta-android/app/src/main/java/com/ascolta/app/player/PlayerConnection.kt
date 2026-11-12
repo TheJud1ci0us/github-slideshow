@@ -54,7 +54,7 @@ class PlayerConnection(
     db: AppDatabase,
     private val settings: Settings,
     private val progress: com.ascolta.app.data.ProgressStore,
-    private val dig: com.ascolta.app.data.DigStore,
+    private val fish: com.ascolta.app.data.FishStore,
 ) {
     private val podcastDao = db.podcastDao()
     /** Language of the episode playing, for listening statistics. */
@@ -292,12 +292,12 @@ class PlayerConnection(
                         val ms = (wall - lastTickWall).coerceIn(0, 1_000)
                         progress.addListening(language, ms)
                         logListening(ms, language)
-                        // The Dig site is paid in minutes of foreign-language listening.
-                        dig.addListening(ms, language != settings.nativeLanguage.value, c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
+                        // The Aquarium is paid in coins from foreign-language listening.
+                        fish.addListening(ms, language != settings.nativeLanguage.value, c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
                     }
                     val position = c.currentPosition
                     val length = c.duration
-                    if (length > 60_000 && position >= length - 5_000) dig.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
+                    if (length > 60_000 && position >= length - 5_000) fish.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
                     checkAutoPause(c, position)
                     checkSleep(c, position)
                     lastTickPosition = position

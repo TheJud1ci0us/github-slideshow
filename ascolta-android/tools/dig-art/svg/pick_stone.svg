@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<path d="M31.5,12H32.5A2.5,2.5 0 0,1 35,14.5V57.5A2.5,2.5 0 0,1 32.5,60H31.5A2.5,2.5 0 0,1 29,57.5V14.5A2.5,2.5 0 0,1 31.5,12Z" fill="#8A5A33" stroke="#33261F" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" transform="rotate(45 32 32)"/>
-<path d="M30.8,20V56" fill="none" stroke="#B98456" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round" transform="rotate(45 32 32)"/>
-<path d="M4,22C16,4 48,4 60,22C50,15 40,13 36,13V19H28V13C24,13 14,15 4,22Z" fill="#8D9299" stroke="#33261F" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" transform="rotate(45 32 32)"/>
-<path d="M36,13C40,13 50,15 60,22C52,10 42,7.5 36,7.5Z" fill="#787A7F" transform="rotate(45 32 32)"/>
-<path d="M10,16C18,10 26,8.5 30,8.5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.6" transform="rotate(45 32 32)"/>
-<path d="M29,9H35A2,2 0 0,1 37,11V18A2,2 0 0,1 35,20H29A2,2 0 0,1 27,18V11A2,2 0 0,1 29,9Z" fill="#6A6B6E" stroke="#33261F" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" transform="rotate(45 32 32)"/>
-</svg>
