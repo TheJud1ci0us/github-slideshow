@@ -189,9 +189,22 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                     onChanged = { refreshKey++ },
                     tier = stringResource(R.string.tier_most_accurate),
                 )
-                if (current == SpeechModel.MOST_ACCURATE || current !in tiers) Hint(stringResource(R.string.tier_most_accurate_hint))
+                if (current == SpeechModel.MOST_ACCURATE) Hint(stringResource(R.string.tier_most_accurate_hint))
+                // Meta Omnilingual: one model for every language (no punctuation; sentences cut at pauses).
+                if (SpeechModel.OMNILINGUAL !in tiers) {
+                    ModelRow(
+                        SpeechModel.OMNILINGUAL, selected = current == SpeechModel.OMNILINGUAL, learning = learning, refreshKey = refreshKey,
+                        onSelect = { settings.setModelFor(learning, SpeechModel.OMNILINGUAL) },
+                        onChanged = { refreshKey++ },
+                        tier = stringResource(R.string.tier_meta),
+                    )
+                }
+                // Parakeet sometimes writes English: redo those sentences with Canary (a few seconds per block).
+                if (SpeechModel.CANARY_180M.supports(learning) && learning != "en" && SpeechModel.PARAKEET in tiers) {
+                    SwitchRow(stringResource(R.string.fix_english_title), stringResource(R.string.fix_english_text), settings.fixEnglish)
+                }
                 // A model chosen earlier that isn't one of the choices stays usable until another is picked.
-                if (current !in tiers && current != SpeechModel.MOST_ACCURATE) {
+                if (current !in tiers && current != SpeechModel.MOST_ACCURATE && current != SpeechModel.OMNILINGUAL) {
                     ModelRow(
                         current, selected = true, learning = learning, refreshKey = refreshKey,
                         onSelect = {}, onChanged = { refreshKey++ },

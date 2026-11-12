@@ -593,4 +593,7 @@
     <string name="model_desc_canary">Canary 180M (NVIDIA): un modelo pequeño al que se le indica el idioma, usado para rehacer las frases que Parakeet escribe en inglés. Francés, español, alemán.</string>
     <string name="detailed_log_title">Registro detallado</string>
     <string name="detailed_log_text">Registra también cada frase, por qué una se tomó por inglés y qué se rehízo. Se queda en tu teléfono; solo se envía si lo compartes.</string>
+    <string name="tier_meta">Meta Omnilingual · todos los idiomas</string>
+    <string name="fix_english_title">Corregir frases en inglés</string>
+    <string name="fix_english_text">Cuando Parakeet escribe una frase en inglés, se rehace con NVIDIA Canary (210 MB), al que se le indica el idioma. Añade unos segundos por minuto de audio; desactívalo para la máxima velocidad.</string>
 </resources>

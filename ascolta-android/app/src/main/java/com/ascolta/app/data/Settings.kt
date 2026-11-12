@@ -185,6 +185,8 @@ class Settings(context: Context) {
     val ratingAsked = bool("rating_asked", false)
     /** Diagnostics: log every sentence, why it was flagged and what was redone (stays on the phone). */
     val detailedLog = bool("detailed_log", false)
+    /** Redo the sentences Parakeet writes in English with Canary (costs a few seconds per block). */
+    val fixEnglish = bool("fix_english", true)
 
     fun learningList(): List<String> =
         learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }

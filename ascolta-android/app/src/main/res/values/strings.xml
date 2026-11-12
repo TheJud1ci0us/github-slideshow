@@ -613,4 +613,7 @@
     <string name="model_desc_canary">Canary 180M (NVIDIA): a small model told the language, used to redo the sentences Parakeet writes in English. French, Spanish, German.</string>
     <string name="detailed_log_title">Detailed log</string>
     <string name="detailed_log_text">Also records every sentence, why one was taken for English and what was redone. Stays on your phone; it\'s only sent if you share it.</string>
+    <string name="tier_meta">Meta Omnilingual · every language</string>
+    <string name="fix_english_title">Fix English sentences</string>
+    <string name="fix_english_text">When Parakeet writes a sentence in English, redo it with NVIDIA Canary (210 MB), which is told the language. Adds a few seconds per minute of audio; turn off for maximum speed.</string>
 </resources>

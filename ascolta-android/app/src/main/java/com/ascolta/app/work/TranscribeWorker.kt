@@ -564,7 +564,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
                                         AppLog.d("Sentence") { "${clock(segment.startMs)} ${text.take(80)}" }
-                                        if (FIX_WRONG_LANGUAGE && model.engine == Engine.PARAKEET && SpeechModel.CANARY_180M.supports(language) && language != "en" &&
+                                        if (FIX_WRONG_LANGUAGE && settings.fixEnglish.value && model.engine == Engine.PARAKEET && SpeechModel.CANARY_180M.supports(language) && language != "en" &&
                                             com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
                                             AppLog.d("English?") { "${clock(segment.startMs)} flagged — ${com.ascolta.app.data.SentenceLanguage.why(text, language, wordLists, names)}" }
                                             wrongLanguage += segment
