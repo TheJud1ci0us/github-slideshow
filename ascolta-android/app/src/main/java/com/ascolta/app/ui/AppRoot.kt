@@ -59,7 +59,7 @@ private val TABS = listOf(
 
 /** Which tab a screen belongs to, for the highlighted item in the bar. */
 private fun tabOf(route: String): String = when {
-    route.startsWith("settings") || route == "progress" || route == "personalize" || route == "profile" -> "profile"
+    route.startsWith("settings") || route == "progress" || route == "dig" || route == "personalize" || route == "profile" -> "profile"
     route == "review" -> "words"
     else -> route.substringBefore('?')
 }
@@ -110,7 +110,7 @@ fun AscoltaRoot() {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (!inPlayer) {
+            if (!inPlayer && route != "dig") {
                 Column(Modifier.navigationBarsPadding()) {
                     MiniPlayer(onOpen = { id -> nav.navigate(Routes.player(id)) })
                     FloatingNavBar(
@@ -147,8 +147,10 @@ fun AscoltaRoot() {
                     openProgress = { nav.navigate("progress") },
                     openPersonalize = { nav.navigate("personalize") },
                     openPaywall = { nav.navigate("paywall") },
+                    openDig = { nav.navigate("dig") },
                 )
             }
+            composable("dig") { DigScreen(onBack = { nav.popBackStack() }) }
             composable("paywall?reason={reason}", arguments = listOf(navArgument("reason") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
                 PaywallScreen(entry.arguments?.getString("reason"), onBack = { nav.popBackStack() }, openLegal = { nav.navigate("settings/about") })
             }

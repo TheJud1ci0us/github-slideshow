@@ -115,6 +115,7 @@ class AppGraph(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(app)
     val progress = com.ascolta.app.data.ProgressStore(app)
+    val dig = com.ascolta.app.data.DigStore(app)
     val db = AppDatabase.build(app)
     val http = Http.client()
     val transcripts = TranscriptStore(File(app.filesDir, "transcripts"))
@@ -137,7 +138,7 @@ class AppGraph(app: Application) {
     fun requirePro(reason: String): Boolean = isPro.also { if (!it) billing.requestPaywall(reason) }
     val feedLanguage = com.ascolta.app.net.FeedLanguage(http)
     val repo = PodcastRepository(app, db, http, settings, transcripts, translation)
-    val player = PlayerConnection(app, db, settings, progress)
+    val player = PlayerConnection(app, db, settings, progress, dig)
 
     /** Text shared to the app (e.g. a Spotify/Apple link), waiting to be handled by the UI. */
     val pendingSharedText = MutableStateFlow<String?>(null)
