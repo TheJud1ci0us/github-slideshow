@@ -11,11 +11,20 @@ import java.io.File
 
 class WrongLanguageTest {
     private val lists = WordLists { lang ->
-        listOf(File("src/main/assets/words/$lang.txt.gz"), File("app/src/main/assets/words/$lang.txt.gz"))
+        listOf(File("src/main/assets/" + WordLists.assetName(lang)), File("app/src/main/assets/" + WordLists.assetName(lang)))
             .firstOrNull { it.exists() }?.inputStream()
     }
 
     private fun wrong(text: String, lang: String) = SentenceLanguage.isEnglishInstead(text, lang, lists)
+
+    @Test
+    fun theWordListsTheAppOpensExist() {
+        listOf("en", "fr", "it", "es", "de", "pt").forEach { lang ->
+            val f = listOf(File("src/main/assets/" + WordLists.assetName(lang)), File("app/src/main/assets/" + WordLists.assetName(lang))).firstOrNull { it.exists() }
+            assertTrue("missing ${WordLists.assetName(lang)}", f != null)
+            assertTrue(lists.ranks(lang)!!.size > 10_000)
+        }
+    }
 
     @Test
     fun shortEnglishSlipsAreCaught() {
@@ -25,6 +34,14 @@ class WrongLanguageTest {
             assertTrue(lang, wrong("Of course.", lang))
             assertTrue(lang, wrong("So what do you think?", lang))
         }
+    }
+
+    @Test
+    fun theLogSaysWhyASentenceWasFlagged() {
+        val why = SentenceLanguage.why("Yes, exactly.", "fr", lists)!!
+        assertTrue(why, why.startsWith("frequency: 2 of 2 words English-only"))
+        assertTrue(why.contains("exactly"))
+        assertEquals(null, SentenceLanguage.why("Oui, exactement.", "fr", lists))
     }
 
     @Test

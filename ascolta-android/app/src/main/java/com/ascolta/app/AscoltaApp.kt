@@ -42,6 +42,8 @@ class AscoltaApp : Application() {
             previous?.uncaughtException(thread, error)
         }
         graph = AppGraph(this)
+        // The detailed log follows its setting (read once here, then on every change).
+        kotlinx.coroutines.MainScope().launch { graph.settings.detailedLog.flow.collect { AppLog.detailed = it } }
         com.ascolta.app.data.Analytics.init(this, graph.settings, graph.http)
         com.ascolta.app.data.Analytics.track("TelemetryDeck.Session.started")
         getSharedPreferences("analytics", MODE_PRIVATE).getString("crash", null)?.let { crash ->

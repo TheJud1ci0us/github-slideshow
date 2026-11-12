@@ -199,7 +199,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         update(applicationContext.getString(R.string.status_downloading_translation), status.value.progress)
         val ok = withTimeoutOrNull(TRANSLATION_DOWNLOAD_TIMEOUT_MS) {
             runCatching { graph.translation.ensureModel(source, target, requireWifi = false) }
-                .onFailure { AppLog.w(TAG, "Translation model download failed", it) }
+                .onFailure {
+                    // Switching episodes stops this job, and its download with it: not a failure.
+                    if (it is kotlinx.coroutines.CancellationException) AppLog.i(TAG, "Translation model download stopped with the job")
+                    else AppLog.w(TAG, "Translation model download failed", it)
+                }
                 .isSuccess
         } ?: false.also { AppLog.w(TAG, "Translation model download timed out; translating later") }
         return ok
@@ -537,6 +541,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         // Parakeet can't be told the language: sentences it wrote in English are redone with Canary.
                         val wrongLanguage = mutableListOf<Segment>()
                         recognizer.setDetectedSpeech(prepared.speech)
+                        AppLog.d("Speech") {
+                            "block ${clock(blockStartMs)}: ${prepared.speech?.size ?: 0} stretches of speech found " +
+                                "(${prepared.speech?.sumOf { it.second - it.first }?.div(1000) ?: 0}s), ${regions?.size ?: 0} with gaps checked"
+                        }
                         val finished = withContext(CoreDispatchers.recognition) {
                             recognizer.transcribe(
                                 prepared.samples, regions, language, prompt,
@@ -555,8 +563,10 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                             words = cleanWords(seg.words, seg.startMs, seg.endMs)
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
+                                        AppLog.d("Sentence") { "${clock(segment.startMs)} ${text.take(80)}" }
                                         if (FIX_WRONG_LANGUAGE && model.engine == Engine.PARAKEET && SpeechModel.CANARY_180M.supports(language) && language != "en" &&
                                             com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
+                                            AppLog.d("English?") { "${clock(segment.startMs)} flagged — ${com.ascolta.app.data.SentenceLanguage.why(text, language, wordLists, names)}" }
                                             wrongLanguage += segment
                                         } else {
                                             events.trySend(WriterEvent.Sentence(segment))
@@ -700,8 +710,16 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 words = cleanWords(p.words, p.startMs, p.endMs)?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
             )
         }
-        if (segments.isEmpty()) return null
+        if (segments.isEmpty()) {
+            AppLog.d("Canary") { "block ${clock(blockStartMs)}: whole-block redo gave no text; Parakeet's sentences kept" }
+            return null
+        }
         val english = segments.count { com.ascolta.app.data.SentenceLanguage.isEnglishInstead(it.text, language, wordLists, names) }
+        AppLog.d("Canary") {
+            "block ${clock(blockStartMs)}: whole-block redo, $english of ${segments.size} still English" +
+                (if (english * 2 < segments.size) "; used:" else "; rejected (heard English too):") +
+                segments.joinToString("") { "\n   ${clock(it.startMs)} ${it.text.take(80)}" }
+        }
         return segments.takeIf { english * 2 < segments.size }
     }
 
@@ -730,8 +748,16 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         var redone = 0
         wrong.indices.forEach { i ->
             val text = texts[i].trim()
-            if (text.isEmpty() || isHallucination(text) ||
-                com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) return@forEach
+            val rejected = when {
+                text.isEmpty() -> if (parts.isEmpty()) "Canary returned nothing" else "no Canary text at that time"
+                isHallucination(text) -> "ghost line"
+                com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names) -> "Canary heard English too"
+                else -> null
+            }
+            AppLog.d("Canary") {
+                "${clock(wrong[i].startMs)} \"${wrong[i].text.take(60)}\" → \"${text.take(60)}\" " + (rejected?.let { "rejected: $it" } ?: "used")
+            }
+            if (rejected != null) return@forEach
             val words = parts.filter { p -> (p.startMs + p.endMs) / 2 in (wrong[i].startMs - blockStartMs - pad)..(wrong[i].endMs - blockStartMs + pad) }
                 .flatMap { it.words.orEmpty() }.map { it.copy(startMs = it.startMs + blockStartMs) }.takeIf { it.isNotEmpty() }
             wrong[i] = wrong[i].copy(text = Names.correct(text, names).first, words = words)
@@ -739,6 +765,9 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
         return redone
     }
+
+    /** A time in the episode for the log: 12:34. */
+    private fun clock(ms: Long) = "%d:%02d".format(java.util.Locale.US, ms / 60_000, ms / 1000 % 60)
 
     /** A timed word with the same name correction as its sentence ("Selenski," → "Zelensky,"). */
     private fun fixWord(word: String, fixed: Map<String, String>): String {

@@ -12,7 +12,9 @@ import java.util.Locale
  * can be reported without a computer.
  */
 object AppLog {
-    private const val MAX_BYTES = 200_000L
+    /** "Detailed log" (Diagnostics): every sentence, why it was flagged, what was redone. */
+    @Volatile var detailed = false
+    private val maxBytes get() = if (detailed) 1_000_000L else 200_000L
     private var file: File? = null
     private val time = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
 
@@ -23,6 +25,16 @@ object AppLog {
     fun i(tag: String, message: String) {
         Log.i(tag, message)
         write("I", tag, message)
+    }
+
+    /** Only written with the detailed log on; the message is built only then. */
+    inline fun d(tag: String, message: () -> String) {
+        if (detailed) detail(tag, message())
+    }
+
+    fun detail(tag: String, message: String) {
+        Log.d(tag, message)
+        write("D", tag, message)
     }
 
     fun w(tag: String, message: String, error: Throwable? = null) {
@@ -37,11 +49,11 @@ object AppLog {
     }
 
     @Synchronized
-    private fun write(level: String, tag: String, message: String) {
+    fun write(level: String, tag: String, message: String) {
         val f = file ?: return
         runCatching {
-            if (f.length() > MAX_BYTES) {
-                val keep = f.readText().takeLast((MAX_BYTES / 2).toInt())
+            if (f.length() > maxBytes) {
+                val keep = f.readText().takeLast((maxBytes / 2).toInt())
                 f.writeText(keep)
             }
             f.appendText("${time.format(Date())} $level/$tag: $message\n")

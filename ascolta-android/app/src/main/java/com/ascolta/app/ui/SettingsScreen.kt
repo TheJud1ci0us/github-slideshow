@@ -747,6 +747,8 @@ private fun DiagnosticsSection() {
         headlineContent = { Text(stringResource(R.string.view_log)) },
         supportingContent = { Text(stringResource(R.string.view_log_text)) },
     )
+    // Every sentence, why it was flagged and what was redone: to send when something goes wrong.
+    SwitchRow(stringResource(R.string.detailed_log_title), stringResource(R.string.detailed_log_text), context.graph.settings.detailedLog)
     Hint(stringResource(R.string.speech_engine_info, engine))
     if (showLog) {
         val log = remember { AppLog.read().takeLast(20_000) }
@@ -764,7 +766,8 @@ private fun DiagnosticsSection() {
                 TextButton(onClick = {
                     val send = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, AppLog.read().takeLast(50_000))
+                        // The log, up to its last 500,000 characters (the detailed log keeps up to 1 MB).
+                        putExtra(Intent.EXTRA_TEXT, AppLog.read().takeLast(500_000))
                     }
                     context.startActivity(Intent.createChooser(send, context.getString(R.string.share_log)))
                 }) { Text(stringResource(R.string.action_share)) }

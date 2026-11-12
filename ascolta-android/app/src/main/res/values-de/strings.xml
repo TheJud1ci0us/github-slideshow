@@ -584,4 +584,6 @@
     <string name="ad_free_text">Viele Podcasts verkaufen eine werbefreie Version als privaten RSS-Feed (Patreon, Supercast, Acast+…). Wenn du einen hast, kopiere die Feed-Adresse aus diesem Dienst und füge sie hier hinzu: Du bekommst die Folgen ohne Werbung.</string>
     <string name="ad_free_add">Feed-Link hinzufügen</string>
     <string name="model_desc_canary">Canary 180M (NVIDIA): ein kleines Modell, dem die Sprache gesagt wird; es schreibt die Sätze neu, die Parakeet auf Englisch schreibt. Französisch, Spanisch, Deutsch.</string>
+    <string name="detailed_log_title">Ausführliches Protokoll</string>
+    <string name="detailed_log_text">Zeichnet auch jeden Satz auf, warum einer für Englisch gehalten wurde und was neu gemacht wurde. Bleibt auf deinem Handy; es wird nur gesendet, wenn du es teilst.</string>
 </resources>

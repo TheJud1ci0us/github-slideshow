@@ -159,6 +159,14 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         runCatching { com.ascolta.app.data.AdDetector.detect(segments) }
             .onFailure { com.ascolta.app.data.AppLog.w("Ads", "Ad detection failed", it) }
             .getOrDefault(emptyList())
+            .also { found ->
+                if (found.isNotEmpty()) com.ascolta.app.data.AppLog.d("Ads") {
+                    found.joinToString("; ") { a ->
+                        val first = segments.firstOrNull { it.startMs >= a.startMs }?.text?.take(60).orEmpty()
+                        "%d:%02d–%d:%02d \"%s\"".format(a.startMs / 60_000, a.startMs / 1000 % 60, a.endMs / 60_000, a.endMs / 1000 % 60, first)
+                    }
+                }
+            }
     }
     // Known words (optional): new words softly highlighted.
     val highlightNew by settings.highlightNewWords.flow.collectAsState()

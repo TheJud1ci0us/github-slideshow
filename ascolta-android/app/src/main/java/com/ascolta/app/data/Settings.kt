@@ -183,6 +183,8 @@ class Settings(context: Context) {
     /** Flashcards reviewed in total, and whether the store rating was asked. */
     val cardsReviewed = int("cards_reviewed", 0)
     val ratingAsked = bool("rating_asked", false)
+    /** Diagnostics: log every sentence, why it was flagged and what was redone (stays on the phone). */
+    val detailedLog = bool("detailed_log", false)
 
     fun learningList(): List<String> =
         learningLanguages.value.split(',').filter { it.isNotBlank() }.ifEmpty { listOf(learningLanguage.value) }

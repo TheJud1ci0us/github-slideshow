@@ -591,4 +591,6 @@
     <string name="ad_free_text">Beaucoup de podcasts vendent une version sans publicité sous forme de flux RSS privé (Patreon, Supercast, Acast+…). Si vous en avez un, copiez l\'adresse du flux depuis ce service et ajoutez-la ici : vous aurez les épisodes sans pub.</string>
     <string name="ad_free_add">Ajouter un lien de flux</string>
     <string name="model_desc_canary">Canary 180M (NVIDIA) : un petit modèle à qui l\'on indique la langue, utilisé pour refaire les phrases que Parakeet écrit en anglais. Français, espagnol, allemand.</string>
+    <string name="detailed_log_title">Journal détaillé</string>
+    <string name="detailed_log_text">Enregistre aussi chaque phrase, pourquoi une phrase a été prise pour de l\'anglais et ce qui a été refait. Reste sur votre téléphone ; il n\'est envoyé que si vous le partagez.</string>
 </resources>

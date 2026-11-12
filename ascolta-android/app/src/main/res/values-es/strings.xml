@@ -591,4 +591,6 @@
     <string name="ad_free_text">Muchos podcasts venden una versión sin anuncios como feed RSS privado (Patreon, Supercast, Acast+…). Si tienes uno, copia la dirección del feed desde ese servicio y añádela aquí: tendrás los episodios sin anuncios.</string>
     <string name="ad_free_add">Añadir un enlace de feed</string>
     <string name="model_desc_canary">Canary 180M (NVIDIA): un modelo pequeño al que se le indica el idioma, usado para rehacer las frases que Parakeet escribe en inglés. Francés, español, alemán.</string>
+    <string name="detailed_log_title">Registro detallado</string>
+    <string name="detailed_log_text">Registra también cada frase, por qué una se tomó por inglés y qué se rehízo. Se queda en tu teléfono; solo se envía si lo compartes.</string>
 </resources>

@@ -58,6 +58,24 @@ object SentenceLanguage {
     }
 
     /**
+     * Why [text] counts as English instead of [language] (for the detailed log), or null if it
+     * doesn't: which rule, and its numbers.
+     */
+    fun why(text: String, language: String, lists: WordLists? = null, names: List<String> = emptyList()): String? {
+        if (!isEnglishInstead(text, language, lists, names)) return null
+        val words = WORD.findAll(text.lowercase().replace('’', '\'')).map { it.value }.toList()
+        val en = lists?.ranks("en")
+        val own = lists?.ranks(language)
+        if (en != null && own != null) {
+            val englishOnly = words.filter { w -> en[w]?.let { r -> own[w]?.let { it > 8 * r + 50 } ?: true } == true }
+            if (englishOnly.isNotEmpty()) return "frequency: ${englishOnly.size} of ${words.size} words English-only (${englishOnly.take(5).joinToString(", ")})"
+        }
+        val markers = MARKERS[language].orEmpty()
+        val english = words.filter { it in ENGLISH && it !in markers }
+        return "little words: ${english.size} English (${english.take(5).joinToString(", ")}), ${words.count { it in markers }} $language"
+    }
+
+    /**
      * Short slips too ("Exactly.", "Yes, exactly.", "Of course."): most words are common in
      * English and rare or unknown in [language] (8× rarer at least, so loanwords such as "OK",
      * "parking", "week-end" or "meeting" in French don't count). Names of the episode don't count.
