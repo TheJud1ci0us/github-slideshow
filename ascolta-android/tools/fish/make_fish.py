@@ -108,12 +108,14 @@ class Fish:
             if prev: e.parent = prev; e.use_connect = True
             prev = e
         bpy.ops.object.mode_set(mode='OBJECT')
+        bone_of, frac_of = [], []
         groups = [ob.vertex_groups.new(name=nm) for nm in names]
         for v in me.vertices:
             t = (x0 - v.co.x) / (x0 - x1); u = 0.0
             for j in joints[1:4]:
                 s = min(1.0, max(0.0, (t - (j - 0.09)) / 0.18)); u += s * s * (3 - 2 * s)
             k = min(int(u), 3); fr = u - k
+            bone_of.append(k); frac_of.append(round(fr if k < 3 else 0.0, 3))
             groups[k].add([v.index], 1 - fr if k < 3 else 1.0, 'REPLACE')
             if k < 3 and fr > 0: groups[k + 1].add([v.index], fr, 'REPLACE')
         ob.parent = rig; mod = ob.modifiers.new("Armature", 'ARMATURE'); mod.object = rig
@@ -125,8 +127,19 @@ class Fish:
                 pb.rotation_quaternion = Quaternion(axis, swim * amp[i] * math.sin(2 * math.pi * (fr - 1) / 24 - phase[i]))
                 pb.keyframe_insert("rotation_quaternion", frame=fr)
         rig.animation_data.action.name = self.name + "_Swim"
+        # The same fish for the app's own 3D drawing: vertices with their spine bone, triangles
+        # with their colour, the joints of the spine and how strongly it swims.
+        me.calc_loop_triangles()
+        cols = [self.colors[k] if isinstance(self.colors[k], str) else self.colors[k][0] for k in self.keys]
+        APP[self.name.lower()] = {
+            "v": [round(c, 4) for v in me.vertices for c in v.co], "b": bone_of, "f": frac_of,
+            "t": [i for lt in me.loop_triangles for i in (*lt.vertices, lt.material_index)],
+            "colors": cols, "keys": self.keys, "glow": [0 if isinstance(self.colors[k], str) else 1 for k in self.keys],
+            "joints": [round(x0 + (x1 - x0) * j, 4) for j in joints[:4]], "swim": swim,
+        }
         return rig, ob
 
+APP = {}
 EYE = {"eye": "#FFFFFF", "pupil": "#14181F"}
 FISH = []
 def add(f, **kw): FISH.append(f.finish(**kw))
@@ -248,4 +261,8 @@ for rig, ob in FISH:
 for i, (rig, ob) in enumerate(FISH):
     rig.location = ((i % 5) * 1.7 - 3.4, 0, 0.75 - (i // 5) * 1.5)
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, "LowPolyFish.blend"))
+if os.environ.get("APP_ASSETS"):
+    import json
+    os.makedirs(os.environ["APP_ASSETS"], exist_ok=True)
+    for name, data in APP.items(): json.dump(data, open(os.path.join(os.environ["APP_ASSETS"], name + ".json"), "w"), separators=(",", ":"))
 for r in report: print("FISH %-14s %4d triangles  %d materials  %6d bytes" % r)

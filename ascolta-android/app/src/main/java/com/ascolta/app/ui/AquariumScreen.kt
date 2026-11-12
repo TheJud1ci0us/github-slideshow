@@ -56,31 +56,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -96,7 +90,6 @@ import com.ascolta.app.data.FishGame.Tier
 import com.ascolta.app.graph
 import kotlinx.coroutines.delay
 import kotlin.math.hypot
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -132,17 +125,11 @@ private fun sand(b: Background): Color = when (b) {
     Background.DEEP -> Color(0xFF34435F)
 }
 
-/** The sprite sheet of [fish]: its own colours, the second colouring, or gold. */
+/** The 3D model of [species] (read once from the app's assets). */
 @Composable
-private fun sheetOf(fish: Fish): ImageBitmap {
-    val art = FISH_ART.getValue(fish.species)
-    return ImageBitmap.imageResource(
-        when (fish.tier) {
-            Tier.COMMON, Tier.RARE -> art.base
-            Tier.UNCOMMON, Tier.VERY_RARE -> art.alt
-            Tier.LEGENDARY -> art.gold
-        },
-    )
+private fun modelOf(species: Species): FishModel {
+    val context = LocalContext.current
+    return remember(species) { FishModel.of(context, species) }
 }
 
 /** Seconds that keep running while [animate] (screenshots pass false and a fixed [start]). */
@@ -172,49 +159,28 @@ private fun DrawScope.star(center: Offset, radius: Float, color: Color) {
 }
 
 /**
- * Draws one fish (frame of its swim loop by [time]) with its tier's effects: Rare is shiny
- * with sparkles, Very rare has a glowing aura and a trail of light bubbles, Legendary a gold
- * glow, a shimmer and a sparkle trail. [silhouette] draws a plain shape (not collected yet).
+ * Draws one fish in 3D, heading [yaw], with its tier's effects: Rare is shiny with sparkles,
+ * Very rare has a glowing aura and a trail of light bubbles, Legendary a gold glow, a shimmer
+ * and a sparkle trail. [silhouette] draws a plain shape (not collected yet); [fog] fades a
+ * far fish into the water.
  */
 internal fun DrawScope.drawFish(
-    sheet: ImageBitmap, tier: Tier, center: Offset, size: Float, time: Float,
-    phase: Float = 0f, flip: Boolean = false, alpha: Float = 1f, silhouette: Color? = null,
+    model: FishModel, tier: Tier, center: Offset, size: Float, time: Float,
+    phase: Float = 0f, yaw: Float = 0f, alpha: Float = 1f, silhouette: Color? = null, fog: Color = Color.Transparent, fogAmount: Float = 0f,
 ) {
-    val frame = ((time * 9f + phase * 8f).toInt() % 8 + 8) % 8
-    val cell = sheet.width / 4
-    val src = IntOffset((frame % 4) * cell, (frame / 4) * cell)
     val half = size / 2
-    val topLeft = IntOffset((center.x - half).roundToInt(), (center.y - half).roundToInt())
-    val dst = IntSize(size.roundToInt(), size.roundToInt())
     val effects = silhouette == null
-    val behind = if (flip) 1f else -1f
+    val behind = -kotlin.math.cos(yaw)
     if (effects && tier >= Tier.VERY_RARE) {
         val c = if (tier == Tier.LEGENDARY) Color(0xFFFFD54A) else Color(0xFF8AF6FF)
         val r = half * 1.1f * (0.9f + 0.1f * sin(time * 3f + phase * 6f))
         drawCircle(Brush.radialGradient(listOf(c.copy(alpha = 0.6f * alpha), c.copy(alpha = 0.18f * alpha), Color.Transparent), center, r), r, center)
     }
-    scale(if (flip) -1f else 1f, 1f, center) {
-        if (effects && (tier == Tier.RARE || tier == Tier.LEGENDARY)) {
-            // A band of light sweeping over the fish only (kept inside its own layer).
-            val canvas = drawContext.canvas
-            canvas.saveLayer(Rect(center.x - half, center.y - half, center.x + half, center.y + half), Paint().apply { this.alpha = alpha })
-            drawImage(sheet, src, IntSize(cell, cell), topLeft, dst, filterQuality = FilterQuality.Medium)
-            val t = ((time * 0.55f + phase) % 1.4f) / 1.4f
-            val x = center.x - size + t * size * 2f
-            drawRect(
-                Brush.linearGradient(
-                    listOf(Color.Transparent, Color.White.copy(alpha = if (tier == Tier.LEGENDARY) 0.85f else 0.6f), Color.Transparent),
-                    start = Offset(x, center.y - half), end = Offset(x + size * 0.35f, center.y + half),
-                ),
-                topLeft = Offset(center.x - half, center.y - half), size = Size(size, size), blendMode = BlendMode.SrcAtop,
-            )
-            canvas.restore()
-        } else {
-            drawImage(
-                sheet, src, IntSize(cell, cell), topLeft, dst, alpha = alpha,
-                colorFilter = silhouette?.let { ColorFilter.tint(it) }, filterQuality = FilterQuality.Medium,
-            )
-        }
+    drawIntoCanvas {
+        model.draw(
+            it.nativeCanvas, tier, center.x, center.y, size, yaw, time, phase,
+            fog = fog.toArgb(), fogAmount = fogAmount, flat = silhouette?.toArgb(), effects = effects,
+        )
     }
     if (!effects) return
     if (tier == Tier.VERY_RARE) {
@@ -242,13 +208,15 @@ internal fun DrawScope.drawFish(
     }
 }
 
-/** A fish on its own (collection, catch): animated when [time] moves. */
+/** A fish on its own (collection, catch): it swims in place and turns a little, or all the way round with [spin]. */
 @Composable
-internal fun FishSprite(fish: Fish, time: Float, modifier: Modifier = Modifier, owned: Boolean = true) {
-    val sheet = sheetOf(fish)
-    val shadow = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)
+internal fun FishSprite(fish: Fish, time: Float, modifier: Modifier = Modifier, owned: Boolean = true, spin: Boolean = false) {
+    val model = modelOf(fish.species)
+    val shadow = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer)
     Canvas(modifier) {
-        drawFish(sheet, fish.tier, Offset(size.width / 2, size.height / 2), size.minDimension * 0.8f, time, phase = fish.species.ordinal * 0.13f, silhouette = if (owned) null else shadow)
+        val phase = fish.species.ordinal * 0.13f
+        val yaw = if (!owned) 0f else if (spin) -0.5f + time * 0.9f else sin(time * 0.7f + phase * 6f) * 0.5f - 0.25f
+        drawFish(model, fish.tier, Offset(size.width / 2, size.height / 2), size.minDimension * 0.8f, time, phase, yaw, silhouette = if (owned) null else shadow)
     }
 }
 
@@ -258,7 +226,8 @@ private class Swimmer(index: Int) {
     var x = 0.12f + random.nextFloat() * 0.76f
     var y = 0.14f + random.nextFloat() * 0.52f
     var z = random.nextFloat()
-    var flip = random.nextBoolean()
+    /** Heading: 0 nose to the right, π to the left, in between towards or away from the glass. */
+    var yaw = (if (random.nextBoolean()) 3.1416f else 0f) + (random.nextFloat() - 0.5f) * 1.3f
     val phase = random.nextFloat()
     private val speed = 0.05f + random.nextFloat() * 0.05f
     private var tx = x; private var ty = y; private var tz = z
@@ -273,7 +242,11 @@ private class Swimmer(index: Int) {
         if (d > 0.001f) {
             val v = speed * (if (attract != null) 2.6f else 1f) * dt
             x += dx / d * minOf(v, d); y += dy / d * minOf(v, d) * 0.6f
-            if (dx > 0.02f) flip = false else if (dx < -0.02f) flip = true
+            // Turn towards where it's going: sideways, and into or out of the depth of the tank.
+            val want = kotlin.math.atan2(-(tz - z) * 0.45f, if (kotlin.math.abs(dx) < 0.03f) kotlin.math.cos(yaw) * 0.03f else dx)
+            var turn = (want - yaw) % 6.2832f
+            if (turn > 3.1416f) turn -= 6.2832f else if (turn < -3.1416f) turn += 6.2832f
+            yaw += turn * (dt * 2.6f).coerceAtMost(1f)
         }
         z += (tz - z) * (dt * 0.4f).coerceAtMost(1f)
     }
@@ -297,7 +270,7 @@ internal fun Tank(
     animate: Boolean = true, startTime: Float = 0f,
 ) {
     val swimmers = remember(fish) { fish.indices.map { Swimmer(it) } }
-    val sheets = fish.map { sheetOf(it) }
+    val models = fish.map { modelOf(it.species) }
     val painters: List<Pair<Decoration, Painter>> = DECO_PLACE.keys.filter { it in decorations }.map { it to painterResource(DECO_ART.getValue(it).art) }
     val time = remember { mutableFloatStateOf(startTime) }
     var attract by remember { mutableStateOf<Pair<Offset, Float>?>(null) }
@@ -353,8 +326,8 @@ internal fun Tank(
             val s = swimmers[i]
             val bob = sin(t * 1.6f + s.phase * 6f) * h * 0.008f
             drawFish(
-                sheets[i], fish[i].tier, Offset(s.x * w, s.y * h + bob), w * (0.15f + 0.13f * s.z), t,
-                phase = s.phase, flip = s.flip, alpha = 0.62f + 0.38f * s.z,
+                models[i], fish[i].tier, Offset(s.x * w, s.y * h + bob), w * (0.15f + 0.13f * s.z), t,
+                phase = s.phase, yaw = s.yaw, alpha = 0.62f + 0.38f * s.z, fog = colors[1], fogAmount = (1f - s.z) * 0.32f,
             )
         }
         // The glass.
@@ -527,7 +500,7 @@ private fun Fishing(
     if (phase == FishingPhase.CAUGHT && result != null) {
         val pop = remember(result) { Animatable(if (animate) 0.2f else 1f) }
         LaunchedEffect(result) { pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) }
-        FishSprite(result.fish, time, Modifier.size(200.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value })
+        FishSprite(result.fish, time, Modifier.size(200.dp).graphicsLayer { scaleX = pop.value; scaleY = pop.value }, spin = true)
         Text(stringResource(FISH_ART.getValue(result.fish.species).name), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         TierChip(result.fish.tier)
         Text(

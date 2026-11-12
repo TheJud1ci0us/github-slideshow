@@ -4,20 +4,20 @@ import com.ascolta.app.R
 import com.ascolta.app.data.FishGame.Decoration
 import com.ascolta.app.data.FishGame.Species
 
-/** Sprites and names of the Aquarium (generated list: explicit, so resource shrinking keeps them). */
-internal class FishArt(val base: Int, val alt: Int, val gold: Int, val name: Int)
+/** Names and drawings of the Aquarium (generated list: explicit, so resource shrinking keeps them). */
+internal class FishArt(val name: Int)
 
 internal val FISH_ART: Map<Species, FishArt> = mapOf(
-    Species.CLOWNFISH to FishArt(R.drawable.fish_clownfish_base, R.drawable.fish_clownfish_alt, R.drawable.fish_clownfish_gold, R.string.aq_fish_clownfish),
-    Species.BLUETANG to FishArt(R.drawable.fish_bluetang_base, R.drawable.fish_bluetang_alt, R.drawable.fish_bluetang_gold, R.string.aq_fish_bluetang),
-    Species.GOLDFISH to FishArt(R.drawable.fish_goldfish_base, R.drawable.fish_goldfish_alt, R.drawable.fish_goldfish_gold, R.string.aq_fish_goldfish),
-    Species.ANGELFISH to FishArt(R.drawable.fish_angelfish_base, R.drawable.fish_angelfish_alt, R.drawable.fish_angelfish_gold, R.string.aq_fish_angelfish),
-    Species.PUFFERFISH to FishArt(R.drawable.fish_pufferfish_base, R.drawable.fish_pufferfish_alt, R.drawable.fish_pufferfish_gold, R.string.aq_fish_pufferfish),
-    Species.SHARK to FishArt(R.drawable.fish_shark_base, R.drawable.fish_shark_alt, R.drawable.fish_shark_gold, R.string.aq_fish_shark),
-    Species.BETTA to FishArt(R.drawable.fish_betta_base, R.drawable.fish_betta_alt, R.drawable.fish_betta_gold, R.string.aq_fish_betta),
-    Species.NEONTETRA to FishArt(R.drawable.fish_neontetra_base, R.drawable.fish_neontetra_alt, R.drawable.fish_neontetra_gold, R.string.aq_fish_neontetra),
-    Species.BUTTERFLYFISH to FishArt(R.drawable.fish_butterflyfish_base, R.drawable.fish_butterflyfish_alt, R.drawable.fish_butterflyfish_gold, R.string.aq_fish_butterflyfish),
-    Species.ANGLERFISH to FishArt(R.drawable.fish_anglerfish_base, R.drawable.fish_anglerfish_alt, R.drawable.fish_anglerfish_gold, R.string.aq_fish_anglerfish),
+    Species.CLOWNFISH to FishArt(R.string.aq_fish_clownfish),
+    Species.BLUETANG to FishArt(R.string.aq_fish_bluetang),
+    Species.GOLDFISH to FishArt(R.string.aq_fish_goldfish),
+    Species.ANGELFISH to FishArt(R.string.aq_fish_angelfish),
+    Species.PUFFERFISH to FishArt(R.string.aq_fish_pufferfish),
+    Species.SHARK to FishArt(R.string.aq_fish_shark),
+    Species.BETTA to FishArt(R.string.aq_fish_betta),
+    Species.NEONTETRA to FishArt(R.string.aq_fish_neontetra),
+    Species.BUTTERFLYFISH to FishArt(R.string.aq_fish_butterflyfish),
+    Species.ANGLERFISH to FishArt(R.string.aq_fish_anglerfish),
 )
 
 internal class DecoArt(val art: Int, val name: Int)
