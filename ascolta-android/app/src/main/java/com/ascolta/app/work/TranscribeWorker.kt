@@ -546,7 +546,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         // Parakeet can't be told the language: sentences it wrote in English are redone with Canary.
                         val wrongLanguage = mutableListOf<Segment>()
                         val doubtful = mutableListOf<Segment>() // sentences with words that don't exist
-                        val heard = mutableListOf<Segment>() // every sentence of this block, to find skipped stretches
                         val checkDoubts = settings.checkDoubtfulWords.value && com.ascolta.app.data.DoubtfulWords.supports(language, wordLists)
                         recognizer.setDetectedSpeech(prepared.speech)
                         AppLog.d("Speech") {
@@ -561,11 +560,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 },
                                 onSegment = { seg ->
                                     val (text, fixed) = com.ascolta.app.data.Names.correct(seg.text.trim(), names)
-                                    if (text.isNotEmpty() && (isHallucination(text) || com.ascolta.app.data.Names.echoesPrompt(text, names))) {
-                                        AppLog.d("Dropped") {
-                                            "${clock(seg.startMs + blockStartMs)} \"${text.take(80)}\" — " + if (isHallucination(text)) "ghost line" else "repeats the names hint"
-                                        }
-                                    }
                                     if (text.isNotEmpty() && !isHallucination(text) && !com.ascolta.app.data.Names.echoesPrompt(text, names)) {
                                         count++
                                         lastEnd = maxOf(lastEnd, seg.endMs + blockStartMs)
@@ -577,7 +571,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
                                         AppLog.d("Sentence") { "${clock(segment.startMs)} ${text.take(80)}" }
-                                        heard += segment
                                         if (FIX_WRONG_LANGUAGE && settings.fixEnglish.value && model.engine == Engine.PARAKEET && SpeechModel.CANARY_180M.supports(language) && language != "en" &&
                                             com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
                                             AppLog.d("English?") { "${clock(segment.startMs)} flagged — ${com.ascolta.app.data.SentenceLanguage.why(text, language, wordLists, names)}" }
@@ -603,26 +596,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             )
                         }
                         watcher.cancel()
-                        // Stretches skipped in the middle of speech (Parakeet sometimes goes silent for a few
-                        // seconds, mid-sentence): heard again on their own.
-                        val detected = prepared.speech
-                        if (finished && !isStopped && detected != null) {
-                            val holes = Holes.find(
-                                detected.map { (a, b) -> a + blockStartMs to b + blockStartMs }, heard,
-                                blockStartMs, blockStartMs + blockLenMs,
-                            )
-                            if (holes.isNotEmpty()) {
-                                val cuts = buildList {
-                                    add(blockStartMs); add(blockStartMs + blockLenMs)
-                                    if (model.engine == Engine.PARAKEET && regions != null) {
-                                        com.ascolta.app.whisper.SpeechDetection.groupForContext(regions).forEach { (a, b) -> add(a + blockStartMs); add(b + blockStartMs) }
-                                    }
-                                }
-                                val refilled = refillHoles(holes, cuts, prepared.samples, blockStartMs, language, names, prompt, recognizer, model, options)
-                                refilled.forEach { events.send(WriterEvent.Sentence(it)) }
-                                AppLog.i(TAG, "Skipped speech: ${holes.size} stretches (${holes.sumOf { it.speechMs } / 1000}s), ${refilled.size} sentences recovered")
-                            }
-                        }
                         if (wrongLanguage.isNotEmpty() && !isStopped) {
                             val redoStarted = System.currentTimeMillis()
                             // A conversation where many sentences slipped into English: the whole block is
@@ -870,60 +843,6 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             redone++
         }
         return redone
-    }
-
-    /**
-     * Each skipped stretch heard again: by the main model on its own (a short piece often works
-     * when the long one didn't), else by the second model told the language (Canary or a
-     * downloaded Whisper). Returns the sentences recovered, with episode times.
-     */
-    private suspend fun refillHoles(
-        holes: List<Holes.Hole>,
-        cuts: List<Long>,
-        samples: FloatArray,
-        blockStartMs: Long,
-        language: String,
-        names: List<String>,
-        prompt: String?,
-        main: SpeechEngine,
-        model: SpeechModel,
-        options: EngineOptions,
-    ): List<Segment> {
-        val lengthMs = samples.size / 16L
-        val found = mutableListOf<Segment>()
-        for (hole in holes) {
-            val from = (hole.startMs - blockStartMs - 300).coerceAtLeast(0)
-            val to = (hole.endMs - blockStartMs + 300).coerceAtMost(lengthMs)
-            if (to - from < 500) continue
-            val edge = cuts.firstOrNull { it in (hole.startMs - 1_000)..(hole.endMs + 1_000) }
-                ?.let { if (it == cuts[0] || it == cuts[1]) " (at a block edge)" else " (at a piece edge ${clock(it)})" } ?: ""
-            suspend fun hear(engine: SpeechEngine): List<Segment> {
-                val parts = mutableListOf<com.ascolta.app.whisper.WhisperSegment>()
-                withContext(CoreDispatchers.recognition) { engine.transcribe(samples, listOf(from to to), language, prompt, {}, { parts += it }) }
-                return parts.mapNotNull { p ->
-                    val (text, fixed) = Names.correct(p.text.trim(), names)
-                    if (text.isEmpty() || isHallucination(text) || Names.echoesPrompt(text, names)) return@mapNotNull null
-                    Segment(
-                        p.startMs + blockStartMs, p.endMs + blockStartMs, text,
-                        words = cleanWords(p.words, p.startMs, p.endMs)?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
-                    )
-                }
-            }
-            var by = model.label
-            var again = runCatching { hear(main) }.getOrDefault(emptyList())
-            if (again.isEmpty()) {
-                doubtFixer(language, model, options)?.let { (second, secondModel) ->
-                    by = secondModel.label
-                    again = runCatching { hear(second) }.getOrDefault(emptyList())
-                }
-            }
-            AppLog.d("Hole") {
-                "${clock(hole.startMs)}–${clock(hole.endMs)} (${hole.speechMs / 1000}s of speech, no words)$edge → " +
-                    if (again.isEmpty()) "nothing heard" else "$by: \"${again.joinToString(" ") { it.text }.take(100)}\""
-            }
-            found += again
-        }
-        return found
     }
 
     /** A time in the episode for the log: 12:34. */
