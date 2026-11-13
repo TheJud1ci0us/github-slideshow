@@ -239,6 +239,7 @@ private fun AddCardDialog(onDismiss: () -> Unit) {
             runCatching { graph.repo.translateText(text.trim(), from, to) }
                 .onSuccess { into(it.trim()) }
                 .onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
                     Toast.makeText(context, context.getString(R.string.translation_unavailable, it.message ?: ""), Toast.LENGTH_LONG).show()
                 }
             translating = false

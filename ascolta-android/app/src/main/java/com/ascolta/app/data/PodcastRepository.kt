@@ -2,6 +2,7 @@
 
 package com.ascolta.app.data
 
+import kotlinx.coroutines.async
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -500,6 +501,18 @@ class PodcastRepository(
      * Returns the updated transcript, or null if translation isn't possible right now.
      */
     suspend fun translateTranscript(episodeId: Long): Transcript? {
+        // Runs in the app's scope: leaving the episode's screen doesn't stop it (a screen only
+        // waits for it), and a second screen joins the same job.
+        val job = translationJobs.compute(episodeId) { _, old ->
+            old?.takeIf { it.isActive } ?: backgroundScope.async { translateNow(episodeId) }
+        }!!
+        return try { job.await() } finally { if (job.isCompleted) translationJobs.remove(episodeId, job) }
+    }
+
+    private val backgroundScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Default)
+    private val translationJobs = java.util.concurrent.ConcurrentHashMap<Long, kotlinx.coroutines.Deferred<Transcript?>>()
+
+    private suspend fun translateNow(episodeId: Long): Transcript? {
         val transcript = transcripts.load(episodeId) ?: return null
         val target = settings.nativeLanguage.value
         if (!translation.isSupported(transcript.language, target)) return null
@@ -507,20 +520,30 @@ class PodcastRepository(
         if (!stale && transcript.segments.all { it.translation != null }) return transcript
         withTimeoutOrNull(3 * 60_000L) { ensureTranslationModel(transcript.language, target) }
             ?: throw IOException("the translation model couldn't be downloaded. Check your connection and try again.")
-        val segments = transcript.segments.map { segment ->
-            if (segment.translation != null && !stale) segment
-            else segment.copy(translation = translation.translate(segment.text, transcript.language, target))
-        }
         // Re-read in case transcription added sentences meanwhile (anywhere, after a jump), and
         // put the translations on matching sentences instead of relying on positions.
-        val latest = transcripts.load(episodeId) ?: transcript
-        val translated = segments.associateBy { it.startMs to it.text }
-        val merged = latest.copy(
-            segments = latest.segments.map { seg -> translated[seg.startMs to seg.text] ?: seg },
-            translationLanguage = target,
-        )
-        transcripts.save(episodeId, merged)
-        return merged
+        val translated = HashMap<Pair<Long, String>, String>()
+        suspend fun saveProgress(done: Boolean): Transcript {
+            val latest = transcripts.load(episodeId) ?: transcript
+            val merged = latest.copy(
+                segments = latest.segments.map { seg ->
+                    translated[seg.startMs to seg.text]?.let { seg.copy(translation = it) } ?: seg
+                },
+                // Switching language part-way: the transcript keeps its old language until all is
+                // done, so a stopped job is picked up again later.
+                translationLanguage = if (done || !stale) target else latest.translationLanguage,
+            )
+            transcripts.save(episodeId, merged)
+            return merged
+        }
+        var sinceSave = 0
+        for (segment in transcript.segments) {
+            if (segment.translation != null && !stale) continue
+            translated[segment.startMs to segment.text] = translation.translate(segment.text, transcript.language, target)
+            // Saved as it goes, so a stopped translation keeps what's done.
+            if (++sinceSave >= 20) { saveProgress(done = false); sinceSave = 0 }
+        }
+        return saveProgress(done = true)
     }
 
     /**

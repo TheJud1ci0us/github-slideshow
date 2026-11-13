@@ -206,7 +206,11 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             translating = true
             runCatching { graph.repo.translateTranscript(episodeId) }
                 .onSuccess { if (it != null) transcript = it }
-                .onFailure { Toast.makeText(context, context.getString(R.string.translation_unavailable, it.message ?: ""), Toast.LENGTH_LONG).show() }
+                .onFailure {
+                    // Leaving the screen only stops waiting (the translation carries on): not an error.
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    Toast.makeText(context, context.getString(R.string.translation_unavailable, it.message ?: ""), Toast.LENGTH_LONG).show()
+                }
             translating = false
         }
     }
@@ -1383,7 +1387,7 @@ private fun WordSheet(
     val scope = rememberCoroutineScope()
     val translation by produceState<String?>(null, lookup) {
         value = runCatching { graph.repo.translateWord(lookup.word, language) }
-            .getOrElse { context.getString(R.string.word_translation_unavailable, it.message ?: "") }
+            .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; context.getString(R.string.word_translation_unavailable, it.message ?: "") }
     }
     // Dictionary meanings (Wiktionary), in the learner's language when it isn't English.
     val entry by produceState<Pair<com.ascolta.app.data.Dictionary.Entry, List<String>>?>(null, lookup) {

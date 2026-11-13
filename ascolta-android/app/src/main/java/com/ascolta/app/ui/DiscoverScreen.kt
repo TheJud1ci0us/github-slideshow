@@ -193,6 +193,11 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             search(initialQuery)
         }
     }
+    // A theme chosen earlier (kept when leaving Discover, its list isn't): its list again, also
+    // after switching language, instead of "For you" under the theme's name.
+    LaunchedEffect(learning) {
+        if (initialQuery.isNullOrBlank()) genre?.let { browse(it) }
+    }
     // Nothing searched yet: suggestions for this learner (courses for beginners, else a favourite theme).
     // "For you": suggestions for the language, favourite themes and level (shown before any search).
     // The suggestions first, then (as you scroll) the favourite themes, shows for learners and
