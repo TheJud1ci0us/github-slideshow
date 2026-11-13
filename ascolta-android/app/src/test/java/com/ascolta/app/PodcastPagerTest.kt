@@ -78,4 +78,26 @@ class PodcastPagerTest {
         assertEquals(asked.size, asked.distinct().size)
         assertFalse(asked.any { it.first == 1498 })
     }
+
+    @Test
+    fun aRareFilterStopsSearchingAfterTheCap() = runBlocking {
+        var fetched = 0
+        val pager = PodcastPager(
+            List(50) { n -> suspend { fetched++; shows("s$n", 10) } },
+            check = { batch -> batch.filter { it.title == "s2 4" } }, // one match in the third source
+            pageSize = 10, maxCheckedPerPage = 40,
+        )
+        val page = pager.next()
+        assertEquals(listOf("s2 4"), page.map { it.title })
+        assertTrue(pager.exhausted)
+        assertTrue(fetched <= 5) // didn't read all 50 sources
+    }
+
+    @Test
+    fun hostsThatNeverPublishTranscriptsAreAnsweredWithoutDownloading() {
+        assertEquals(false, com.ascolta.app.net.TranscriptHosts.quickAnswer("https://anchor.fm/s/abc/podcast/rss"))
+        assertEquals(false, com.ascolta.app.net.TranscriptHosts.quickAnswer("https://feeds.soundcloud.com/users/1/sounds.rss"))
+        assertEquals(null, com.ascolta.app.net.TranscriptHosts.quickAnswer("https://rss.listen.style/p/x/rss"))
+        assertEquals(null, com.ascolta.app.net.TranscriptHosts.quickAnswer("not a url"))
+    }
 }

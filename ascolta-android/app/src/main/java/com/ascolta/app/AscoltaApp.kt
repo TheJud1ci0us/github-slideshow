@@ -136,7 +136,7 @@ class AppGraph(app: Application) {
 
     /** A Pro-only feature: true with Pro, otherwise shows the paywall. */
     fun requirePro(reason: String): Boolean = isPro.also { if (!it) billing.requestPaywall(reason) }
-    val feedLanguage = com.ascolta.app.net.FeedLanguage(http)
+    val feedLanguage = com.ascolta.app.net.FeedLanguage(http, java.io.File(app.filesDir, "feed-transcripts.txt"))
     val repo = PodcastRepository(app, db, http, settings, transcripts, translation)
     val player = PlayerConnection(app, db, settings, progress, fish)
 

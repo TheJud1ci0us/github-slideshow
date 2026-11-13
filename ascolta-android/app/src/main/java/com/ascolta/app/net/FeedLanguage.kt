@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
  * web page, or refuses apps; following one of those only gives an error, so they are hidden
  * from suggestions. A feed that is just slow isn't counted as dead.
  */
-class FeedLanguage(private val http: OkHttpClient) {
+class FeedLanguage(private val http: OkHttpClient, private val transcriptStore: java.io.File? = null) {
     private val cache = ConcurrentHashMap<String, String>()
     private val dead = ConcurrentHashMap.newKeySet<String>()
     private val limit = Semaphore(8)
@@ -63,24 +63,50 @@ class FeedLanguage(private val http: OkHttpClient) {
         feedUrls.distinct().map { url -> async { url to of(url) } }.awaitAll().toMap()
     }
 
-    private val transcripts = ConcurrentHashMap<String, Boolean>()
-
-    /** Whether the feed is known to give official transcripts; null when not checked yet. */
-    fun knownTranscripts(feedUrl: String): Boolean? = transcripts[feedUrl]
-
-    /**
-     * Whether the feed's latest episodes come with official transcripts (`<podcast:transcript>`):
-     * its first three episodes are read (at most 512 KB). False when it can't be read in time.
-     */
-    suspend fun hasTranscripts(feedUrl: String): Boolean {
-        transcripts[feedUrl]?.let { return it }
-        val found = limit.withPermit {
-            withTimeoutOrNull(8_000) {
-                withContext(Dispatchers.IO) { runCatching { readTranscripts(feedUrl) }.getOrNull() }
+    /** Feeds checked for official transcripts (kept on the phone, so each is read only once). */
+    private val transcripts: ConcurrentHashMap<String, Boolean> by lazy {
+        ConcurrentHashMap<String, Boolean>().also { map ->
+            runCatching {
+                transcriptStore?.takeIf { it.exists() }?.forEachLine { line ->
+                    val tab = line.lastIndexOf('\t')
+                    if (tab > 0) map[line.substring(0, tab)] = line.endsWith("1")
+                }
             }
         }
-        // Not stored when the feed couldn't be read: it's checked again next time.
-        found?.let { transcripts[feedUrl] = it }
+    }
+
+    private fun remember(feedUrl: String, has: Boolean) {
+        if (transcripts.put(feedUrl, has) == null) runCatching {
+            transcriptStore?.appendText("$feedUrl\t${if (has) 1 else 0}\n")
+        }
+    }
+
+    /** Whether the feed is known to give official transcripts; null when not checked yet. */
+    fun knownTranscripts(feedUrl: String): Boolean? = TranscriptHosts.quickAnswer(feedUrl) ?: transcripts[feedUrl]
+
+    /**
+     * Whether the feed's latest episode comes with an official transcript (`<podcast:transcript>`).
+     * Hosts that never publish them (Spotify for Creators…) are answered without any download;
+     * other feeds are read up to the end of their latest episode (at most 192 KB), once.
+     */
+    suspend fun hasTranscripts(feedUrl: String): Boolean {
+        knownTranscripts(feedUrl)?.let { return it }
+        val found = limit.withPermit {
+            withTimeoutOrNull(10_000) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        readTranscripts(feedUrl)
+                    } catch (e: DeadFeed) {
+                        dead += feedUrl
+                        null
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
+        }
+        // Not kept when the feed couldn't be read: it's checked again next time.
+        found?.let { remember(feedUrl, it) }
         return found == true
     }
 
@@ -89,23 +115,23 @@ class FeedLanguage(private val http: OkHttpClient) {
         batch.map { r -> async { r.takeIf { hasTranscripts(it.feedUrl) } } }.awaitAll().filterNotNull()
     }
 
+    /** One read for both answers: the transcript tag, and the language on the way (cached too). */
     private fun readTranscripts(feedUrl: String): Boolean? {
         http.newCall(Request.Builder().url(feedUrl).build()).execute().use { response ->
+            if (response.code in 400..499 && response.code != 429) throw DeadFeed()
             if (!response.isSuccessful) return null
             val stream = response.body?.source()?.inputStream() ?: return null
             val text = StringBuilder()
             val buffer = ByteArray(8_192)
-            var scanned = 0
-            while (text.length < 524_288) {
+            while (text.length < 196_608) {
                 val n = stream.read(buffer)
                 if (n <= 0) break
                 text.append(String(buffer, 0, n, Charsets.UTF_8))
-                // Only the new part (and a little before it, for a tag cut in two) is searched.
-                val from = (scanned - 40).coerceAtLeast(0)
-                if (TRANSCRIPT.containsMatchIn(text.substring(from))) return true
-                if (ITEM_END.findAll(text).take(3).count() >= 3) return false
-                scanned = text.length
+                if (!cache.containsKey(feedUrl)) TAG.find(text)?.let { cache[feedUrl] = LanguageCheck.normalize(it.groupValues[1]).orEmpty() }
+                if (TRANSCRIPT.containsMatchIn(text)) return true
+                if (ITEM_END.containsMatchIn(text)) return false // the latest episode has none
             }
+            if (text.isNotEmpty() && !FEED.containsMatchIn(text)) throw DeadFeed()
             return false
         }
     }

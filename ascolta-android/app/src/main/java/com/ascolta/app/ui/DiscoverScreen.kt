@@ -143,7 +143,10 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
 
     /** With "Official transcript" on, a list keeps only shows whose latest episodes have one. */
     fun official(check: suspend (List<DirectoryResult>) -> List<DirectoryResult>): suspend (List<DirectoryResult>) -> List<DirectoryResult> =
-        if (!settings.discoverOfficialOnly.value) check else { batch -> graph.feedLanguage.withTranscripts(check(batch)) }
+        if (!settings.discoverOfficialOnly.value) check else { batch -> check(graph.feedLanguage.withTranscripts(batch)) }
+
+    /** Shows with official transcripts are rare: a page gives up after checking this many. */
+    fun officialCap() = if (settings.discoverOfficialOnly.value) 100 else Int.MAX_VALUE
 
     fun search(term: String) {
         if (term.isBlank()) return
@@ -164,6 +167,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         load(com.ascolta.app.data.PodcastPager(
             top + listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }),
             check = official { it }, // the search results are shown in any language; the tag says which
+            maxCheckedPerPage = officialCap(),
             pageSize = 30,
         ))
     }
@@ -189,6 +193,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
             (if (course) com.ascolta.app.data.Recommendations.learnerSources(graph.directory, lang, store, stores)
             else com.ascolta.app.data.Recommendations.themeSources(graph.directory, genreId, lang, store)) + more,
             check = official(com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course)),
+            maxCheckedPerPage = officialCap(),
         ))
     }
 
@@ -223,6 +228,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         com.ascolta.app.data.PodcastPager(
             listOf(picks) + com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList()) + more,
             check = official(com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true)),
+            maxCheckedPerPage = officialCap(),
             pageSize = 18,
         )
     }
@@ -471,7 +477,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 activePager?.exhausted == true -> Text(
-                    stringResource(R.string.discover_end),
+                    stringResource(if (officialOnly) R.string.discover_end_official else R.string.discover_end),
                     Modifier.fillMaxWidth().padding(16.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

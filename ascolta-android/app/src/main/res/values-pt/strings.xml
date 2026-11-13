@@ -706,4 +706,5 @@
     <string name="badge_sharp_ear_desc">Pegue %1$d erros de transcrição</string>
     <string name="wrong_ok_native">Corrigido. As moedas são só para ouvir em um idioma que você está aprendendo, não na sua língua materna.</string>
     <string name="filter_official">Transcrição oficial</string>
+    <string name="discover_end_official">Nenhum outro podcast com transcrição oficial encontrado aqui. Tente outro tema ou desative o filtro.</string>
 </resources>

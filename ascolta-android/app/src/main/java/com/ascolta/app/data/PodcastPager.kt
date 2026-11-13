@@ -16,6 +16,8 @@ class PodcastPager(
     private val check: suspend (List<DirectoryResult>) -> List<DirectoryResult>,
     private val pageSize: Int = 12,
     private val retryDelayMs: Long = 2_000,
+    /** A rare kind of show (official transcripts): stop after checking this many for one page. */
+    private val maxCheckedPerPage: Int = Int.MAX_VALUE,
 ) {
     private val seen = HashSet<String>()
     private val pending = ArrayDeque<DirectoryResult>()
@@ -31,7 +33,13 @@ class PodcastPager(
     /** The next page (possibly shorter, or empty once [exhausted]). */
     suspend fun next(): List<DirectoryResult> = lock.withLock {
         val out = mutableListOf<DirectoryResult>()
+        var checked = 0
         while (out.size < pageSize) {
+            if (checked >= maxCheckedPerPage && ready.isEmpty()) {
+                // Searched long enough: what was found is shown, and the list ends here.
+                exhausted = true
+                break
+            }
             if (ready.isNotEmpty()) {
                 out += ready.removeFirst()
                 continue
@@ -52,6 +60,7 @@ class PodcastPager(
                 continue
             }
             val batch = List(minOf(pending.size, pageSize + 4)) { pending.removeFirst() }
+            checked += batch.size
             ready += runCatching { check(batch) }.getOrDefault(emptyList())
         }
         out

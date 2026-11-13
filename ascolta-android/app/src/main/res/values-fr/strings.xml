@@ -706,4 +706,5 @@
     <string name="badge_sharp_ear_desc">Repérez %1$d erreurs de transcription</string>
     <string name="wrong_ok_native">Corrigé. Les pièces sont réservées à l\'écoute dans une langue que tu apprends, pas ta langue maternelle.</string>
     <string name="filter_official">Transcription officielle</string>
+    <string name="discover_end_official">Pas d’autre podcast avec transcription officielle trouvé ici. Essayez un autre thème, ou désactivez le filtre.</string>
 </resources>

@@ -726,4 +726,5 @@
     <string name="badge_sharp_ear_desc">Catch %1$d transcription mistakes</string>
     <string name="wrong_ok_native">Corrected. Coins are only for listening in a language you\'re learning, not your native one.</string>
     <string name="filter_official">Official transcript</string>
+    <string name="discover_end_official">No more podcasts with official transcripts found here. Try another theme, or turn the filter off.</string>
 </resources>
