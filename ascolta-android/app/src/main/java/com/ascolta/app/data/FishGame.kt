@@ -105,6 +105,16 @@ object FishGame {
         fun canCast(bait: Bait) = coins >= bait.price || (bait == Bait.WORM && freeCasts > 0)
     }
 
+    /**
+     * Whether listening in [language] pays coins: only a language other than [native] (base codes
+     * compared, so "pt-BR" is Portuguese). An unknown language never pays.
+     */
+    fun isForeign(language: String?, native: String): Boolean {
+        val base = language?.trim()?.lowercase()?.substringBefore('-')?.substringBefore('_').orEmpty()
+        if (base.isEmpty()) return false
+        return base != native.trim().lowercase().substringBefore('-').substringBefore('_')
+    }
+
     /** One-time welcome: what was listened to before the game existed, up to an hour (600 coins). */
     fun gift(s: State, pastMs: Long): State = if (s.gifted) s else s.copy(gifted = true, coinMs = s.coinMs + pastMs.coerceIn(0, GIFT_MAX_MS))
 

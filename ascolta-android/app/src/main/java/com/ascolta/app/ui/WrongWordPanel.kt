@@ -41,6 +41,8 @@ internal data class WrongWordResult(
     val newTranslation: String? = null,
     /** Coins given (0: already rewarded, or today's rewards used). */
     val coins: Int = 0,
+    /** The episode is in the learner's native language: corrected, but no coins. */
+    val nativeLanguage: Boolean = false,
     /** Names the podcast's list learned from the correction. */
     val learned: List<String> = emptyList(),
     val podcast: String? = null,
@@ -105,7 +107,7 @@ private fun ResultCard(r: WrongWordResult, onEditAnyway: () -> Unit) {
         if (ok) {
             Text(stringResource(R.string.wrong_ok_title), style = MaterialTheme.typography.titleSmall, color = tint, fontWeight = FontWeight.Bold)
             if (r.coins > 0) Text(stringResource(R.string.wrong_ok_coins, r.coins), style = MaterialTheme.typography.titleMedium, color = tint)
-            else Text(stringResource(R.string.wrong_ok_no_coins), style = MaterialTheme.typography.bodySmall)
+            else Text(stringResource(if (r.nativeLanguage) R.string.wrong_ok_native else R.string.wrong_ok_no_coins), style = MaterialTheme.typography.bodySmall)
             r.newSentence?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             r.newTranslation?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (r.meaningUnchecked) Text(stringResource(R.string.wrong_ok_unchecked), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

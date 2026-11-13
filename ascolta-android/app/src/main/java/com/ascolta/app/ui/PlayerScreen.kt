@@ -1137,13 +1137,15 @@ private suspend fun checkSuggestion(
     if (meaning != null) return WrongWordResult(meaning, suggested.trim(), newSentence, there, languageName = languageName)
     val learned = graph.repo.editSentence(episode, lookup.segment, newSentence)
     val key = "${episode?.id}:${lookup.segment.startMs}:${range.first}"
-    val rewarded = graph.fish.rewardCatch(key)
+    // Coins only for listening in a language other than the learner's native one.
+    val foreign = com.ascolta.app.data.FishGame.isForeign(language, native)
+    val rewarded = foreign && graph.fish.rewardCatch(key)
     if (rewarded) graph.progress.recordCatch()
     com.ascolta.app.data.Analytics.track("Transcript.mistakeCaught", mapOf("language" to language, "rewarded" to rewarded.toString()))
     return WrongWordResult(
         com.ascolta.app.data.WordCheck.Verdict.PLAUSIBLE, suggested.trim(), newSentence, there,
         coins = if (rewarded) com.ascolta.app.data.FishGame.CATCH_COINS else 0,
-        learned = learned, podcast = podcastTitle, meaningUnchecked = there == null || back == null, languageName = languageName,
+        learned = learned, nativeLanguage = !foreign, podcast = podcastTitle, meaningUnchecked = there == null || back == null, languageName = languageName,
     )
 }
 

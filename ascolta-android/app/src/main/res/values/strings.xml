@@ -618,7 +618,7 @@
     <string name="fix_english_text">When Parakeet writes a sentence in English, redo it with NVIDIA Canary (210 MB), which is told the language. Adds a few seconds per minute of audio; turn off for maximum speed.</string>
     <string name="aq_title">Aquarium</string>
     <string name="aq_card_text">%d coins to spend</string>
-    <string name="aq_how">Listening in a foreign language earns 10 coins a minute. Spend them on bait and catch fish for your tank.</string>
+    <string name="aq_how">Listening in a language other than your native one earns 10 coins a minute (listening in your native language earns nothing). Spend them on bait and catch fish for your tank.</string>
     <string name="aq_welcome">Welcome gift: %d coins for what you\'ve already listened to.</string>
     <string name="aq_empty">Your tank is empty. Catch your first fish!</string>
     <string name="aq_combo">Combo ×%s</string>
@@ -724,4 +724,5 @@
     <string name="wrong_edit_anyway">Edit anyway</string>
     <string name="badge_sharp_ear_title">Sharp ear ×%1$d</string>
     <string name="badge_sharp_ear_desc">Catch %1$d transcription mistakes</string>
+    <string name="wrong_ok_native">Corrected. Coins are only for listening in a language you\'re learning, not your native one.</string>
 </resources>

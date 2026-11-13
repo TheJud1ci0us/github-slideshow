@@ -591,7 +591,7 @@
     <string name="fix_english_text">Wenn Parakeet einen Satz auf Englisch schreibt, wird er mit NVIDIA Canary (210 MB) neu gemacht, dem die Sprache gesagt wird. Kostet einige Sekunden pro Minute Audio; für maximale Geschwindigkeit ausschalten.</string>
     <string name="aq_title">Aquarium</string>
     <string name="aq_card_text">%d Münzen zum Ausgeben</string>
-    <string name="aq_how">Hören in einer Fremdsprache bringt 10 Münzen pro Minute. Gib sie für Köder aus und fange Fische für dein Aquarium.</string>
+    <string name="aq_how">Hören in einer anderen Sprache als deiner Muttersprache bringt 10 Münzen pro Minute (Hören in deiner Muttersprache bringt nichts). Gib sie für Köder aus und fang Fische für dein Aquarium.</string>
     <string name="aq_welcome">Willkommensgeschenk: %d Münzen für das, was du schon gehört hast.</string>
     <string name="aq_empty">Dein Aquarium ist leer. Fang deinen ersten Fisch!</string>
     <string name="aq_combo">Kombo ×%s</string>
@@ -697,4 +697,5 @@
     <string name="wrong_edit_anyway">Trotzdem bearbeiten</string>
     <string name="badge_sharp_ear_title">Gutes Gehör ×%1$d</string>
     <string name="badge_sharp_ear_desc">Entdecke %1$d Transkriptionsfehler</string>
+    <string name="wrong_ok_native">Korrigiert. Münzen gibt es nur fürs Hören in einer Sprache, die du lernst, nicht in deiner Muttersprache.</string>
 </resources>

@@ -598,7 +598,7 @@
     <string name="fix_english_text">Quando o Parakeet escreve uma frase em inglês, ela é refeita com o NVIDIA Canary (210 MB), a quem se indica a língua. Acrescenta alguns segundos por minuto de áudio; desative para a velocidade máxima.</string>
     <string name="aq_title">Aquário</string>
     <string name="aq_card_text">%d moedas para gastar</string>
-    <string name="aq_how">Ouvir em uma língua estrangeira rende 10 moedas por minuto. Gaste em iscas e pesque peixes para o seu aquário.</string>
+    <string name="aq_how">Ouvir num idioma diferente da tua língua materna dá 10 moedas por minuto (ouvir na tua língua materna não dá nada). Gasta-as em isco e pesca peixes para o teu aquário.</string>
     <string name="aq_welcome">Presente de boas-vindas: %d moedas pelo que você já ouviu.</string>
     <string name="aq_empty">Seu aquário está vazio. Pesque seu primeiro peixe!</string>
     <string name="aq_combo">Combo ×%s</string>
@@ -704,4 +704,5 @@
     <string name="wrong_edit_anyway">Editar mesmo assim</string>
     <string name="badge_sharp_ear_title">Ouvido afiado ×%1$d</string>
     <string name="badge_sharp_ear_desc">Pegue %1$d erros de transcrição</string>
+    <string name="wrong_ok_native">Corrigido. As moedas são só para ouvir num idioma que estás a aprender, não na tua língua materna.</string>
 </resources>

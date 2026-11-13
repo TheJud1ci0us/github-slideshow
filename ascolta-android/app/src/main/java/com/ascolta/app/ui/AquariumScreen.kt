@@ -347,7 +347,7 @@ fun AquariumScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         graph.progress.flush()
         val native = graph.settings.nativeLanguage.value
-        val past = graph.progress.stats.value.listenedMs.filterKeys { it != native }.values.sum()
+        val past = graph.progress.stats.value.listenedMs.filterKeys { FishGame.isForeign(it, native) }.values.sum()
         val firstVisit = !graph.fish.state.value.gifted
         graph.fish.opened(past)
         if (firstVisit) welcome = (past.coerceAtMost(FishGame.GIFT_MAX_MS) / FishGame.COIN_MS).toInt()

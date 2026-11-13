@@ -24,8 +24,8 @@ android {
         applicationId = "app.lingopod"
         minSdk = 26
         targetSdk = 35
-        versionCode = 191
-        versionName = "1.9.1"
+        versionCode = 192
+        versionName = "1.9.2"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.

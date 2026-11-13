@@ -163,4 +163,18 @@ class FishGameTest {
         s = FishGame.choose(s, FishGame.Background.LAGOON)!! // owned: free to switch back
         assertEquals(400, s.coins)
     }
+
+    @Test fun onlyNonNativeListeningPays() {
+        assertFalse(FishGame.isForeign("fr", "fr"))
+        assertFalse(FishGame.isForeign("pt-BR", "pt"))
+        assertFalse(FishGame.isForeign("EN_us", "en"))
+        assertFalse(FishGame.isForeign(null, "fr"))
+        assertFalse(FishGame.isForeign(" ", "fr"))
+        assertTrue(FishGame.isForeign("sv", "fr"))
+        // An hour in the native language: no coins and no free cast for finishing the episode.
+        var s = State()
+        s = FishGame.listen(s, 60 * MINUTE, 60 * MINUTE, 1, FishGame.isForeign("fr", "fr"), 7)
+        assertEquals(0, s.coins)
+        assertEquals(0, FishGame.finishEpisode(s, 7, 60 * MINUTE).freeCasts)
+    }
 }

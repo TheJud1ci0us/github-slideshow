@@ -1,5 +1,6 @@
 package com.ascolta.app.player
 
+import com.ascolta.app.data.FishGame
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
@@ -331,7 +332,7 @@ class PlayerConnection(
                         progress.addListening(language, ms)
                         logListening(ms, language)
                         // The Aquarium is paid in coins from foreign-language listening.
-                        fish.addListening(ms, language != settings.nativeLanguage.value, c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
+                        fish.addListening(ms, FishGame.isForeign(playingLanguage, settings.nativeLanguage.value), c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
                     }
                     val position = c.currentPosition
                     val length = c.duration
