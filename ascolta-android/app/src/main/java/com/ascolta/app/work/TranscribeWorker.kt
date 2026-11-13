@@ -421,7 +421,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     var speedFactor: Float? = null
                     var buffered = false        // waiting: the zone ahead of the listener is transcribed
                     var waitingSince = 0L
-                    var hidden = false          // paused because the app isn't on screen while listening
+                    var hidden = false          // paused because the app isn't on screen
                     var jumpedToMs = -1L
 
                     while (true) {
@@ -432,16 +432,16 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         // Follow the listener when this episode is loaded in the player.
                         val player = graph.player.state.value
                         val following = player.episodeId == episodeId
-                        val listening = following && (player.isPlaying || player.isBuffering)
 
-                        // Listening with the phone locked or the app in the background: stop until
-                        // the app is opened again, then restart right where the listener is.
-                        if (listening && !AppVisibility.visible.value) {
+                        // The app not on screen (phone locked, another app open): stop until it is
+                        // opened again, then restart right where the listener is.
+                        if (!AppVisibility.visible.value) {
                             if (!hidden) {
                                 hidden = true
-                                AppLog.i(TAG, "App not on screen while listening: transcription paused")
+                                AppLog.i(TAG, "App not on screen: transcription paused")
                                 prefetch?.second?.cancel()
                                 prefetch = null
+                                releaseEngine() // free the model's memory while away
                             }
                             update(applicationContext.getString(R.string.status_paused_listening), progressOf(latest.value))
                             AppVisibility.visible.first { it } // returns at once if visible meanwhile
@@ -526,8 +526,8 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                 delay(300)
                                 val p = graph.player.state.value
                                 val mine = p.episodeId == episodeId
-                                val away = mine && (p.isPlaying || p.isBuffering) && !AppVisibility.visible.value
-                                if (mine && (away || TranscriptionPlan.shouldAbandon(covered, p.positionMs, prepared.span))) {
+                                val away = !AppVisibility.visible.value
+                                if (away || (mine && TranscriptionPlan.shouldAbandon(covered, p.positionMs, prepared.span))) {
                                     abandoned = true
                                     engine?.abort()
                                     break

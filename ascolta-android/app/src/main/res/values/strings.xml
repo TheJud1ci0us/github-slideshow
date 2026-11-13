@@ -252,7 +252,7 @@
     <string name="npu_log_title">NPU log</string>
     <string name="npu_log_text">Checks the phone\'s NPU setup now and shows every NPU attempt</string>
     <string name="action_clear">Clear</string>
-    <string name="status_paused_listening">Paused while you listen with the app closed — open LingoPod to continue</string>
+    <string name="status_paused_listening">Paused while LingoPod isn\'t on screen — open the app to continue</string>
     <string name="translate_title">Translate sentences</string>
     <string name="translate_text">Off: only the transcript is shown and nothing is translated (tapped words are still translated)</string>
     <string name="model_languages">Languages (%1$d): %2$s</string>
@@ -486,7 +486,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Unzip this file.\n2. Copy the files in media/ into Anki\'s collection.media folder (Anki: Tools → Check Media → View Files).\n3. In Anki: File → Import → cards.txt. Fields: Front, Back, Sentence, Sentence translation, Audio (tab-separated).\n</string>
     <string name="shadow_this">Shadow this sentence</string>
     <string name="saved_without_audio">Saved without the speaker\'s audio: the episode is downloading for next time</string>
-    <string name="select_hint">Tap another word, even in the next sentence, to extend</string>
+    <string name="select_hint">Tap another word to adjust, or long-press and slide again</string>
     <string name="select_save">Save</string>
     <string name="select_shadow">Shadow</string>
     <string name="select_copy">Copy</string>
@@ -571,7 +571,7 @@
     <string name="pro_lifetime">Lifetime (pay once)</string>
     <string name="pro_profile_subtitle">Unlimited transcription, Best models, Anki export</string>
     <string name="tour_select_title">Select and save</string>
-    <string name="tour_select_text">1. Long-press a word to start a selection.\n2. Tap another word, even in a later sentence, to extend it.\n3. Or long-press a sentence\'s time to take the whole sentence.\n4. Then Save (a card with the speaker\'s voice), Shadow, or Copy.\nIf your selection crosses two sentences, you can remove the \".\" or \"?\" the transcription put between them.\nTo fix a word or a name, select it and tap the pencil.</string>
+    <string name="tour_select_text">1. Long-press the first word you want.\n2. Without lifting your finger, slide to the last word, even into the next sentences.\n3. Lift your finger: the selection is translated right away.\n4. Then Save (a card with the speaker\'s voice), Shadow, or Copy.\nLong-press a sentence\'s time to take the whole sentence.\nIf your selection crosses two sentences, you can remove the \".\" or \"?\" the transcription put between them.\nTo fix a word or a name, select it and tap the pencil.</string>
     <string name="select_join_question">Punctuation between the sentences:</string>
     <string name="select_keep_punctuation">Keep</string>
     <string name="select_remove_punctuation">Remove</string>

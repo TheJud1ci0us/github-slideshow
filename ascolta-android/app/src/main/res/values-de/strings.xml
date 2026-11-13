@@ -225,7 +225,7 @@
     <string name="npu_log_title">NPU-Protokoll</string>
     <string name="npu_log_text">Prüft jetzt die NPU-Einrichtung des Telefons und zeigt jeden Versuch</string>
     <string name="action_clear">Leeren</string>
-    <string name="status_paused_listening">Pausiert, während du bei geschlossener App hörst – öffne LingoPod zum Fortsetzen</string>
+    <string name="status_paused_listening">Pausiert, solange LingoPod nicht geöffnet ist – öffne die App zum Fortsetzen</string>
     <string name="translate_title">Sätze übersetzen</string>
     <string name="translate_text">Aus: nur das Transkript, keine Übersetzung (angetippte Wörter werden weiterhin übersetzt)</string>
     <string name="model_languages">Sprachen (%1$d): %2$s</string>
@@ -459,7 +459,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Entpacke diese Datei.\n2. Kopiere die Dateien aus media/ in Ankis Ordner collection.media (Anki: Extras → Medien prüfen → Dateien anzeigen).\n3. In Anki: Datei → Importieren → cards.txt. Felder: Vorderseite, Rückseite, Satz, Satzübersetzung, Audio (tabulatorgetrennt).\n</string>
     <string name="shadow_this">Diesen Satz nachsprechen</string>
     <string name="saved_without_audio">Ohne Audio des Sprechers gespeichert: die Folge wird für das nächste Mal heruntergeladen</string>
-    <string name="select_hint">Tippe auf ein anderes Wort, auch im nächsten Satz, um zu erweitern</string>
+    <string name="select_hint">Tippe ein anderes Wort zum Anpassen, oder drücke lange und ziehe erneut</string>
     <string name="select_save">Speichern</string>
     <string name="select_shadow">Nachsprechen</string>
     <string name="select_copy">Kopieren</string>
@@ -544,7 +544,7 @@
     <string name="pro_lifetime">Lebenslang (einmal zahlen)</string>
     <string name="pro_profile_subtitle">Unbegrenzte Transkription, beste Modelle, Anki-Export</string>
     <string name="tour_select_title">Auswählen und speichern</string>
-    <string name="tour_select_text">1. Halte ein Wort gedrückt, um eine Auswahl zu beginnen.\n2. Tippe auf ein anderes Wort, auch in einem späteren Satz, um sie zu erweitern.\n3. Oder halte die Zeit eines Satzes gedrückt, um den ganzen Satz zu nehmen.\n4. Dann Speichern (eine Karte mit der Stimme des Sprechers), Nachsprechen oder Kopieren.\nGeht die Auswahl über zwei Sätze, kannst du den „.“ oder das „?“ entfernen, das die Transkription dazwischen gesetzt hat.\nUm ein Wort oder einen Namen zu korrigieren, wähle es aus und tippe auf den Stift.</string>
+    <string name="tour_select_text">1. Drücke lange auf das erste gewünschte Wort.\n2. Ziehe, ohne den Finger zu heben, bis zum letzten Wort, auch in die nächsten Sätze.\n3. Heb den Finger: die Auswahl wird sofort übersetzt.\n4. Dann Speichern (eine Karte mit der Stimme des Sprechers), Nachsprechen oder Kopieren.\nDrücke lange auf die Zeit eines Satzes, um den ganzen Satz zu nehmen.\nGeht die Auswahl über zwei Sätze, kannst du den \".\" oder das \"?\" dazwischen entfernen.\nUm ein Wort oder einen Namen zu korrigieren, wähle es aus und tippe auf den Stift.</string>
     <string name="select_join_question">Satzzeichen zwischen den Sätzen:</string>
     <string name="select_keep_punctuation">Behalten</string>
     <string name="select_remove_punctuation">Entfernen</string>

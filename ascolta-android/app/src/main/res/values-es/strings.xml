@@ -229,7 +229,7 @@
     <string name="npu_log_title">Registro NPU</string>
     <string name="npu_log_text">Comprueba ahora la configuración NPU del teléfono y muestra cada intento</string>
     <string name="action_clear">Borrar</string>
-    <string name="status_paused_listening">En pausa mientras escuchas con la app cerrada — abre LingoPod para continuar</string>
+    <string name="status_paused_listening">En pausa mientras LingoPod no está en pantalla — abre la app para continuar</string>
     <string name="translate_title">Traducir frases</string>
     <string name="translate_text">Desactivado: solo la transcripción, sin traducción (las palabras tocadas se siguen traduciendo)</string>
     <string name="model_languages">Idiomas (%1$d): %2$s</string>
@@ -466,7 +466,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Descomprime este archivo.\n2. Copia los archivos de media/ en la carpeta collection.media de Anki (Anki: Herramientas → Comprobar multimedia → Ver archivos).\n3. En Anki: Archivo → Importar → cards.txt. Campos: Anverso, Reverso, Frase, Traducción de la frase, Audio (separados por tabulaciones).\n</string>
     <string name="shadow_this">Shadowing de esta frase</string>
     <string name="saved_without_audio">Guardado sin el audio del hablante: el episodio se está descargando para la próxima vez</string>
-    <string name="select_hint">Toca otra palabra, incluso en la frase siguiente, para ampliar</string>
+    <string name="select_hint">Toca otra palabra para ajustar, o mantén pulsado y desliza de nuevo</string>
     <string name="select_save">Guardar</string>
     <string name="select_shadow">Shadowing</string>
     <string name="select_copy">Copiar</string>
@@ -551,7 +551,7 @@
     <string name="pro_lifetime">De por vida (pago único)</string>
     <string name="pro_profile_subtitle">Transcripción ilimitada, mejores modelos, exportación a Anki</string>
     <string name="tour_select_title">Seleccionar y guardar</string>
-    <string name="tour_select_text">1. Mantén pulsada una palabra para empezar una selección.\n2. Toca otra palabra, incluso en una frase posterior, para ampliarla.\n3. O mantén pulsada la hora de una frase para tomarla entera.\n4. Luego Guardar (una tarjeta con la voz de quien habla), Shadowing o Copiar.\nSi la selección cruza dos frases, puedes quitar el «.» o el «?» que la transcripción puso entre ellas.\nPara corregir una palabra o un nombre, selecciónalo y toca el lápiz.</string>
+    <string name="tour_select_text">1. Mantén pulsada la primera palabra que quieras.\n2. Sin levantar el dedo, desliza hasta la última palabra, incluso en las frases siguientes.\n3. Levanta el dedo: la selección se traduce enseguida.\n4. Luego Guardar (una tarjeta con la voz del hablante), Shadowing o Copiar.\nMantén pulsada la hora de una frase para tomar la frase entera.\nSi la selección cruza dos frases, puedes quitar el \".\" o el \"?\" que hay entre ellas.\nPara corregir una palabra o un nombre, selecciónalo y toca el lápiz.</string>
     <string name="select_join_question">Puntuación entre las frases:</string>
     <string name="select_keep_punctuation">Mantener</string>
     <string name="select_remove_punctuation">Quitar</string>

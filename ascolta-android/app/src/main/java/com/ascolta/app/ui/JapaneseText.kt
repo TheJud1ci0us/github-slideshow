@@ -1,5 +1,6 @@
 package com.ascolta.app.ui
 
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -41,15 +42,16 @@ fun JapaneseSentence(
     tokenColor: ((JaToken) -> androidx.compose.ui.graphics.Color?)? = null,
     /** Tap on a token: the dictionary, or extending a selection. */
     onTap: (JaToken) -> Unit,
-    /** Long press on a token: starts (or extends) a selection. */
-    onLongPress: (JaToken) -> Unit = {},
+    /** Where each word's box is (its first character), for selecting by sliding. */
+    onTokenPlaced: ((Int, androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val highlight = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
     val selectColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)
     val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
-    val longPress by androidx.compose.runtime.rememberUpdatedState(onLongPress)
     val rubyStyle = style.copy(fontSize = style.fontSize * 0.55f, lineHeight = style.fontSize * 0.7f, fontWeight = FontWeight.Normal)
     FlowRow(
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(if (script == JapaneseScript.ROMAJI) 5.dp else 0.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -61,8 +63,12 @@ fun JapaneseSentence(
             val mod = Modifier
                 .then(if (chosen) Modifier.background(selectColor) else if (active) Modifier.background(highlight, RoundedCornerShape(4.dp)) else Modifier)
                 .then(
-                    if (token.isWord) Modifier.pointerInput(token) {
-                        detectTapGestures(onTap = { tap(token) }, onLongPress = { longPress(token) })
+                    if (token.isWord) Modifier.pointerInput(token) { detectTapGestures(onTap = { tap(token) }) }
+                    else Modifier,
+                )
+                .then(
+                    if (onTokenPlaced != null && token.isWord) {
+                        Modifier.onGloballyPositioned { onTokenPlaced(token.start, it) }
                     } else Modifier,
                 )
             when (script) {

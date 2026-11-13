@@ -229,7 +229,7 @@
     <string name="npu_log_title">Log da NPU</string>
     <string name="npu_log_text">Verifica agora a configuração da NPU do telefone e mostra cada tentativa</string>
     <string name="action_clear">Limpar</string>
-    <string name="status_paused_listening">Pausado enquanto você ouve com o app fechado — abra o LingoPod para continuar</string>
+    <string name="status_paused_listening">Pausado enquanto o LingoPod não está na tela — abra o app para continuar</string>
     <string name="translate_title">Traduzir frases</string>
     <string name="translate_text">Desativado: só a transcrição, sem tradução (palavras tocadas continuam sendo traduzidas)</string>
     <string name="model_languages">Idiomas (%1$d): %2$s</string>
@@ -466,7 +466,7 @@
     <string name="anki_howto">LingoPod → Anki\n\n1. Descompacte este ficheiro.\n2. Copie os ficheiros de media/ para a pasta collection.media do Anki (Anki: Ferramentas → Verificar multimédia → Ver ficheiros).\n3. No Anki: Ficheiro → Importar → cards.txt. Campos: Frente, Verso, Frase, Tradução da frase, Áudio (separados por tabulações).\n</string>
     <string name="shadow_this">Shadowing desta frase</string>
     <string name="saved_without_audio">Guardado sem o áudio do orador: o episódio está a ser transferido para a próxima vez</string>
-    <string name="select_hint">Toque noutra palavra, mesmo na frase seguinte, para alargar</string>
+    <string name="select_hint">Toque em outra palavra para ajustar, ou pressione e deslize de novo</string>
     <string name="select_save">Guardar</string>
     <string name="select_shadow">Shadowing</string>
     <string name="select_copy">Copiar</string>
@@ -551,7 +551,7 @@
     <string name="pro_lifetime">Vitalício (pagamento único)</string>
     <string name="pro_profile_subtitle">Transcrição ilimitada, melhores modelos, exportação para o Anki</string>
     <string name="tour_select_title">Selecionar e guardar</string>
-    <string name="tour_select_text">1. Mantenha premida uma palavra para começar uma seleção.\n2. Toque noutra palavra, mesmo numa frase mais à frente, para a alargar.\n3. Ou mantenha premida a hora de uma frase para a escolher inteira.\n4. Depois Guardar (um cartão com a voz de quem fala), Shadowing ou Copiar.\nSe a seleção atravessar duas frases, pode retirar o «.» ou o «?» que a transcrição pôs entre elas.\nPara corrigir uma palavra ou um nome, selecione-o e toque no lápis.</string>
+    <string name="tour_select_text">1. Pressione e segure a primeira palavra que você quer.\n2. Sem levantar o dedo, deslize até a última palavra, mesmo nas próximas frases.\n3. Solte o dedo: a seleção é traduzida na hora.\n4. Depois Guardar (um cartão com a voz de quem fala), Shadowing ou Copiar.\nPressione e segure o horário de uma frase para pegar a frase inteira.\nSe a seleção cruzar duas frases, você pode remover o \".\" ou o \"?\" entre elas.\nPara corrigir uma palavra ou um nome, selecione e toque no lápis.</string>
     <string name="select_join_question">Pontuação entre as frases:</string>
     <string name="select_keep_punctuation">Manter</string>
     <string name="select_remove_punctuation">Retirar</string>
@@ -598,7 +598,7 @@
     <string name="fix_english_text">Quando o Parakeet escreve uma frase em inglês, ela é refeita com o NVIDIA Canary (210 MB), a quem se indica a língua. Acrescenta alguns segundos por minuto de áudio; desative para a velocidade máxima.</string>
     <string name="aq_title">Aquário</string>
     <string name="aq_card_text">%d moedas para gastar</string>
-    <string name="aq_how">Ouvir num idioma diferente da tua língua materna dá 10 moedas por minuto (ouvir na tua língua materna não dá nada). Gasta-as em isco e pesca peixes para o teu aquário.</string>
+    <string name="aq_how">Ouvir em um idioma diferente da sua língua materna rende 10 moedas por minuto (ouvir na sua língua materna não rende nada). Gaste-as em iscas e pesque peixes para o seu aquário.</string>
     <string name="aq_welcome">Presente de boas-vindas: %d moedas pelo que você já ouviu.</string>
     <string name="aq_empty">Seu aquário está vazio. Pesque seu primeiro peixe!</string>
     <string name="aq_combo">Combo ×%s</string>
@@ -704,5 +704,5 @@
     <string name="wrong_edit_anyway">Editar mesmo assim</string>
     <string name="badge_sharp_ear_title">Ouvido afiado ×%1$d</string>
     <string name="badge_sharp_ear_desc">Pegue %1$d erros de transcrição</string>
-    <string name="wrong_ok_native">Corrigido. As moedas são só para ouvir num idioma que estás a aprender, não na tua língua materna.</string>
+    <string name="wrong_ok_native">Corrigido. As moedas são só para ouvir em um idioma que você está aprendendo, não na sua língua materna.</string>
 </resources>

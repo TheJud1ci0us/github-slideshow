@@ -1,5 +1,9 @@
 package com.ascolta.app.ui
 
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -365,6 +369,41 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         } else selB = com.ascolta.app.data.WordPos(segmentIndex, word)
         graph.player.pause()
     }
+    // Selecting by sliding: long press a word, slide to the last word, release.
+    val dragSelect = remember { DragSelect() }
+    var dragging by remember { mutableStateOf(false) }
+    var dragAt by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var listBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    /** The word under the finger; a sentence without words counts whole (from its start, or to its end). */
+    fun wordUnder(window: androidx.compose.ui.geometry.Offset, end: Boolean): com.ascolta.app.data.WordPos? {
+        val (i, w) = dragSelect.at(window) ?: return null
+        val last = ((allRanges.getOrNull(i)?.size ?: 1) - 1).coerceAtLeast(0)
+        return com.ascolta.app.data.WordPos(i, if (w >= 0) w else if (end) last else 0)
+    }
+    fun dragTo(window: androidx.compose.ui.geometry.Offset) {
+        dragAt = window
+        val a = selA ?: return
+        wordUnder(window, end = true)?.let { p ->
+            // Sliding back above the start: the start sentence counts from its end.
+            selB = if (p.segment < a.segment && allRanges.getOrNull(p.segment).isNullOrEmpty()) p.copy(word = 0) else p
+        }
+    }
+    // Near the top or bottom of the transcript while sliding: it scrolls.
+    LaunchedEffect(dragging) {
+        while (dragging) {
+            val bounds = listBounds
+            val edge = 56 * context.resources.displayMetrics.density
+            val dy = when {
+                bounds == null -> 0f
+                dragAt.y > bounds.bottom - edge -> 18f
+                dragAt.y < bounds.top + edge -> -18f
+                else -> 0f
+            }
+            if (dy != 0f && listState.scrollBy(dy) != 0f) dragTo(dragAt)
+            delay(16)
+        }
+    }
 
     androidx.compose.material3.Scaffold(
         topBar = {
@@ -467,10 +506,23 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
             val joinPref by settings.joinSelection.flow.collectAsState()
             // A selection across two transcript sentences: with or without the "." or "?" between them.
             val sel = if (raw != null && raw.canJoin && joinPref) raw.joined() else raw
+            // The selection translated in the app once the finger is lifted.
+            val selLanguage = transcript?.language ?: settings.learningLanguage.value
+            val selNative = settings.nativeLanguage.value
+            var selTranslation by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(sel?.text, dragging) {
+                selTranslation = null
+                val text = sel?.text
+                if (text != null && !dragging && selLanguage != selNative) {
+                    delay(250)
+                    selTranslation = runCatching { graph.repo.translateText(text, selLanguage, selNative) }.getOrNull()
+                }
+            }
             if (sel != null && raw != null) SelectionBar(
                 text = sel.text,
-                onTranslate = { WebLookup.translate(context, sel.text, transcript?.language ?: settings.learningLanguage.value, settings.nativeLanguage.value) },
-                onSearch = { WebLookup.search(context, sel.text) },
+                translation = selTranslation,
+                translating = !dragging && selTranslation == null && selLanguage != selNative,
+                onTranslate = { WebLookup.translate(context, sel.text, selLanguage, selNative) },
                 canJoin = raw.canJoin,
                 joined = joinPref,
                 onJoin = { settings.joinSelection.set(it) },
@@ -601,7 +653,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
             } else LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().tourTarget("transcript"),
+                modifier = Modifier.fillMaxSize().tourTarget("transcript")
+                    .onGloballyPositioned { listBounds = it.boundsInWindow() },
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -619,6 +672,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         textScale = textScale,
                         onSeek = { follow = true; seek(segment.startMs) },
                         onWord = { word ->
+                            if (dragging) return@SegmentItem
                             graph.player.pause()
                             lookup = WordLookup(word, segment)
                         },
@@ -637,7 +691,21 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                             }
                         },
                         selecting = selA != null,
-                        onSelect = { w -> selectWord(i, w) },
+                        onSelect = { w -> if (!dragging) selectWord(i, w) },
+                        dragSelect = dragSelect,
+                        index = i,
+                        onDragStart = { window ->
+                            wordUnder(window, end = false)?.let { p ->
+                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                selA = p
+                                selB = wordUnder(window, end = true) ?: p
+                                dragAt = window
+                                dragging = true
+                                graph.player.pause()
+                            }
+                        },
+                        onDragMove = { window -> if (dragging) dragTo(window) },
+                        onDragEnd = { dragging = false },
                         newWords = if (highlightNew && !isJapanese) remember(segment.text, knownLevels, commonWords) {
                             com.ascolta.app.data.KnownWords.newWordRanges(segment.text, knownLevels, commonWords)
                         } else null,
@@ -939,7 +1007,7 @@ private fun Banner(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SegmentItem(
+internal fun SegmentItem(
     segment: Segment,
     words: List<Word>?,
     language: String?,
@@ -957,8 +1025,14 @@ private fun SegmentItem(
     selected: IntRange? = null,
     /** A selection is being made: taps extend it instead of opening the word. */
     selecting: Boolean = false,
-    /** Long press on a word (index; -1 = the whole sentence), or a tap while [selecting]. */
+    /** Long press on the time (-1 = the whole sentence), or a tap on a word (index) while [selecting]. */
     onSelect: (Int) -> Unit = {},
+    /** Selecting by sliding: where this sentence's words are, and the finger's moves (window positions). */
+    dragSelect: DragSelect? = null,
+    index: Int = -1,
+    onDragStart: (androidx.compose.ui.geometry.Offset) -> Unit = {},
+    onDragMove: (androidx.compose.ui.geometry.Offset) -> Unit = {},
+    onDragEnd: () -> Unit = {},
     /** Words not yet Familiar or Known (character ranges), softly highlighted; null when the option is off. */
     newWords: List<IntRange>? = null,
     /** Part of a detected ad: shown dimmed. */
@@ -972,8 +1046,33 @@ private fun SegmentItem(
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val select by androidx.compose.runtime.rememberUpdatedState(onSelect)
     val seek by androidx.compose.runtime.rememberUpdatedState(onSeek)
+    // Long press a word, slide to the last word wanted, release: the words in between are selected.
+    val placed = remember { SentenceLayout() }
+    val ranges by androidx.compose.runtime.rememberUpdatedState(selectRanges)
+    val dragStart by androidx.compose.runtime.rememberUpdatedState(onDragStart)
+    val dragMove by androidx.compose.runtime.rememberUpdatedState(onDragMove)
+    val dragEnd by androidx.compose.runtime.rememberUpdatedState(onDragEnd)
+    if (dragSelect != null) androidx.compose.runtime.DisposableEffect(dragSelect, index) {
+        val target = DragSelect.Target(card = { placed.card }, wordAt = { p -> placed.charAt(p)?.let { wordIndexAt(ranges, it) } ?: -1 })
+        dragSelect.register(index, target)
+        onDispose { dragSelect.unregister(index, target) }
+    }
+    val slide = Modifier
+        .onGloballyPositioned { placed.area = it }
+        .pointerInput(Unit) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { p -> placed.area?.takeIf { it.isAttached }?.let { dragStart(it.localToWindow(p)) } },
+                onDrag = { change, _ ->
+                    change.consume()
+                    placed.area?.takeIf { it.isAttached }?.let { dragMove(it.localToWindow(change.position)) }
+                },
+                onDragEnd = { dragEnd() },
+                onDragCancel = { dragEnd() },
+            )
+        }
     Column(
         Modifier
+            .onGloballyPositioned { placed.card = it }
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -1006,7 +1105,8 @@ private fun SegmentItem(
                 selectedChars = selectedChars,
                 tokenColor = frequency?.let { f -> { token: com.ascolta.app.data.JaToken -> f.firstOrNull { it.first.first == token.start }?.let { bandColors[it.second] } } },
                 onTap = { token -> if (selecting) onSelect(wordIndexAt(selectRanges, token.start)) else onWord(token.surface) },
-                onLongPress = { token -> onSelect(wordIndexAt(selectRanges, token.start)) },
+                onTokenPlaced = { start, coords -> placed.tokens[start] = coords },
+                modifier = slide,
             )
         } else if (showOriginal) {
             val wordRanges = remember(segment, words) { wordRanges(segment.text, words) }
@@ -1051,7 +1151,8 @@ private fun SegmentItem(
                     // Japanese or Chinese would be the whole sentence).
                     else WordSplitter.wordAt(segment.text, offset, language)?.let(onWord)
                 },
-                onLongPress = { offset -> onSelect(wordIndexAt(selectRanges, offset)) },
+                modifier = slide,
+                onLayout = { coords, layout -> placed.text = coords; placed.textLayout = layout },
             )
         }
         if (showTranslation) {
@@ -1071,22 +1172,26 @@ private fun SegmentItem(
 
 /** Text where a tap or a long press reports the character under the finger. */
 @Composable
-private fun TappableText(text: AnnotatedString, style: TextStyle, onTap: (Int) -> Unit, onLongPress: (Int) -> Unit) {
+private fun TappableText(
+    text: AnnotatedString,
+    style: TextStyle,
+    onTap: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    onLayout: (androidx.compose.ui.layout.LayoutCoordinates, TextLayoutResult) -> Unit = { _, _ -> },
+) {
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     // The gesture detector lives as long as the text: always call the latest handlers (otherwise a
     // tap after a long press still acts as if nothing were selected and opens the dictionary).
     val tap by androidx.compose.runtime.rememberUpdatedState(onTap)
-    val longPress by androidx.compose.runtime.rememberUpdatedState(onLongPress)
     Text(
         text,
         style = style,
         onTextLayout = { layout = it },
-        modifier = Modifier.pointerInput(text.text) {
-            detectTapGestures(
-                onTap = { pos -> layout?.let { tap(it.getOffsetForPosition(pos)) } },
-                onLongPress = { pos -> layout?.let { longPress(it.getOffsetForPosition(pos)) } },
-            )
-        },
+        modifier = modifier
+            .onGloballyPositioned { c -> layout?.let { onLayout(c, it) } }
+            .pointerInput(text.text) {
+                detectTapGestures(onTap = { pos -> layout?.let { tap(it.getOffsetForPosition(pos)) } })
+            },
     )
 }
 
@@ -1371,21 +1476,13 @@ private fun WordSheet(
                     shape = androidx.compose.foundation.shape.CircleShape,
                 )
             }
-            // The word on Google: Translate (the app if installed) or a search.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(
-                    onClick = { WebLookup.translate(context, lookup.word, language, graph.settings.nativeLanguage.value) },
-                    label = { Text(stringResource(R.string.google_translate)) },
-                    leadingIcon = { Icon(Icons.Filled.Translate, null, Modifier.size(18.dp)) },
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                )
-                AssistChip(
-                    onClick = { WebLookup.search(context, lookup.word) },
-                    label = { Text(stringResource(R.string.web_search)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, Modifier.size(18.dp)) },
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                )
-            }
+            // The word in Google Translate (the app if installed).
+            AssistChip(
+                onClick = { WebLookup.translate(context, lookup.word, language, graph.settings.nativeLanguage.value) },
+                label = { Text(stringResource(R.string.google_translate)) },
+                leadingIcon = { Icon(Icons.Filled.Translate, null, Modifier.size(18.dp)) },
+                shape = androidx.compose.foundation.shape.CircleShape,
+            )
             // "Wrong word?": the learner says what they heard; a plausible correction is rewarded.
             var wrongOpen by remember(lookup) { mutableStateOf(false) }
             var suggestion by remember(lookup) { mutableStateOf("") }
@@ -1622,7 +1719,9 @@ private fun SelectionBar(
     onEdit: () -> Unit,
     onClose: () -> Unit,
     onTranslate: () -> Unit = {},
-    onSearch: () -> Unit = {},
+    /** The selection in the learner's language (the app's translator), null while it comes. */
+    translation: String? = null,
+    translating: Boolean = false,
 ) {
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -1632,8 +1731,14 @@ private fun SelectionBar(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onTranslate) { Icon(Icons.Filled.Translate, stringResource(R.string.google_translate)) }
-                IconButton(onClick = onSearch) { Icon(Icons.Filled.Search, stringResource(R.string.web_search)) }
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.action_close)) }
+            }
+            when {
+                translation != null -> Text(
+                    translation, style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.primary, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                )
+                translating -> Text("…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(stringResource(R.string.select_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (canJoin) {
