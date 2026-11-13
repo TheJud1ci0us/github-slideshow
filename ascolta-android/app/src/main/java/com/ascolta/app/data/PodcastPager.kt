@@ -15,6 +15,7 @@ class PodcastPager(
     private val sources: List<suspend () -> List<DirectoryResult>>,
     private val check: suspend (List<DirectoryResult>) -> List<DirectoryResult>,
     private val pageSize: Int = 12,
+    private val retryDelayMs: Long = 2_000,
 ) {
     private val seen = HashSet<String>()
     private val pending = ArrayDeque<DirectoryResult>()
@@ -40,7 +41,13 @@ class PodcastPager(
                     exhausted = true
                     break
                 }
-                val found = runCatching { sources[nextSource++]() }.getOrDefault(emptyList())
+                // A source that fails (network, the store's rate limit) is tried once more a bit later.
+                val source = sources[nextSource++]
+                val found = runCatching { source() }.getOrElse {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    kotlinx.coroutines.delay(retryDelayMs)
+                    runCatching { source() }.getOrDefault(emptyList())
+                }
                 found.filter { seen.add(it.feedUrl) }.forEach(pending::addLast)
                 continue
             }

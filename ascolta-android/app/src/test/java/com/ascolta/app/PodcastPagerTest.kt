@@ -50,4 +50,32 @@ class PodcastPagerTest {
         assertTrue(LanguageCheck.mentionsLanguage("Bhagavad Gita (Hindi)", "hi"))
         assertFalse(LanguageCheck.mentionsLanguage("Hindi film music charts explained", "hi"))
     }
+
+    @Test
+    fun aFailingSourceIsTriedAgainOnce() = runBlocking {
+        var calls = 0
+        val pager = PodcastPager(
+            listOf(suspend { calls++; if (calls == 1) error("rate limited") else shows("chart", 5) }),
+            check = { it }, pageSize = 10, retryDelayMs = 0,
+        )
+        assertEquals(5, pager.next().size)
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun moreSourcesStartWithTheChosenThemeThenAlternateThemes() = runBlocking {
+        val asked = mutableListOf<Pair<Int, String>>()
+        val sources = Recommendations.moreSources({ id, store -> asked += id to store; emptyList() }, listOf("BR", "PT"), listOf(1545))
+        sources.forEach { it() }
+        // Sports' sub-themes first, in both stores.
+        val sports = Recommendations.SUBGENRES.getValue(1545)
+        assertEquals(sports.flatMap { listOf(it to "BR", it to "PT") }, asked.take(sports.size * 2))
+        // Then the other themes in turn: their own charts first, one theme after the other.
+        val next = asked.drop(sports.size * 2).take(6).map { it.first }.distinct()
+        assertTrue(next.size >= 3)
+        assertTrue(next.none { it in sports || it == 1545 })
+        // Everything is covered once per store, and Language Learning isn't in the tail.
+        assertEquals(asked.size, asked.distinct().size)
+        assertFalse(asked.any { it.first == 1498 })
+    }
 }

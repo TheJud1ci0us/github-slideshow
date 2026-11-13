@@ -17,6 +17,70 @@ data class Pick(val podcast: DirectoryResult, val level: LevelGuess.Estimate, va
  * CEFR level, those at the learner's level first. Used by onboarding, Personalize and Discover.
  */
 object Recommendations {
+    /** Apple's sub-themes under each theme (their charts are what keeps Discover going). */
+    val SUBGENRES: Map<Int, List<Int>> = mapOf(
+        1489 to listOf(1526, 1527, 1530, 1490, 1528, 1529, 1531), // News
+        1324 to listOf(1543, 1443, 1320, 1544, 1302), // Society & Culture
+        1487 to emptyList(), // History
+        1303 to listOf(1495, 1496, 1497), // Comedy
+        1533 to listOf(1538, 1537, 1535, 1541, 1534, 1540, 1542, 1539, 1536), // Science
+        1318 to emptyList(), // Technology
+        1545 to listOf(1546, 1547, 1548, 1549, 1550, 1551, 1552, 1553, 1554, 1555, 1556, 1557, 1558, 1559, 1560), // Sports
+        1483 to listOf(1484, 1485, 1486), // Fiction
+        1321 to listOf(1493, 1412, 1410, 1491, 1492, 1494), // Business
+        1512 to listOf(1517, 1515, 1514, 1518, 1513, 1516), // Health & Fitness
+        1305 to listOf(1520, 1519, 1521, 1522), // Kids & Family
+        1488 to emptyList(), // True Crime
+        1301 to listOf(1482, 1306, 1405, 1406, 1402, 1459), // Arts
+        1309 to listOf(1565, 1566, 1562, 1563, 1564), // TV & Film
+        1310 to listOf(1523, 1524, 1525), // Music
+        1304 to listOf(1500, 1499, 1501), // Education
+        1502 to listOf(1509, 1506, 1510, 1507, 1503, 1508, 1504, 1505), // Leisure
+        1314 to listOf(1444, 1532, 1439, 1438, 1440, 1441, 1463), // Religion & Spirituality
+        1511 to emptyList(), // Government
+    )
+
+    /** More app stores for a language than its main country, so its lists don't stop at one store. */
+    val STORES: Map<String, List<String>> = mapOf(
+        "pt" to listOf("BR", "PT"),
+        "es" to listOf("ES", "MX", "AR", "CO", "US"),
+        "fr" to listOf("FR", "CA", "BE", "CH"),
+        "de" to listOf("DE", "AT", "CH"),
+        "it" to listOf("IT", "CH"),
+        "en" to listOf("US", "GB", "AU", "CA", "IE"),
+        "nl" to listOf("NL", "BE"),
+        "sv" to listOf("SE", "FI"),
+        "ru" to listOf("RU", "KZ"),
+        "ar" to listOf("SA", "EG", "AE", "MA"),
+        "zh" to listOf("CN", "TW", "HK", "SG"),
+        "ko" to listOf("KR"),
+        "ja" to listOf("JP"),
+    )
+
+    /** The stores to look in for [language]: its main [country] first, then the others. */
+    fun storesFor(language: String, country: String): List<String> = (listOf(country) + STORES[language].orEmpty()).distinct()
+
+    /**
+     * The endless tail of Discover's lists: theme charts, one at a time, fetched only when the
+     * list reaches them. The sub-themes of [first] come first (in every store), then every other
+     * theme and its sub-themes, taken in turn so the list keeps changing theme.
+     */
+    fun moreSources(
+        chart: suspend (genreId: Int, store: String) -> List<DirectoryResult>,
+        stores: List<String>,
+        first: List<Int>,
+    ): List<suspend () -> List<DirectoryResult>> {
+        fun charts(ids: List<Int>) = ids.flatMap { id -> stores.map { store -> suspend { chart(id, store) } } }
+        val firstThemes = first.filter { it in SUBGENRES }
+        val head = charts(firstThemes.flatMap { SUBGENRES[it].orEmpty() })
+        // Every other theme: its own chart then its sub-themes, interleaved across themes.
+        val others = SUBGENRES.keys.filter { it !in firstThemes && it != GENRE_LEARNING }
+            .map { charts(listOf(it) + SUBGENRES[it].orEmpty()) }
+        val longest = others.maxOfOrNull { it.size } ?: 0
+        val tail = (0 until longest).flatMap { i -> others.mapNotNull { it.getOrNull(i) } }
+        return head + tail
+    }
+
     suspend fun picks(
         directory: PodcastDirectory,
         feedLanguage: com.ascolta.app.net.FeedLanguage,
@@ -133,9 +197,14 @@ object Recommendations {
     }
 
     /** Shows for learners: one source per learner search ("slow Italian", "italiano facile"…), then the backup. */
-    fun learnerSources(directory: PodcastDirectory, language: String, country: String): List<suspend () -> List<DirectoryResult>> {
+    fun learnerSources(
+        directory: PodcastDirectory,
+        language: String,
+        country: String,
+        stores: List<String> = listOf(country),
+    ): List<suspend () -> List<DirectoryResult>> {
         val names = languageNames(language)
-        return learnerQueries(language, country).map { (term, store) ->
+        return learnerQueries(language, country, stores).map { (term, store) ->
             suspend { directory.search(term, store, 100).filter { forLearners(it, names) } }
         }
     }
@@ -226,12 +295,15 @@ object Recommendations {
     }
 
     /** The searches made for [language]'s learner shows: (term, store) pairs (pure). */
-    fun learnerQueries(language: String, country: String): List<Pair<String, String>> {
+    fun learnerQueries(language: String, country: String, stores: List<String> = listOf(country)): List<Pair<String, String>> {
         val names = languageNames(language)
         val english = names.last()
         val inEnglish = listOf("learn $english", "$english for beginners", "easy $english", "slow $english", "intermediate $english")
             .map { it to "US" }
-        val inLanguage = (LEARNER_TERMS[language].orEmpty() + names.first()).distinct().map { it to country }
+        // The learner phrases in the language, in each of its stores (main country first).
+        val inLanguage = (listOf(country) + stores).distinct().flatMap { store ->
+            (LEARNER_TERMS[language].orEmpty() + names.first()).distinct().map { it to store }
+        }
         return (inEnglish + inLanguage).distinct()
     }
 

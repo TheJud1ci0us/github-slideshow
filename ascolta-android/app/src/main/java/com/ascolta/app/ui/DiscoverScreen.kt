@@ -174,9 +174,15 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         // The theme's chart, then shows found by the theme's own name, then backup searches by
         // the language's name; for learners, the learner searches. Only podcasts really in the
         // language (the store of a small language is often mostly in a neighbouring one).
+        // Then, almost endlessly: the theme's sub-themes and every other theme, in each of the
+        // language's stores (for learners: shows made for native speakers, tagged with their level).
+        val stores = com.ascolta.app.data.Recommendations.storesFor(lang, store)
+        val more = com.ascolta.app.data.Recommendations.moreSources(
+            { id, st -> graph.directory.topByGenre(id, st, 200) }, stores, if (course) settings.interestList() else listOf(genreId),
+        )
         load(com.ascolta.app.data.PodcastPager(
-            if (course) com.ascolta.app.data.Recommendations.learnerSources(graph.directory, lang, store)
-            else com.ascolta.app.data.Recommendations.themeSources(graph.directory, genreId, lang, store),
+            (if (course) com.ascolta.app.data.Recommendations.learnerSources(graph.directory, lang, store, stores)
+            else com.ascolta.app.data.Recommendations.themeSources(graph.directory, genreId, lang, store)) + more,
             check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course),
         ))
     }
@@ -200,8 +206,12 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         val picks = suspend {
             com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, lang, native, settings.interestList(), myBand, 20).map { it.podcast }
         }
+        val more = com.ascolta.app.data.Recommendations.moreSources(
+            { id, st -> graph.directory.topByGenre(id, st, 200) },
+            com.ascolta.app.data.Recommendations.storesFor(lang, store), settings.interestList(),
+        )
         com.ascolta.app.data.PodcastPager(
-            listOf(picks) + com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList()),
+            listOf(picks) + com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList()) + more,
             check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true),
             pageSize = 18,
         )
