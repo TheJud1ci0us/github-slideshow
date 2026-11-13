@@ -63,6 +63,53 @@ class FeedLanguage(private val http: OkHttpClient) {
         feedUrls.distinct().map { url -> async { url to of(url) } }.awaitAll().toMap()
     }
 
+    private val transcripts = ConcurrentHashMap<String, Boolean>()
+
+    /** Whether the feed is known to give official transcripts; null when not checked yet. */
+    fun knownTranscripts(feedUrl: String): Boolean? = transcripts[feedUrl]
+
+    /**
+     * Whether the feed's latest episodes come with official transcripts (`<podcast:transcript>`):
+     * its first three episodes are read (at most 512 KB). False when it can't be read in time.
+     */
+    suspend fun hasTranscripts(feedUrl: String): Boolean {
+        transcripts[feedUrl]?.let { return it }
+        val found = limit.withPermit {
+            withTimeoutOrNull(8_000) {
+                withContext(Dispatchers.IO) { runCatching { readTranscripts(feedUrl) }.getOrNull() }
+            }
+        }
+        // Not stored when the feed couldn't be read: it's checked again next time.
+        found?.let { transcripts[feedUrl] = it }
+        return found == true
+    }
+
+    /** The shows of [batch] that give official transcripts (checked in parallel). */
+    suspend fun withTranscripts(batch: List<com.ascolta.app.net.DirectoryResult>): List<com.ascolta.app.net.DirectoryResult> = coroutineScope {
+        batch.map { r -> async { r.takeIf { hasTranscripts(it.feedUrl) } } }.awaitAll().filterNotNull()
+    }
+
+    private fun readTranscripts(feedUrl: String): Boolean? {
+        http.newCall(Request.Builder().url(feedUrl).build()).execute().use { response ->
+            if (!response.isSuccessful) return null
+            val stream = response.body?.source()?.inputStream() ?: return null
+            val text = StringBuilder()
+            val buffer = ByteArray(8_192)
+            var scanned = 0
+            while (text.length < 524_288) {
+                val n = stream.read(buffer)
+                if (n <= 0) break
+                text.append(String(buffer, 0, n, Charsets.UTF_8))
+                // Only the new part (and a little before it, for a tag cut in two) is searched.
+                val from = (scanned - 40).coerceAtLeast(0)
+                if (TRANSCRIPT.containsMatchIn(text.substring(from))) return true
+                if (ITEM_END.findAll(text).take(3).count() >= 3) return false
+                scanned = text.length
+            }
+            return false
+        }
+    }
+
     private fun read(feedUrl: String): String? {
         http.newCall(Request.Builder().url(feedUrl).build()).execute().use { response ->
             // Gone, forbidden or not found: following it would fail. (Server errors may pass.)
@@ -87,6 +134,8 @@ class FeedLanguage(private val http: OkHttpClient) {
 
     private companion object {
         val FEED = Regex("""<(rss|feed|rdf:RDF|channel)[\s>]""", RegexOption.IGNORE_CASE)
+        val TRANSCRIPT = Regex("""<podcast:transcript[\s>]""", RegexOption.IGNORE_CASE)
+        val ITEM_END = Regex("""</item>""", RegexOption.IGNORE_CASE)
         val TAG = Regex("""<language>\s*([A-Za-z]{2,3}(?:[-_][A-Za-z]{2,4})?)\s*</language>""", RegexOption.IGNORE_CASE)
     }
 }

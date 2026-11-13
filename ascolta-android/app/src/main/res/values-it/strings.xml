@@ -705,4 +705,5 @@
     <string name="badge_sharp_ear_title">Orecchio fino ×%1$d</string>
     <string name="badge_sharp_ear_desc">Trova %1$d errori di trascrizione</string>
     <string name="wrong_ok_native">Corretto. Le monete sono solo per l\'ascolto in una lingua che stai imparando, non nella tua lingua madre.</string>
+    <string name="filter_official">Trascrizione ufficiale</string>
 </resources>

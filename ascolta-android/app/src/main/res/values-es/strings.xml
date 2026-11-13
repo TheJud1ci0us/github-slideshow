@@ -705,4 +705,5 @@
     <string name="badge_sharp_ear_title">Buen oído ×%1$d</string>
     <string name="badge_sharp_ear_desc">Detecta %1$d errores de transcripción</string>
     <string name="wrong_ok_native">Corregido. Las monedas son solo por escuchar en un idioma que estás aprendiendo, no en tu lengua materna.</string>
+    <string name="filter_official">Transcripción oficial</string>
 </resources>

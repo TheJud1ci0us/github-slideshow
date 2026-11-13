@@ -355,6 +355,19 @@ fun FilterMenu(label: String, active: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** An on/off filter as plain text ("✓ Official transcript"); in the accent colour when on. */
+@Composable
+fun FilterToggle(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
+    val color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    TextButton(onClick = { onToggle(!on) }) {
+        if (on) {
+            Icon(androidx.compose.material.icons.Icons.Filled.Check, null, tint = color, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(label, style = MaterialTheme.typography.titleSmall, color = color)
+    }
+}
+
 /** A bottom sheet listing choices (for [FilterMenu]). */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable

@@ -725,4 +725,5 @@
     <string name="badge_sharp_ear_title">Sharp ear ×%1$d</string>
     <string name="badge_sharp_ear_desc">Catch %1$d transcription mistakes</string>
     <string name="wrong_ok_native">Corrected. Coins are only for listening in a language you\'re learning, not your native one.</string>
+    <string name="filter_official">Official transcript</string>
 </resources>

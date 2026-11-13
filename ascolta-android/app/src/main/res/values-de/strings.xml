@@ -698,4 +698,5 @@
     <string name="badge_sharp_ear_title">Gutes Gehör ×%1$d</string>
     <string name="badge_sharp_ear_desc">Entdecke %1$d Transkriptionsfehler</string>
     <string name="wrong_ok_native">Korrigiert. Münzen gibt es nur fürs Hören in einer Sprache, die du lernst, nicht in deiner Muttersprache.</string>
+    <string name="filter_official">Offizielles Transkript</string>
 </resources>

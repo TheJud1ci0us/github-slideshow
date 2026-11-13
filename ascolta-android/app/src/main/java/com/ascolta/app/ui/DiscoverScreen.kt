@@ -98,6 +98,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     var genre by rememberSaveable { mutableStateOf<Int?>(null) }
     val myBand = remember(learning, levelsPref) { LevelBand.of(settings.levelFor(learning)) }
     var band by remember(learning, levelsPref) { mutableStateOf(myBand) }
+    val officialOnly by settings.discoverOfficialOnly.flow.collectAsState()
     var loadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     // Endless lists: the pager behind the results shown, and whether a page is loading.
     var pager by remember { mutableStateOf<com.ascolta.app.data.PodcastPager?>(null) }
@@ -140,6 +141,10 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         }
     }
 
+    /** With "Official transcript" on, a list keeps only shows whose latest episodes have one. */
+    fun official(check: suspend (List<DirectoryResult>) -> List<DirectoryResult>): suspend (List<DirectoryResult>) -> List<DirectoryResult> =
+        if (!settings.discoverOfficialOnly.value) check else { batch -> graph.feedLanguage.withTranscripts(check(batch)) }
+
     fun search(term: String) {
         if (term.isBlank()) return
         genre = null
@@ -158,7 +163,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         // Then the search itself: this store first, then the US one (more shows), up to 200 each.
         load(com.ascolta.app.data.PodcastPager(
             top + listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }),
-            check = { it }, // the search results are shown in any language; the tag says which
+            check = official { it }, // the search results are shown in any language; the tag says which
             pageSize = 30,
         ))
     }
@@ -183,7 +188,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         load(com.ascolta.app.data.PodcastPager(
             (if (course) com.ascolta.app.data.Recommendations.learnerSources(graph.directory, lang, store, stores)
             else com.ascolta.app.data.Recommendations.themeSources(graph.directory, genreId, lang, store)) + more,
-            check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course),
+            check = official(com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course)),
         ))
     }
 
@@ -202,9 +207,9 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     // "For you": suggestions for the language, favourite themes and level (shown before any search).
     // The suggestions first, then (as you scroll) the favourite themes, shows for learners and
     // the backup searches, endlessly until the store runs out.
-    val forYouItems = remember(learning, interestsPref, levelsPref) { androidx.compose.runtime.mutableStateListOf<DirectoryResult>() }
-    var forYouLoaded by remember(learning, interestsPref, levelsPref) { mutableStateOf(false) }
-    val forYouPager = remember(learning, interestsPref, levelsPref) {
+    val forYouItems = remember(learning, interestsPref, levelsPref, officialOnly) { androidx.compose.runtime.mutableStateListOf<DirectoryResult>() }
+    var forYouLoaded by remember(learning, interestsPref, levelsPref, officialOnly) { mutableStateOf(false) }
+    val forYouPager = remember(learning, interestsPref, levelsPref, officialOnly) {
         val lang = learning
         val native = settings.nativeLanguage.value
         val store = country ?: "US"
@@ -217,7 +222,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         )
         com.ascolta.app.data.PodcastPager(
             listOf(picks) + com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList()) + more,
-            check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true),
+            check = official(com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true)),
             pageSize = 18,
         )
     }
@@ -306,6 +311,15 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                         active = band != null,
                         onClick = { levelMenu = true },
                     )
+                }
+                // Only podcasts that publish their own transcripts (any theme, search or "For you").
+                FilterToggle(stringResource(R.string.filter_official), officialOnly) { on ->
+                    settings.discoverOfficialOnly.set(on)
+                    com.ascolta.app.data.Analytics.track("Discover.officialFilter", mapOf("on" to on.toString()))
+                    when {
+                        genre != null -> browse(genre!!)
+                        query.isNotBlank() && results.isNotEmpty() -> search(query)
+                    }
                 }
                 if (categoryMenu) {
                     MenuSheet(onDismiss = { categoryMenu = false }) {
@@ -405,6 +419,10 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                             level?.let {
                                 Text(stringResource(R.string.level_estimated, it.label), style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary)
+                            }
+                            if (graph.feedLanguage.knownTranscripts(r.feedUrl) == true) {
+                                Text("✓ " + stringResource(R.string.filter_official), style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.tertiary)
                             }
                             // Another language than the one learned: say so.
                             if (lang != null && lang != learning) {
