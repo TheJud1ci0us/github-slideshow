@@ -545,6 +545,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                         val rescuedMs = if (prepared.speech != null && regions != null) com.ascolta.app.whisper.SpeechDetection.gapMs(prepared.speech, regions) else 0L
                         // Parakeet can't be told the language: sentences it wrote in English are redone with Canary.
                         val wrongLanguage = mutableListOf<Segment>()
+                        val blockSegments = mutableListOf<Segment>() // Parakeet's sentences, kept where a redo hears nothing
                         val doubtful = mutableListOf<Segment>() // sentences with words that don't exist
                         val checkDoubts = settings.checkDoubtfulWords.value && com.ascolta.app.data.DoubtfulWords.supports(language, wordLists)
                         recognizer.setDetectedSpeech(prepared.speech)
@@ -570,6 +571,7 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                                             words = cleanWords(seg.words, seg.startMs, seg.endMs)
                                                 ?.map { w -> w.copy(startMs = w.startMs + blockStartMs, text = fixWord(w.text, fixed)) },
                                         )
+                                        blockSegments += segment
                                         AppLog.d("Sentence") { "${clock(segment.startMs)} ${text.take(80)}" }
                                         if (FIX_WRONG_LANGUAGE && settings.fixEnglish.value && model.engine == Engine.PARAKEET && SpeechModel.CANARY_180M.supports(language) && language != "en" &&
                                             com.ascolta.app.data.SentenceLanguage.isEnglishInstead(text, language, wordLists, names)) {
@@ -602,9 +604,11 @@ class TranscribeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                             // redone by Canary (told the language), which keeps the exchange together.
                             val wholeBlock = finished && TranscriptionPlan.redoWholeBlock(wrongLanguage.size, count) &&
                                 redoBlockInLanguage(prepared, blockStartMs, language, names, options)?.let { segments ->
-                                    events.send(WriterEvent.ReplaceSpan(Span(blockStartMs, blockStartMs + blockLenMs), segments))
+                                    val merged = TranscriptionPlan.mergeRedo(blockSegments, segments)
+                                    events.send(WriterEvent.ReplaceSpan(Span(blockStartMs, blockStartMs + blockLenMs), merged))
                                     AppLog.i(TAG, "Wrong language: ${wrongLanguage.size} of $count sentences; whole block redone with Canary " +
-                                        "(${segments.size} sentences) in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
+                                        "(${segments.size} sentences, ${merged.size - segments.size} of Parakeet's kept where Canary heard nothing) " +
+                                        "in ${(System.currentTimeMillis() - redoStarted) / 1000.0}s")
                                     true
                                 } == true
                             if (!wholeBlock) {

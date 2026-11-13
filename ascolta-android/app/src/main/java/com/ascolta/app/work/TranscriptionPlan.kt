@@ -53,6 +53,20 @@ object Coverage {
 
 object TranscriptionPlan {
     /**
+     * A block redone by a second model: its sentences, plus each [original] sentence that the
+     * redo didn't cover (less than half of it overlaps a redone sentence), so a stretch the
+     * second model missed keeps its first text instead of disappearing. Sorted by time.
+     */
+    fun mergeRedo(original: List<Segment>, redone: List<Segment>): List<Segment> {
+        val kept = original.filter { o ->
+            val length = (o.endMs - o.startMs).coerceAtLeast(1)
+            val covered = redone.sumOf { r -> (minOf(o.endMs, r.endMs) - maxOf(o.startMs, r.startMs)).coerceAtLeast(0) }
+            covered * 2 < length
+        }
+        return (redone + kept).sortedBy { it.startMs }
+    }
+
+    /**
      * Where "next sentence" goes: the next transcribed sentence after [positionMs] (however far,
      * so an ad is crossed in one tap), or 15 s on when there is none yet. Never backwards.
      */

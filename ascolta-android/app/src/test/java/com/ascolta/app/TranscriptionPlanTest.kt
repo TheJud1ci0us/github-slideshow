@@ -124,4 +124,16 @@ class TranscriptionPlanTest {
             SpeechDetection.merge(listOf(10_000L to 21_000L, 0L to 4_000L, 20_050L to 25_000L)),
         )
     }
+
+    @Test fun blockRedoKeepsParakeetWhereCanaryHeardNothing() {
+        val parakeet = listOf(Segment(0, 10_000, "a"), Segment(10_000, 30_000, "b"), Segment(30_000, 50_000, "c"), Segment(50_000, 60_000, "d"))
+        // Canary covered the whole block: only its sentences.
+        val all = listOf(Segment(0, 25_000, "A"), Segment(25_000, 60_000, "B"))
+        assertEquals(listOf("A", "B"), TranscriptionPlan.mergeRedo(parakeet, all).map { it.text })
+        // Canary heard only the first 25 s: the rest of Parakeet's text stays, in time order.
+        val part = listOf(Segment(0, 25_000, "A"))
+        assertEquals(listOf("A", "c", "d"), TranscriptionPlan.mergeRedo(parakeet, part).map { it.text })
+        // Canary heard nothing: Parakeet unchanged.
+        assertEquals(parakeet, TranscriptionPlan.mergeRedo(parakeet, emptyList()))
+    }
 }

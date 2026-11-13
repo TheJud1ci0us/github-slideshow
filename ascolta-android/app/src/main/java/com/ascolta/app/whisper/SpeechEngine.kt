@@ -257,7 +257,11 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
             if (to - from < 1_600) continue // < 0.1 s
             val stream = if (hints && names.isNotEmpty()) recognizer.createStream(names) else recognizer.createStream()
             try {
-                stream.acceptWaveform(samples.copyOfRange(from, to), 16_000)
+                // Canary returns nothing for most pieces that end mid-speech; a second of silence
+                // after the piece fixes it (it gives no timestamps, so no time shifts).
+                val piece = if (engine == Engine.CANARY) samples.copyOfRange(from, to).copyOf(to - from + CANARY_TAIL_SAMPLES)
+                else samples.copyOfRange(from, to)
+                stream.acceptWaveform(piece, 16_000)
                 recognizer.decode(stream)
                 val result = recognizer.getResult(stream)
                 // SenseVoice may report tags such as <|ja|><|NEUTRAL|>; they aren't words.
@@ -326,6 +330,8 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
     private companion object {
         const val MAX_PIECE_MS = 25_000L
         const val REAZON_MAX_PIECE_MS = 12_000L
+        /** 1 s of silence after each Canary piece. */
+        const val CANARY_TAIL_SAMPLES = 16_000
         const val REAZON_SHIFT_MS = 300L
         val TAG = Regex("""<\|[^|]*\|>""")
         val CANARY_HYPHEN = Regex("""(?<=\p{L}) - (?=\p{L})""")
