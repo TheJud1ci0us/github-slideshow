@@ -55,10 +55,33 @@ class TranscriptionPlanTest {
     fun abandonsBlockOnlyWhenTheListenerNeedsSomethingElse() {
         val done = listOf(Span(0, 3 * min))
         val block = Span(3 * min, 4 * min)
-        assertFalse(TranscriptionPlan.shouldAbandon(done, 2 * min, block))       // listening just before it
-        assertFalse(TranscriptionPlan.shouldAbandon(done, 3 * min + 30_000, block)) // inside it
-        assertTrue(TranscriptionPlan.shouldAbandon(done, 20 * min, block))       // jumped ahead
-        assertTrue(TranscriptionPlan.shouldAbandon(listOf(Span(2 * min, 3 * min)), 30_000, block)) // jumped back to a gap
+        assertFalse(TranscriptionPlan.shouldAbandon(done, 2 * min, block, seeked = true))       // listening just before it
+        assertFalse(TranscriptionPlan.shouldAbandon(done, 3 * min + 30_000, block, seeked = true)) // inside it
+        assertTrue(TranscriptionPlan.shouldAbandon(done, 20 * min, block, seeked = true))       // jumped ahead
+        assertTrue(TranscriptionPlan.shouldAbandon(listOf(Span(2 * min, 3 * min)), 30_000, block, seeked = true)) // jumped back to a gap
+    }
+
+    @Test
+    fun slowTurboFinishesEvenWhenPlaybackPassesTheBlock() {
+        val block = Span(141_000, 161_000)
+        // The reported case: playback reaches 174s, then 220s during inference.
+        for (position in 141_000L..240_000L step 1_000) {
+            assertFalse(TranscriptionPlan.shouldAbandon(emptyList(), position, block, seeked = false))
+        }
+        assertTrue(TranscriptionPlan.shouldAbandon(emptyList(), 220_000, block, seeked = true))
+        assertTrue(TranscriptionPlan.shouldAbandon(emptyList(), 100_000, block, seeked = true))
+        assertFalse(TranscriptionPlan.shouldAbandon(emptyList(), 150_000, block, seeked = true))
+    }
+
+    @Test
+    fun slowRecognitionKeepsContiguousAudioUntilAnActualSeek() {
+        val done = listOf(Span(141_000, 161_000))
+        // Playback has advanced, but the next block must not skip 161..220s.
+        assertEquals(Span(161_000, 221_000), BufferPolicy.nextBlock(done, 220_000, episode, min, workFromMs = 141_000))
+        // A real seek resets the anchor and targets the new position.
+        assertEquals(Span(600_000, 660_000), BufferPolicy.nextBlock(done, 600_000, episode, min, workFromMs = 600_000))
+        // Fast models still respect the ahead limit and wait when the zone is full.
+        assertNull(BufferPolicy.nextBlock(listOf(Span(0, 300_000)), 0, episode, min, 300_000, workFromMs = 0))
     }
 
     @Test

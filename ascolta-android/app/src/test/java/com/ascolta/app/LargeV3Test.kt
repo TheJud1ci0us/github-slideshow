@@ -23,12 +23,9 @@ class LargeV3Test {
     fun largeV3IsProWhenThePaywallIsOnAndEnglishFixingIsOff() {
         assertEquals(SpeechModel.tiers("fr")[1], FreeLimits.allowedModel(SpeechModel.LARGE_V3, "fr", pro = false))
         assertEquals(SpeechModel.LARGE_V3, FreeLimits.allowedModel(SpeechModel.LARGE_V3, "fr", pro = true))
-        // English slips are redone with Canary 180M, told the language (French, Spanish, German).
-        assertTrue(TranscribeWorker.FIX_WRONG_LANGUAGE)
-        val canary = SpeechModel.CANARY_180M
-        listOf("fr", "es", "de").forEach { assertTrue(it, canary.supports(it)) }
-        assertFalse(canary.supports("it"))
-        assertEquals(207_170_046L, canary.files.sumOf { it.approxBytes })
-        assertFalse(canary in SpeechModel.tiers("fr")) // a helper, not offered as the main model
+        assertFalse(TranscribeWorker.FIX_WRONG_LANGUAGE)
+        assertEquals(SpeechModel.BASE, SpeechModel.byId("parakeet-v3"))
+        assertEquals(SpeechModel.BASE, SpeechModel.byId("canary-180m"))
+        assertFalse(SpeechModel.entries.any { it.label.contains("NVIDIA") })
     }
 }

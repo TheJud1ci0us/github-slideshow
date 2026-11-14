@@ -13,6 +13,7 @@ import androidx.media3.session.MediaSessionService
 import com.ascolta.app.MainActivity
 
 /** Plays audio in the background with a media notification and lock-screen controls. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
 

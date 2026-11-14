@@ -38,6 +38,9 @@ data class PlayerState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val speed: Float = 1f,
+    /** Changes only on a seek, never on ordinary playback ticks. */
+    val seekRevision: Long = 0,
+    val seekPositionMs: Long = 0,
 )
 
 /**
@@ -163,6 +166,12 @@ class PlayerConnection(
             }, ContextCompat.getMainExecutor(context))
         }
         c.addListener(object : Player.Listener {
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    _state.value = _state.value.copy(seekRevision = _state.value.seekRevision + 1, seekPositionMs = newPosition.positionMs)
+                    syncState()
+                }
+            }
             override fun onEvents(player: Player, events: Player.Events) {
                 syncState()
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {

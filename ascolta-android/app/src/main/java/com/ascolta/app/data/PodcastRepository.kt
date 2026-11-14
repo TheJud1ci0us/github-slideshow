@@ -735,37 +735,11 @@ class PodcastRepository(
     /** Tab-separated export that Anki (and most flashcard apps) can import. */
     /**
      * Words and sentences of the current language for Anki, with the speakers' audio: a zip with
-     * cards.txt (front, back, sentence, sentence translation, [sound:…]) and the clips in media/,
-     * plus how to import it. Returns the zip file.
+     * A standard Anki package with the selected language’s cards and existing audio clips.
+     * The language is captured before the exporter switches to its IO dispatcher.
      */
-    suspend fun exportAnkiZip(): File = withContext(Dispatchers.IO) {
-        val language = settings.learningLanguage.value
-        val cards = vocabDao.all().filter { it.language == language }
-        val dir = File(context.cacheDir, "export").apply { mkdirs() }
-        val zip = File(dir, "lingopod-$language-anki.zip")
-        java.util.zip.ZipOutputStream(zip.outputStream().buffered()).use { out ->
-            val lines = StringBuilder()
-            for (v in cards) {
-                val clip = v.audioPath?.let(::File)?.takeIf { it.exists() }
-                val sound = clip?.let { "lingopod-${v.id}.${it.extension}" }
-                if (clip != null && sound != null) {
-                    out.putNextEntry(java.util.zip.ZipEntry("media/$sound"))
-                    clip.inputStream().use { it.copyTo(out) }
-                    out.closeEntry()
-                }
-                lines.append(
-                    listOf(v.word, v.translation, v.sentence.orEmpty(), v.sentenceTranslation.orEmpty(), sound?.let { "[sound:$it]" }.orEmpty())
-                        .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') },
-                ).append('\n')
-            }
-            out.putNextEntry(java.util.zip.ZipEntry("cards.txt"))
-            out.write(lines.toString().toByteArray())
-            out.closeEntry()
-            out.putNextEntry(java.util.zip.ZipEntry("HOW-TO-IMPORT.txt"))
-            out.write(context.getString(R.string.anki_howto).toByteArray())
-            out.closeEntry()
-        }
-        zip
+    suspend fun exportAnkiPackage(language: String = settings.learningLanguage.value): File = withContext(Dispatchers.IO) {
+        AnkiExporter.write(context, language, vocabDao.all().filter { it.language == language })
     }
 
     suspend fun exportVocabTsv(): String = vocabDao.all().filter { it.language == settings.learningLanguage.value }.joinToString("\n") { v ->

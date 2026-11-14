@@ -72,6 +72,9 @@ private fun isTabRoot(route: String?): Boolean =
  * The tab the current screen was opened from: the last tab page on the back stack (a podcast
  * opened from Discover belongs to Discover).
  */
+// Navigation 2.9 exposes this observable stack with library-group visibility. It is
+// needed to retain the originating tab while a player/detail page covers that tab.
+@android.annotation.SuppressLint("RestrictedApi")
 private fun NavHostController.currentTab(): String? =
     currentBackStack.value.lastOrNull { isTabRoot(it.destination.route) }?.destination?.route?.let(::tabOf)
 
@@ -139,7 +142,7 @@ fun AscoltaRoot() {
                     openPodcast = { nav.navigate(Routes.podcast(it)) },
                 )
             }
-            composable("words") { WordsScreen(openReview = { nav.navigate("review") }) }
+            composable("words") { WordsScreen(openReview = { nav.navigate("review") }, openEpisode = { nav.navigate(Routes.player(it)) }) }
             composable("review") { ReviewScreen(onBack = { nav.popBackStack() }) }
             composable("profile") {
                 ProfileScreen(
@@ -176,7 +179,7 @@ fun AscoltaRoot() {
                 "player/{episodeId}",
                 arguments = listOf(navArgument("episodeId") { type = NavType.LongType }),
             ) { entry ->
-                PlayerScreen(episodeId = entry.arguments!!.getLong("episodeId"), onBack = { nav.popBackStack() })
+                PlayerScreen(episodeId = entry.arguments!!.getLong("episodeId"), onBack = { nav.popBackStack() }, openDiagnostics = { nav.navigate("settings/diagnostics") })
             }
         }
     }
@@ -263,6 +266,7 @@ fun AscoltaRoot() {
  * Discover, and switching tabs never brings back an old podcast page. Each tab's main page
  * keeps its place (e.g. Discover's search).
  */
+@android.annotation.SuppressLint("RestrictedApi")
 private fun NavHostController.navigateToTab(route: String) {
     val target = tabOf(route)
     // Close the pages opened from the current tab, back to its main page.

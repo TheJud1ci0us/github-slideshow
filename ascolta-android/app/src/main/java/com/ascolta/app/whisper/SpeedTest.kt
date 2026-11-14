@@ -68,7 +68,7 @@ object SpeedTest {
         }
         val threads = settings.effectiveThreads()
         val options = EngineOptions(
-            threads = threads, flashAttention = settings.flashAttention.value, language = SAMPLE_LANGUAGE,
+            threads = threads, flashAttention = settings.flashAttention.value, fastDecoding = settings.fastDecoding.value, language = SAMPLE_LANGUAGE,
             gpu = settings.useGpu.value && model.gpu,
         )
 

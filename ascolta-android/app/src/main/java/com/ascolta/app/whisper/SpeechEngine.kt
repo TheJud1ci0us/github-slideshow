@@ -21,6 +21,7 @@ data class EngineOptions(
     val language: String? = null,
     /** Run Whisper on the graphics chip when possible (experimental). */
     val gpu: Boolean = false,
+    val fastDecoding: Boolean = false,
 )
 
 /** A loaded speech recognition model. Not thread-safe: one transcription at a time. */
@@ -45,7 +46,7 @@ interface SpeechEngine : Closeable {
 
     /**
      * Names to expect in this episode (guests, places…), for engines that take word hints
-     * (Parakeet). Whisper gets them in its prompt instead.
+     * Whisper gets them in its prompt instead.
      */
     fun setNames(names: List<String>) {}
 
@@ -59,7 +60,7 @@ interface SpeechEngine : Closeable {
         fun load(context: Context, model: SpeechModel, models: ModelManager, options: EngineOptions): SpeechEngine =
             when (model.engine) {
                 Engine.WHISPER -> WhisperEngine(models.primaryPath(model).path, options)
-                Engine.PARAKEET, Engine.SENSEVOICE, Engine.REAZONSPEECH, Engine.OMNILINGUAL, Engine.CANARY -> SherpaEngine(model, models.primaryPath(model), options)
+                Engine.SENSEVOICE, Engine.REAZONSPEECH, Engine.OMNILINGUAL -> SherpaEngine(model, models.primaryPath(model), options)
             }
 
     }
@@ -106,7 +107,7 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
                 onSegment(WhisperSegment(start, maxOf(start, end), sentence, timed))
             }
         }
-        return WhisperLib.nativeTranscribe(handle, audio, language, options.threads, prompt, listener, null) != null
+        return WhisperLib.nativeTranscribe(handle, audio, language, options.threads, prompt, listener, null, options.fastDecoding) != null
     }
 
     override fun abort() {
@@ -121,36 +122,16 @@ class WhisperEngine(modelPath: String, private val options: EngineOptions) : Spe
     }
 }
 
-/**
- * NVIDIA Parakeet TDT 0.6B v3 through sherpa-onnx (on the CPU). It works on short
- * utterances, so each stretch of speech is recognised separately and split into sentences.
- */
-/**
- * Speech models run by sherpa-onnx: NVIDIA Parakeet (transducer), SenseVoice (Japanese,
- * Chinese, Korean, English; non-autoregressive, very light) and ReazonSpeech (Japanese
- * Zipformer transducer). They recognise each speech region in one pass and give a time for
- * every token, from which sentences and words are built.
- */
+/** Runs SenseVoice, ReazonSpeech and Omnilingual locally through sherpa-onnx. */
 class SherpaEngine(model: SpeechModel, modelDir: File, private val options: EngineOptions) : SpeechEngine {
     @Volatile private var aborted = false
     private val recognizer: OfflineRecognizer
     private val language = options.language
     private val engine = model.engine
-    /**
-     * Names as hint words need beam search, which in sherpa-onnx ignores Parakeet's timing
-     * predictions (TDT) and left stretches untranscribed (1.1.0). Parakeet stays on greedy
-     * decoding; names are corrected after recognition instead (Names.correct).
-     */
-    private val hints = false
     /** Where the detector found speech in the current block (the rest are gaps checked anyway). */
     @Volatile private var detected: List<Pair<Long, Long>>? = null
-    @Volatile private var names = ""
 
     override val needsSpeechRegions: Boolean get() = true
-
-    override fun setNames(names: List<String>) {
-        this.names = com.ascolta.app.data.Names.hotwords(names)
-    }
 
     override fun setDetectedSpeech(regions: List<Pair<Long, Long>>?) {
         detected = regions
@@ -179,47 +160,22 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 numThreads = options.threads,
                 modelType = "transducer",
             )
-            // Canary is told the language (source and target the same: transcription, not translation).
-            Engine.CANARY -> OfflineModelConfig(
-                canary = com.k2fsa.sherpa.onnx.OfflineCanaryModelConfig(
-                    encoder = File(modelDir, "encoder.int8.onnx").path,
-                    decoder = File(modelDir, "decoder.int8.onnx").path,
-                    srcLang = options.language ?: "en",
-                    tgtLang = options.language ?: "en",
-                    usePnc = true,
-                ),
-                tokens = File(modelDir, "tokens.txt").path,
-                numThreads = options.threads,
-            )
             Engine.OMNILINGUAL -> OfflineModelConfig(
                 omnilingual = OfflineOmnilingualAsrCtcModelConfig(model = File(modelDir, "model.int8.onnx").path),
                 tokens = File(modelDir, "tokens.txt").path,
                 numThreads = options.threads,
             )
-            else -> OfflineModelConfig(
-                transducer = OfflineTransducerModelConfig(
-                    encoder = File(modelDir, "encoder.int8.onnx").path,
-                    decoder = File(modelDir, "decoder.int8.onnx").path,
-                    joiner = File(modelDir, "joiner.int8.onnx").path,
-                ),
-                tokens = File(modelDir, "tokens.txt").path,
-                numThreads = options.threads,
-                modelType = "nemo_transducer",
-            )
+            else -> error("Unsupported sherpa engine: ${model.engine}")
         }
         // ReazonSpeech gives no punctuation: its sentences are found with the Japanese dictionary.
         if (engine == Engine.REAZONSPEECH) com.ascolta.app.data.Japanese.loadBlocking()
         recognizer = OfflineRecognizer(
             null,
             OfflineRecognizerConfig(
-                // Canary's encoder reads 128 mel bands, the others 80.
-                featConfig = FeatureConfig(sampleRate = 16_000, featureDim = if (model.engine == Engine.CANARY) 128 else 80),
+                featConfig = FeatureConfig(sampleRate = 16_000, featureDim = 80),
                 modelConfig = modelConfig,
-                // Parakeet searches a few candidates so the names given as hints can win
-                // (off for Parakeet: see `hints`).
-                decodingMethod = if (hints) "modified_beam_search" else "greedy_search",
+                decodingMethod = "greedy_search",
                 maxActivePaths = 4,
-                hotwordsFile = if (hints) hotwordsFile(modelDir).path else "",
                 hotwordsScore = 1.5f,
             ),
         )
@@ -236,9 +192,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
         aborted = false
         val regions = speech ?: listOf(0L to samples.size / 16L)
         // ReazonSpeech drops words on long input (it was trained on short utterances).
-        // Parakeet: short replies are recognised together with the speech around them (it
-        // guesses the language from what it hears, and a lone "Tu sais ?" can come out English).
-        val grouped = if (engine == Engine.PARAKEET) SpeechDetection.groupForContext(regions) else regions
+        val grouped = regions
         AppLog.d("Pieces") {
             "${engine.name}: ${regions.size} stretches → ${grouped.size} pieces (block-relative s): " +
                 grouped.take(40).joinToString(" ") { "${it.first / 1000}-${it.second / 1000}" }
@@ -255,12 +209,9 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
             val from = (startMs * 16).toInt().coerceIn(0, samples.size)
             val to = (endMs * 16).toInt().coerceIn(from, samples.size)
             if (to - from < 1_600) continue // < 0.1 s
-            val stream = if (hints && names.isNotEmpty()) recognizer.createStream(names) else recognizer.createStream()
+            val stream = recognizer.createStream()
             try {
-                // Canary returns nothing for most pieces that end mid-speech; a second of silence
-                // after the piece fixes it (it gives no timestamps, so no time shifts).
-                val piece = if (engine == Engine.CANARY) samples.copyOfRange(from, to).copyOf(to - from + CANARY_TAIL_SAMPLES)
-                else samples.copyOfRange(from, to)
+                val piece = samples.copyOfRange(from, to)
                 stream.acceptWaveform(piece, 16_000)
                 recognizer.decode(stream)
                 val result = recognizer.getResult(stream)
@@ -283,10 +234,7 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
                 } else {
                     SpeechAlignment.sentencesFromTokens(tokens, times, startMs, endMs, TAG.replace(result.text, ""))
                 }
-                sentences.map { seg ->
-                    // Canary writes hyphenated words with spaces ("États - Unis").
-                    if (engine == Engine.CANARY) seg.copy(text = CANARY_HYPHEN.replace(seg.text, "-")) else seg
-                }.forEach { seg ->
+                sentences.forEach { seg ->
                     // Real words (also in Japanese / Chinese), timed from the tokens.
                     val words = com.ascolta.app.data.WordSplitter.timedWords(seg.text, seg.words, seg.startMs, seg.endMs, this.language ?: language)
                     onSegment(seg.copy(words = words))
@@ -330,27 +278,10 @@ class SherpaEngine(model: SpeechModel, modelDir: File, private val options: Engi
     private companion object {
         const val MAX_PIECE_MS = 25_000L
         const val REAZON_MAX_PIECE_MS = 12_000L
-        /** 1 s of silence after each Canary piece. */
-        const val CANARY_TAIL_SAMPLES = 16_000
         const val REAZON_SHIFT_MS = 300L
         val TAG = Regex("""<\|[^|]*\|>""")
-        val CANARY_HYPHEN = Regex("""(?<=\p{L}) - (?=\p{L})""")
 
-        /** Parakeet's word pieces in the form sherpa-onnx reads to spell hints (fewest pieces win). */
-        fun bpeVocab(dir: File): File = File(dir, "bpe.vocab").also { out ->
-            if (out.exists() && out.length() > 0) return@also
-            val tmp = File(dir, "bpe.vocab.tmp")
-            tmp.bufferedWriter().use { w ->
-                File(dir, "tokens.txt").forEachLine { line ->
-                    val token = line.substringBeforeLast(' ')
-                    if (token.isNotEmpty()) w.append(token).append("\t-1\n")
-                }
-            }
-            tmp.renameTo(out)
-        }
 
-        /** sherpa-onnx needs a hints file to enable hints; each episode then gives its own names. */
-        fun hotwordsFile(dir: File): File = File(dir, "hotwords.txt").also { if (!it.exists()) it.writeText("LingoPod\n") }
     }
 }
 

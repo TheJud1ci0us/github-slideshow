@@ -85,7 +85,6 @@ import androidx.compose.foundation.verticalScroll
 import com.ascolta.app.data.languageFlag
 import com.ascolta.app.data.languageName
 import com.ascolta.app.graph
-import com.ascolta.app.whisper.PARAKEET_LANGUAGES
 
 /** "🇮🇹 Italiano" */
 fun flagAndName(code: String) = "${languageFlag(code)}  ${languageName(code)}"
@@ -217,9 +216,6 @@ fun LanguagePickerDialog(
                         ListItem(
                             modifier = Modifier.clickable { toggle() },
                             headlineContent = { Text(flagAndName(lang.code)) },
-                            supportingContent = if (lang.code in PARAKEET_LANGUAGES) {
-                                { Text(stringResource(R.string.languages_parakeet_badge), style = MaterialTheme.typography.bodySmall) }
-                            } else null,
                             trailingContent = {
                                 if (multi) Checkbox(checked = selected, onCheckedChange = { toggle() })
                                 else RadioButton(selected = selected, onClick = { toggle() })

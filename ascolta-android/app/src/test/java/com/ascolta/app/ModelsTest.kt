@@ -10,14 +10,14 @@ import org.junit.Test
 class ModelsTest {
     @Test
     fun recommendedModelPerLanguage() {
-        assertEquals(SpeechModel.PARAKEET, SpeechModel.recommended("it"))
+        assertEquals(SpeechModel.BASE, SpeechModel.recommended("it"))
         assertEquals(SpeechModel.SENSEVOICE, SpeechModel.recommended("ja"))
         assertEquals(SpeechModel.SENSEVOICE, SpeechModel.recommended("zh"))
         assertEquals(SpeechModel.BASE, SpeechModel.recommended("th"))
         assertTrue(SpeechModel.REAZONSPEECH.supports("ja") && !SpeechModel.REAZONSPEECH.supports("it"))
         assertTrue(SpeechModel.KOTOBA.supports("ja") && SpeechModel.SMALL_GPU.gpu)
         // Old choices still resolve.
-        assertEquals(SpeechModel.PARAKEET, SpeechModel.byId("parakeet-v3-npu"))
+        assertEquals(SpeechModel.BASE, SpeechModel.byId("parakeet-v3-npu"))
     }
 
     @Test

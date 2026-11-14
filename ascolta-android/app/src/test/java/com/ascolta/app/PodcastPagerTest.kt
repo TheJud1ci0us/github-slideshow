@@ -39,7 +39,7 @@ class PodcastPagerTest {
     fun armenianAndFarsiUseOmnilingual() {
         assertEquals(SpeechModel.OMNILINGUAL, SpeechModel.recommended("hy"))
         assertEquals(SpeechModel.OMNILINGUAL, SpeechModel.recommended("fa"))
-        assertEquals(SpeechModel.PARAKEET, SpeechModel.recommended("it"))
+        assertEquals(SpeechModel.BASE, SpeechModel.recommended("it"))
     }
 
     @Test
