@@ -26,4 +26,6 @@ For a reproducible real graphics check:
 2. Run `python tools/universe/render_preview.py` with Mesa EGL and Pillow available.
 3. Run `UniverseUiTest` for interaction checks and phone, landscape, large-font, research and portal screenshots.
 
+UI interaction tests also run on a clean checkout without preview files; their 3D slot stays empty until the graphics pipeline supplies frames.
+
 The EGL check compiles the exact packaged GLSL shaders and renders the exact Kotlin-generated meshes with depth testing. It caught and fixed a shared-uniform precision mismatch between shader stages. The Compose screenshots embed those rendered frames because Robolectric does not provide a physical Android GPU surface. They are not screenshots from a physical phone. Device checks for GPU compatibility, touch feel and sustained battery use remain necessary before a production rollout. If graphics setup fails, an accessible Land list still allows the economy to be played.
