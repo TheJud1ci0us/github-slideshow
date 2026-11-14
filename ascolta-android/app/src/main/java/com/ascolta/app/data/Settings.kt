@@ -20,7 +20,7 @@ fun languageFlag(code: String?): String =
 /**
  * Languages that can be learned and translated: every language both Whisper (99 languages)
  * and ML Kit's on-device translation (59) support. NVIDIA Parakeet v3 knows 25 of them
- * (see PARAKEET_LANGUAGES). The country picks the podcast directory's store.
+ *  The country picks the podcast directory's store.
  */
 val LANGUAGES = listOf(
     Language("af", "Afrikaans", "ZA"),
@@ -172,7 +172,6 @@ class Settings(context: Context) {
     /** Remove the "." or "?" between transcript sentences in a selection (last choice made). */
     val joinSelection = bool("join_selection", false)
     /** Discover: only podcasts that give official transcripts. */
-    val discoverOfficialOnly = bool("discover_official_only", false)
     /** Parakeet wrote sentences in English and no Whisper model was there to redo them: suggest Whisper Base. */
     val languageFixSuggested = bool("language_fix_suggested", false)
     val languageFixDismissed = bool("language_fix_dismissed", false)
@@ -194,7 +193,6 @@ class Settings(context: Context) {
     /** Redo the sentences Parakeet writes in English with Canary (costs a few seconds per block). */
     val fixEnglish = bool("fix_english", true)
     /** Words that don't exist ("kläddsträger") checked again by a second speech model. */
-    val checkDoubtfulWords = bool("check_doubtful_words", false)
     /** Minutes transcribed ahead of the listener (0: the whole episode). */
     val transcribeAhead = int("transcribe_ahead_min", 5)
 
@@ -237,6 +235,7 @@ class Settings(context: Context) {
     fun effectiveThreads(): Int =
         threads.value.takeIf { it in 1..8 } ?: com.ascolta.app.whisper.CoreDispatchers.defaultThreads()
     /** whisper.cpp flash attention ("faster calculation mode"). */
+    val fastDecoding = bool("fast_decoding", false)
     val flashAttention = bool("flash_attention", true)
     /** Skip music and silence with voice-activity detection. */
     val skipNonSpeech = bool("skip_non_speech", true)
@@ -273,7 +272,7 @@ class Settings(context: Context) {
 
     val model: SpeechModel get() = SpeechModel.byId(modelId.value)
 
-    /** Speech model chosen per language, e.g. "it:parakeet-v3,ja:sensevoice". */
+    /** Speech model chosen per language, e.g. "it:base,ja:sensevoice". */
     val languageModels = string("language_models", "")
     /** Anonymous usage statistics: "" = not asked yet, "yes", "no". */
     val analyticsConsent = string("analytics_consent", "")
@@ -283,7 +282,7 @@ class Settings(context: Context) {
 
     /**
      * The speech model for a language: the one chosen for it, else the general choice if it
-     * understands the language, else the recommended one (Parakeet / SenseVoice / Whisper).
+     * understands the language, else the recommended one (Whisper / SenseVoice / Omnilingual).
      */
     fun modelFor(language: String): SpeechModel {
         val chosen = languageModels.value.split(',').mapNotNull { it.split(':').takeIf { p -> p.size == 2 } }

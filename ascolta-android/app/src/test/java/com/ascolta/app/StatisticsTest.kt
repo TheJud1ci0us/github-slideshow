@@ -36,7 +36,7 @@ class StatisticsTest {
 
     @Test
     fun threeModelsPerLanguageLightToBest() {
-        assertEquals(listOf(SpeechModel.BASE, SpeechModel.SMALL, SpeechModel.PARAKEET), SpeechModel.tiers("it"))
+        assertEquals(listOf(SpeechModel.BASE, SpeechModel.SMALL, SpeechModel.TURBO), SpeechModel.tiers("it"))
         assertEquals(listOf(SpeechModel.SENSEVOICE, SpeechModel.REAZONSPEECH, SpeechModel.KOTOBA), SpeechModel.tiers("ja"))
         assertEquals(SpeechModel.OMNILINGUAL, SpeechModel.tiers("hy").last())
         for (lang in listOf("it", "ja", "zh", "hy", "tr", "fa")) {

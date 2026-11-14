@@ -4,6 +4,10 @@
 # whisper.cpp JNI (native code calls back into these, and finds them by name).
 -keep class com.ascolta.app.whisper.WhisperLib { *; }
 -keep class com.ascolta.app.whisper.WhisperSegment { *; }
+# JNI looks up these callbacks by literal name; Kotlin never calls them directly.
+-keep interface com.ascolta.app.whisper.TranscribeListener { *; }
+-keep class * implements com.ascolta.app.whisper.TranscribeListener { *; }
+
 -keepclasseswithmembernames class * { native <methods>; }
 
 # sherpa-onnx (Kotlin API used from its JNI) and ONNX Runtime's Java API.

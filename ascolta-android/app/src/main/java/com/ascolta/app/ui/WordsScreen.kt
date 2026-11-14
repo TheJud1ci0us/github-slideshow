@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WordsScreen(openReview: () -> Unit) {
+fun WordsScreen(openReview: () -> Unit, openEpisode: (Long) -> Unit = {}) {
     val context = LocalContext.current
     val graph = context.graph
     val scope = rememberCoroutineScope()
@@ -87,9 +87,44 @@ fun WordsScreen(openReview: () -> Unit) {
     val due = words.count { it.dueAt <= now }
     var adding by remember { mutableStateOf(false) }
     var exportMenu by remember { mutableStateOf(false) }
+    var exportConfirm by remember { mutableStateOf(false) }
+    var selectedId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Long?>(null) }
+    val selectedWord = words.firstOrNull { it.id == selectedId }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val audioCount by androidx.compose.runtime.produceState(-1, words) {
+        value = -1
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            words.count { it.audioPath?.let { path -> java.io.File(path).isFile } == true }
+        }
+    }
+    var exporting by remember { mutableStateOf(false) }
+    fun exportAnki() {
+        if (exporting || !graph.requirePro("anki")) return
+        exporting = true
+        val exportLanguage = learningNow
+        scope.launch {
+            try {
+                val deck = graph.repo.exportAnkiPackage(exportLanguage)
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", deck)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/apkg"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = android.content.ClipData.newRawUri(deck.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                com.ascolta.app.data.AppLog.w("Anki", "Export failed", e)
+                android.widget.Toast.makeText(context, context.getString(R.string.anki_export_error, e.message.orEmpty()), android.widget.Toast.LENGTH_LONG).show()
+            } finally { exporting = false }
+        }
+    }
+
     // Show all cards, only words, or only sentences.
-    var kind by remember { mutableStateOf(0) }
-    val shownWords = remember(words, kind) { when (kind) { 1 -> words.filter { !it.isSentence }; 2 -> words.filter { it.isSentence }; else -> words } }
+    var kind by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -117,16 +152,7 @@ fun WordsScreen(openReview: () -> Unit) {
                             // For Anki, with the speakers' audio.
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.export_anki)) }, onClick = {
                                 exportMenu = false
-                                if (graph.requirePro("anki")) scope.launch {
-                                    val zip = graph.repo.exportAnkiZip()
-                                    val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", zip)
-                                    val send = Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/zip"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(send, context.getString(R.string.export_chooser)))
-                                }
+                                exportConfirm = true
                             })
                         }
                     }
@@ -137,85 +163,38 @@ fun WordsScreen(openReview: () -> Unit) {
             FloatingActionButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, stringResource(R.string.card_add)) }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (words.isNotEmpty()) {
-                // Built-in flashcards: review what's due today.
-                Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.School, null)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            if (due > 0) stringResource(R.string.cards_due, due) else stringResource(R.string.cards_none_due),
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(enabled = due > 0, onClick = openReview) { Text(stringResource(R.string.cards_review)) }
-                    }
-                }
-            }
-            if (words.isNotEmpty()) {
-                // All / Words / Sentences, as plain text tabs.
-                Row(Modifier.padding(horizontal = 8.dp)) {
-                    listOf(R.string.words_all, R.string.words_only_words, R.string.words_only_sentences).forEachIndexed { k, res ->
-                        TextButton(onClick = { kind = k }) {
-                            Text(stringResource(res), style = MaterialTheme.typography.titleSmall,
-                                color = if (kind == k) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            if (words.isEmpty()) {
-                EmptyHint(stringResource(R.string.words_empty))
-            } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
-                    items(shownWords, key = { it.id }) { w ->
-                        ListItem(
-                            headlineContent = {
-                                val shown = if (w.language == "ja" && jaReady && !w.isSentence) {
-                                    withReading(w.word, com.ascolta.app.data.Japanese.reading(w.word), com.ascolta.app.data.Japanese.romaji(w.word))
-                                } else w.word
-                                Text(if (w.isSentence) w.word else "$shown  →  ${w.translation}")
-                            },
-                            supportingContent = {
-                                Column {
-                                    if (w.isSentence) {
-                                        Text(w.translation, style = MaterialTheme.typography.bodySmall, fontStyle = FontStyle.Italic)
-                                    } else {
-                                        // The sentence's translation is on the back of the flashcard.
-                                        w.sentence?.let { Text(highlightWord(it, w.word), style = MaterialTheme.typography.bodySmall) }
-                                    }
-                                }
-                            },
-                            trailingContent = {
-                                Row {
-                                    // The word in the phone's voice.
-                                    if (!w.isSentence) IconButton(onClick = { com.ascolta.app.data.Speech.speak(context, w.word, w.language) }) {
-                                        Icon(Icons.Filled.RecordVoiceOver, stringResource(R.string.hear_voice))
-                                    }
-                                    // The sentence as it was said in the episode.
-                                    w.audioPath?.let { clip ->
-                                        IconButton(onClick = { com.ascolta.app.whisper.AudioClip.play(clip) }) {
-                                            Icon(Icons.AutoMirrored.Filled.VolumeUp, stringResource(R.string.play_clip))
-                                        }
-                                    }
-                                    // The learner's own shadowing recording.
-                                    w.myAudioPath?.takeIf { java.io.File(it).exists() }?.let { mine ->
-                                        IconButton(onClick = { com.ascolta.app.whisper.AudioClip.play(mine) }) {
-                                            Icon(Icons.Filled.Mic, stringResource(R.string.play_mine))
-                                        }
-                                    }
-                                    IconButton(onClick = { scope.launch { graph.repo.deleteWord(w.id) } }) {
-                                        Icon(Icons.Filled.Delete, stringResource(R.string.action_delete))
-                                    }
-                                }
-                            },
-                        )
-                        HorizontalDivider()
-                    }
-                }
-            }
-        }
+        SavedWordsContent(
+            words = words, due = due, query = query, kind = kind, exporting = exporting, listState = listState,
+            modifier = Modifier.padding(padding),
+            onQuery = { query = it }, onKind = { kind = it }, onReview = openReview,
+            onExport = { exportConfirm = true }, onWord = { selectedId = it.id },
+            onListen = { w ->
+                val clip = w.audioPath?.takeIf { java.io.File(it).isFile }
+                if (clip != null) com.ascolta.app.whisper.AudioClip.play(clip)
+                else com.ascolta.app.data.Speech.speak(context, w.word, w.language)
+            },
+        )
     }
 
+    if (exportConfirm) AlertDialog(
+        onDismissRequest = { exportConfirm = false },
+        title = { Text(stringResource(R.string.export_anki)) },
+        text = { Text(if (audioCount >= 0) stringResource(R.string.export_anki_confirm, languageName(learningNow), words.size, audioCount) else stringResource(R.string.banner_preparing)) },
+        confirmButton = { TextButton(enabled = audioCount >= 0, onClick = { exportConfirm = false; exportAnki() }) { Text(stringResource(R.string.export)) } },
+        dismissButton = { TextButton(onClick = { exportConfirm = false }) { Text(stringResource(R.string.action_cancel)) } },
+    )
+    selectedWord?.let { w ->
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { selectedId = null }) {
+            SavedCardDetails(
+                word = w,
+                reading = if (w.language == "ja" && jaReady && !w.isSentence) withReading(w.word, com.ascolta.app.data.Japanese.reading(w.word), com.ascolta.app.data.Japanese.romaji(w.word)) else null,
+                onEpisode = { selectedId = null; openEpisode(it) },
+                onAudio = { com.ascolta.app.whisper.AudioClip.play(it) },
+                onSpeak = { com.ascolta.app.data.Speech.speak(context, w.word, w.language) },
+                onDelete = { selectedId = null; scope.launch { graph.repo.deleteWord(w.id) } },
+            )
+        }
+    }
     if (adding) AddCardDialog(onDismiss = { adding = false })
 }
 
@@ -488,7 +467,7 @@ internal fun GradeButtons(answer: (Flashcards.Grade) -> Unit) {
 
 /** The sentence with the saved word in bold, so its context stands out. */
 @Composable
-private fun highlightWord(sentence: String, word: String) = androidx.compose.ui.text.buildAnnotatedString {
+internal fun highlightWord(sentence: String, word: String) = androidx.compose.ui.text.buildAnnotatedString {
     val i = sentence.lowercase().indexOf(word.lowercase())
     if (i < 0 || word.isBlank()) { append(sentence); return@buildAnnotatedString }
     append(sentence.substring(0, i))

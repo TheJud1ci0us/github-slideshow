@@ -85,7 +85,6 @@ import androidx.compose.foundation.verticalScroll
 import com.ascolta.app.data.languageFlag
 import com.ascolta.app.data.languageName
 import com.ascolta.app.graph
-import com.ascolta.app.whisper.PARAKEET_LANGUAGES
 
 /** "🇮🇹 Italiano" */
 fun flagAndName(code: String) = "${languageFlag(code)}  ${languageName(code)}"
@@ -217,9 +216,6 @@ fun LanguagePickerDialog(
                         ListItem(
                             modifier = Modifier.clickable { toggle() },
                             headlineContent = { Text(flagAndName(lang.code)) },
-                            supportingContent = if (lang.code in PARAKEET_LANGUAGES) {
-                                { Text(stringResource(R.string.languages_parakeet_badge), style = MaterialTheme.typography.bodySmall) }
-                            } else null,
                             trailingContent = {
                                 if (multi) Checkbox(checked = selected, onCheckedChange = { toggle() })
                                 else RadioButton(selected = selected, onClick = { toggle() })
@@ -448,9 +444,9 @@ fun PodcastStep(
     val picks: List<com.ascolta.app.data.Pick>? = if (loaded) shown else null
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             ScreenTitle(stringResource(R.string.onboarding_podcasts_title), stringResource(R.string.onboarding_podcasts_text))
@@ -470,7 +466,7 @@ fun PodcastStep(
                     imageUrl = pick.podcast.artworkUrl,
                     title = pick.podcast.title,
                     checked = on,
-                    showTitle = true,
+                    edgeToEdge = true,
                     onClick = {
                         if (on) chosen.remove(pick.podcast.feedUrl)
                         else {

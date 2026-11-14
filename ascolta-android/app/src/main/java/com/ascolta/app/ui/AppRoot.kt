@@ -59,7 +59,7 @@ private val TABS = listOf(
 
 /** Which tab a screen belongs to, for the highlighted item in the bar. */
 private fun tabOf(route: String): String = when {
-    route.startsWith("settings") || route == "progress" || route == "aquarium" || route == "personalize" || route == "profile" -> "profile"
+    route.startsWith("settings") || route == "progress" || route == "aquarium" || route == "universe" || route == "personalize" || route == "profile" -> "profile"
     route == "review" -> "words"
     else -> route.substringBefore('?')
 }
@@ -72,6 +72,9 @@ private fun isTabRoot(route: String?): Boolean =
  * The tab the current screen was opened from: the last tab page on the back stack (a podcast
  * opened from Discover belongs to Discover).
  */
+// Navigation 2.9 exposes this observable stack with library-group visibility. It is
+// needed to retain the originating tab while a player/detail page covers that tab.
+@android.annotation.SuppressLint("RestrictedApi")
 private fun NavHostController.currentTab(): String? =
     currentBackStack.value.lastOrNull { isTabRoot(it.destination.route) }?.destination?.route?.let(::tabOf)
 
@@ -110,7 +113,7 @@ fun AscoltaRoot() {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (!inPlayer && route != "aquarium") {
+            if (!inPlayer && route != "aquarium" && route != "universe") {
                 Column(Modifier.navigationBarsPadding()) {
                     MiniPlayer(onOpen = { id -> nav.navigate(Routes.player(id)) })
                     FloatingNavBar(
@@ -139,7 +142,7 @@ fun AscoltaRoot() {
                     openPodcast = { nav.navigate(Routes.podcast(it)) },
                 )
             }
-            composable("words") { WordsScreen(openReview = { nav.navigate("review") }) }
+            composable("words") { WordsScreen(openReview = { nav.navigate("review") }, openEpisode = { nav.navigate(Routes.player(it)) }) }
             composable("review") { ReviewScreen(onBack = { nav.popBackStack() }) }
             composable("profile") {
                 ProfileScreen(
@@ -147,10 +150,11 @@ fun AscoltaRoot() {
                     openProgress = { nav.navigate("progress") },
                     openPersonalize = { nav.navigate("personalize") },
                     openPaywall = { nav.navigate("paywall") },
-                    openAquarium = { nav.navigate("aquarium") },
+                    openUniverse = { nav.navigate("universe") },
                 )
             }
-            composable("aquarium") { AquariumScreen(onBack = { nav.popBackStack() }) }
+            composable("universe") { UniverseScreen(onBack = { nav.popBackStack() }) }
+            composable("aquarium") { UniverseScreen(onBack = { nav.popBackStack() }) } // Restores older saved navigation safely.
             composable("paywall?reason={reason}", arguments = listOf(navArgument("reason") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
                 PaywallScreen(entry.arguments?.getString("reason"), onBack = { nav.popBackStack() }, openLegal = { nav.navigate("settings/about") })
             }
@@ -176,7 +180,7 @@ fun AscoltaRoot() {
                 "player/{episodeId}",
                 arguments = listOf(navArgument("episodeId") { type = NavType.LongType }),
             ) { entry ->
-                PlayerScreen(episodeId = entry.arguments!!.getLong("episodeId"), onBack = { nav.popBackStack() })
+                PlayerScreen(episodeId = entry.arguments!!.getLong("episodeId"), onBack = { nav.popBackStack() }, openDiagnostics = { nav.navigate("settings/diagnostics") })
             }
         }
     }
@@ -263,6 +267,7 @@ fun AscoltaRoot() {
  * Discover, and switching tabs never brings back an old podcast page. Each tab's main page
  * keeps its place (e.g. Discover's search).
  */
+@android.annotation.SuppressLint("RestrictedApi")
 private fun NavHostController.navigateToTab(route: String) {
     val target = tabOf(route)
     // Close the pages opened from the current tab, back to its main page.

@@ -115,7 +115,8 @@ class AppGraph(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val settings = Settings(app)
     val progress = com.ascolta.app.data.ProgressStore(app)
-    val fish = com.ascolta.app.data.FishStore(app)
+    val fish = com.ascolta.app.data.FishStore(app) // Legacy save retained for migration and recovery.
+    val universe = com.ascolta.app.universe.UniverseStore(app, settings.learningLanguage.value, fish.state.value)
     val db = AppDatabase.build(app)
     val http = Http.client()
     val transcripts = TranscriptStore(File(app.filesDir, "transcripts"))
@@ -123,7 +124,15 @@ class AppGraph(app: Application) {
     val wordLists = com.ascolta.app.data.WordLists(app)
     val models = ModelManager(app, http)
     val translation = TranslationService(com.ascolta.app.translate.OpusModels(app, http))
-    val directory = PodcastDirectory(http)
+    // Metadata has a separate bounded disk cache; audio/model downloads never evict its feeds.
+    val metadataHttp = http.newBuilder()
+        .cache(okhttp3.Cache(File(app.cacheDir, "podcast-metadata"), 32L * 1024 * 1024))
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+    val directory = PodcastDirectory(metadataHttp)
+    val discoveryCache = com.ascolta.app.net.DiscoveryCache(File(app.cacheDir, "recommendations"))
     val dictionary = com.ascolta.app.data.Dictionary(app)
     /** LingoPod Pro (Google Play) and what the free version allows. */
     val billing = com.ascolta.app.data.Billing(app, http, scope)
@@ -136,9 +145,9 @@ class AppGraph(app: Application) {
 
     /** A Pro-only feature: true with Pro, otherwise shows the paywall. */
     fun requirePro(reason: String): Boolean = isPro.also { if (!it) billing.requestPaywall(reason) }
-    val feedLanguage = com.ascolta.app.net.FeedLanguage(http, java.io.File(app.filesDir, "feed-transcripts.txt"))
-    val repo = PodcastRepository(app, db, http, settings, transcripts, translation)
-    val player = PlayerConnection(app, db, settings, progress, fish)
+    val feedLanguage = com.ascolta.app.net.FeedLanguage(metadataHttp, java.io.File(app.filesDir, "feed-transcripts.txt"))
+    val repo = PodcastRepository(app, db, metadataHttp, settings, transcripts, translation)
+    val player = PlayerConnection(app, db, settings, progress, universe)
 
     /** Text shared to the app (e.g. a Spotify/Apple link), waiting to be handled by the UI. */
     val pendingSharedText = MutableStateFlow<String?>(null)

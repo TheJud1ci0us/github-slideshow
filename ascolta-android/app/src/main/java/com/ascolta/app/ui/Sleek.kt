@@ -285,62 +285,65 @@ fun CoverTile(
     checked: Boolean = false,
     favourite: Boolean = false,
     showTitle: Boolean = false,
+    edgeToEdge: Boolean = false,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val px = with(androidx.compose.ui.platform.LocalDensity.current) { 140.dp.roundToPx() }
-    Column(modifier) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = { android.widget.Toast.makeText(context, title, android.widget.Toast.LENGTH_SHORT).show() },
-                ),
-        ) {
-            // The name, shown until (or instead of) the picture.
-            Text(
-                title, style = MaterialTheme.typography.labelMedium, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Center).padding(8.dp),
-            )
-            if (imageUrl != null) {
-                coil3.compose.AsyncImage(
-                    model = com.ascolta.app.net.Artwork.sized(imageUrl, px), contentDescription = title,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.matchParentSize(),
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val px = with(androidx.compose.ui.platform.LocalDensity.current) { maxWidth.roundToPx() }
+        Column {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(if (edgeToEdge) androidx.compose.ui.graphics.RectangleShape else RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = { android.widget.Toast.makeText(context, title, android.widget.Toast.LENGTH_SHORT).show() },
+                    ),
+            ) {
+                // The name, shown until (or instead of) the picture.
+                Text(
+                    title, style = MaterialTheme.typography.labelMedium, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center).padding(8.dp),
+                )
+                if (imageUrl != null) {
+                    coil3.compose.AsyncImage(
+                        model = com.ascolta.app.net.Artwork.sized(imageUrl, px), contentDescription = title,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+                }
+                when {
+                    checked -> Box(
+                        Modifier.align(Alignment.TopEnd).padding(5.dp).size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+                    badge > 0 -> Text(
+                        if (badge > 99) "99+" else badge.toString(),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                            .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(bottomStart = 8.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+                if (favourite) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Filled.Star, null,
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp)
+                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape).padding(2.dp),
+                    )
+                }
+            }
+            if (showTitle) {
+                Text(
+                    title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 2.dp),
                 )
             }
-            when {
-                checked -> Box(
-                    Modifier.align(Alignment.TopEnd).padding(5.dp).size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary) }
-                badge > 0 -> Text(
-                    if (badge > 99) "99+" else badge.toString(),
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(bottomStart = 8.dp))
-                        .padding(horizontal = 6.dp, vertical = 1.dp),
-                )
-            }
-            if (favourite) {
-                Icon(
-                    androidx.compose.material.icons.Icons.Filled.Star, null,
-                    tint = androidx.compose.ui.graphics.Color.White,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(4.dp).size(16.dp)
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f), CircleShape).padding(2.dp),
-                )
-            }
-        }
-        if (showTitle) {
-            Text(
-                title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 2.dp),
-            )
         }
     }
 }

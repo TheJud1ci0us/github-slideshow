@@ -110,11 +110,12 @@ object TranscriptionPlan {
     }
 
     /**
-     * While listening: should the block being transcribed be abandoned because the listener
-     * jumped somewhere it doesn't help? True when the first untranscribed point after their
-     * position is outside this block (allowing a little slack).
+     * Only an actual seek may abandon unfinished inference. Ordinary playback can pass the
+     * block while a slow model is still encoding; cancelling then would starve it forever.
+     * A seek within the useful block keeps the work already in progress.
      */
-    fun shouldAbandon(spans: List<Span>, positionMs: Long, block: Span, slackMs: Long = 3_000): Boolean {
+    fun shouldAbandon(spans: List<Span>, positionMs: Long, block: Span, seeked: Boolean, slackMs: Long = 3_000): Boolean {
+        if (!seeked) return false // Slow inference must be allowed to finish as playback advances.
         val needed = Coverage.runEnd(spans, positionMs)
         return needed < block.startMs - slackMs || needed > block.endMs + slackMs
     }
@@ -153,11 +154,12 @@ object BufferPolicy {
 
     /**
      * The next stretch to transcribe for a listener at [positionMs], or null when the zone
-     * ahead of them is fully transcribed (nothing beyond the zone, nothing behind them).
+     * ahead of them is fully transcribed. workFromMs keeps a slow model's contiguous
+     * backlog; reset it to the listener's position only after an actual seek.
      */
-    fun nextBlock(spans: List<Span>, positionMs: Long, totalMs: Long, blockMs: Long, zone: Long = zoneMs(totalMs)): Span? {
+    fun nextBlock(spans: List<Span>, positionMs: Long, totalMs: Long, blockMs: Long, zone: Long = zoneMs(totalMs), workFromMs: Long = positionMs): Span? {
         val end = zoneEnd(positionMs, totalMs, zone)
-        val gap = Coverage.firstGap(spans, positionMs, totalMs) ?: return null
+        val gap = Coverage.firstGap(spans, workFromMs, totalMs) ?: return null
         if (gap.startMs >= end - 500) return null
         return Span(gap.startMs, minOf(gap.endMs, gap.startMs + blockMs, end))
     }

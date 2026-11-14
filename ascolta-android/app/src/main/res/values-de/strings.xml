@@ -117,7 +117,6 @@
     <string name="model_desc_base">Schnell, mit ordentlicher Genauigkeit.</string>
     <string name="model_desc_small">Etwa 3× langsamer als Base, deutlich genauer.</string>
     <string name="model_desc_turbo">Beste Whisper-Genauigkeit, langsam. Braucht ein Handy mit 8 GB RAM.</string>
-    <string name="model_desc_parakeet">Schnell und sehr genau, mit Zeichensetzung. 25 europäische Sprachen (u. a. Italienisch, Spanisch, Französisch, Deutsch, Portugiesisch, Englisch); kein Japanisch oder Chinesisch.</string>
     <string name="model_desc_custom">Eine von dir importierte Whisper-Modelldatei (ggml).</string>
     <string name="model_not_for_language">Unterstützt %1$s nicht</string>
     <string name="model_downloaded">Heruntergeladen</string>
@@ -163,7 +162,7 @@
     <string name="share_log">Protokoll teilen</string>
     <string name="speech_engine_info">Sprach-Engine: %1$s</string>
     <string name="section_about">Über</string>
-    <string name="about_text">LingoPod spielt öffentliche Podcast-RSS-Feeds ab. Spracherkennung (Whisper oder NVIDIA Parakeet) und Übersetzung (ML Kit) laufen beide auf diesem Handy. Modelle werden einmal heruntergeladen; Audio und Transkripte verlassen nie das Gerät.</string>
+    <string name="about_text">LingoPod spielt öffentliche Podcast-RSS-Feeds ab. Spracherkennung (Whisper) und Übersetzung (ML Kit) laufen beide auf diesem Handy. Modelle werden einmal heruntergeladen; Audio und Transkripte verlassen nie das Gerät.</string>
     <string name="notif_channel">Downloads &amp; Transkription</string>
     <string name="notif_channel_desc">Fortschritt von Folgen-Downloads und der Transkription auf dem Gerät</string>
     <string name="status_waiting">Wartet</string>
@@ -196,7 +195,6 @@
         <item quantity="other">%d Folgen</item>
     </plurals>
     <string name="speed_test_accuracy">Genauigkeit: %1$d %% der Wörter richtig</string>
-    <string name="model_desc_parakeet_npu">Parakeet v3 auf dem KI-Chip des Handys (Qualcomm-NPU): Der rechenintensive Teil läuft auf der NPU, der Rest auf der CPU. Möglicherweise um ein Vielfaches schneller und akkuschonender. Großer Download (2,3 GB); beim ersten Einsatz wird die NPU vorbereitet, was einige Minuten dauern kann.</string>
     <string name="npu_unavailable">Auf diesem Handy nicht verfügbar: %1$s</string>
     <string name="npu_check_again">Erneut prüfen</string>
     <string name="npu_chip">NPU gefunden: %1$s</string>
@@ -235,7 +233,6 @@
     <string name="languages_edit">Sprachen</string>
     <string name="languages_learning">Sprachen, die du lernst</string>
     <string name="languages_search">Sprache suchen</string>
-    <string name="languages_parakeet_badge">Auch NVIDIA Parakeet (schnell, genau)</string>
     <string name="action_done">Fertig</string>
     <string name="onboarding_title">Was lernst du?</string>
     <string name="onboarding_text">Wähle eine oder mehrere Sprachen. Jede hat ihre eigene Podcast-Bibliothek und Lernkarten; wechsle mit den Flaggen.</string>
@@ -456,7 +453,6 @@
     <string name="stats_added_audio">Selbst hinzugefügtes Audio</string>
     <string name="stats_history_note">Der Tagesverlauf beginnt mit Version 0.15; früheres Hören zählt zur Gesamtzeit.</string>
     <string name="stats_transcribed">Transkribiert</string>
-    <string name="anki_howto">LingoPod → Anki\n\n1. Entpacke diese Datei.\n2. Kopiere die Dateien aus media/ in Ankis Ordner collection.media (Anki: Extras → Medien prüfen → Dateien anzeigen).\n3. In Anki: Datei → Importieren → cards.txt. Felder: Vorderseite, Rückseite, Satz, Satzübersetzung, Audio (tabulatorgetrennt).\n</string>
     <string name="shadow_this">Diesen Satz nachsprechen</string>
     <string name="saved_without_audio">Ohne Audio des Sprechers gespeichert: die Folge wird für das nächste Mal heruntergeladen</string>
     <string name="select_hint">Tippe ein anderes Wort zum Anpassen, oder drücke lange und ziehe erneut</string>
@@ -503,7 +499,7 @@
     <string name="words_only_sentences">Sätze</string>
     <string name="play_mine">Meine Aufnahme</string>
     <string name="export_text">Als Text (jede Lernkarten-App)</string>
-    <string name="export_anki">Für Anki, mit Audio (.zip)</string>
+    <string name="export_anki">Für Anki, mit Audio (.apkg)</string>
     <string name="length_unknown">Länge unbekannt: lade die Folge herunter, um darin zu springen</string>
     <string name="size_about">etwa</string>
     <string name="data_warning_title">%1$s über mobile Daten herunterladen?</string>
@@ -540,7 +536,7 @@
     <string name="free_cards_used">Du hast %1$d Wörter und Sätze gespeichert, das kostenlose Maximum.</string>
     <string name="free_practice_used">Du hast die %1$d kostenlosen Speicherungen und Nachsprech-Runden für heute genutzt.</string>
     <string name="pro_monthly">Monatlich</string>
-    <string name="pro_yearly">Jährlich (50 % sparen)</string>
+    <string name="pro_yearly" formatted="false">Jährlich (50 % sparen)</string>
     <string name="pro_lifetime">Lebenslang (einmal zahlen)</string>
     <string name="pro_profile_subtitle">Unbegrenzte Transkription, beste Modelle, Anki-Export</string>
     <string name="tour_select_title">Auswählen und speichern</string>
@@ -553,7 +549,6 @@
     <string name="names_placeholder">Angela Merkel\nLeipzig</string>
     <string name="edit_sentence">Text korrigieren</string>
     <string name="edit_sentence_text">Korrigiere ein falsch verstandenes Wort oder einen Namen. Korrigierte Namen werden für die nächsten Folgen dieses Podcasts gemerkt.</string>
-    <string name="language_fix_text">Einige Sätze kamen auf Englisch heraus. Lade NVIDIA Canary (210 MB) herunter, ein kleines Modell, dem die Sprache der Folge gesagt wird, um sie automatisch neu zu schreiben.</string>
     <string name="language_fix_download">Herunterladen (%1$s)</string>
     <string name="tier_most_accurate">Am genauesten · langsam</string>
     <string name="tier_most_accurate_hint">Whisper Large v3 ist auf den meisten Handys langsamer als die Wiedergabe: am besten für vorab heruntergeladene Folgen.</string>
@@ -583,12 +578,9 @@
     <string name="ad_free_title">Werbefreie Version</string>
     <string name="ad_free_text">Viele Podcasts verkaufen eine werbefreie Version als privaten RSS-Feed (Patreon, Supercast, Acast+…). Wenn du einen hast, kopiere die Feed-Adresse aus diesem Dienst und füge sie hier hinzu: Du bekommst die Folgen ohne Werbung.</string>
     <string name="ad_free_add">Feed-Link hinzufügen</string>
-    <string name="model_desc_canary">Canary 180M (NVIDIA): ein kleines Modell, dem die Sprache gesagt wird; es schreibt die Sätze neu, die Parakeet auf Englisch schreibt. Französisch, Spanisch, Deutsch.</string>
     <string name="detailed_log_title">Ausführliches Protokoll</string>
     <string name="detailed_log_text">Zeichnet auch jeden Satz auf, warum einer für Englisch gehalten wurde und was neu gemacht wurde. Bleibt auf deinem Handy; es wird nur gesendet, wenn du es teilst.</string>
     <string name="tier_meta">Meta Omnilingual · alle Sprachen</string>
-    <string name="fix_english_title">Englische Sätze korrigieren</string>
-    <string name="fix_english_text">Wenn Parakeet einen Satz auf Englisch schreibt, wird er mit NVIDIA Canary (210 MB) neu gemacht, dem die Sprache gesagt wird. Kostet einige Sekunden pro Minute Audio; für maximale Geschwindigkeit ausschalten.</string>
     <string name="aq_title">Aquarium</string>
     <string name="aq_card_text">%d Münzen zum Ausgeben</string>
     <string name="aq_how">Hören in einer anderen Sprache als deiner Muttersprache bringt 10 Münzen pro Minute (Hören in deiner Muttersprache bringt nichts). Gib sie für Köder aus und fang Fische für dein Aquarium.</string>
@@ -660,7 +652,7 @@
     <string name="aq_bg_lagoon">Lagune im Abendrot</string>
     <string name="aq_bg_deep">Tiefsee</string>
     <string name="doubt_title">Zweifelhafte Wörter prüfen</string>
-    <string name="doubt_text">Wenn ein Wort nicht existiert (wahrscheinlich verhört), wird der Satz von einem zweiten Modell, dem die Sprache vorgegeben wird, noch einmal angehört: NVIDIA Canary für Englisch, Französisch, Spanisch und Deutsch, sonst ein heruntergeladenes Whisper-Modell (Turbo, Small oder Base). Tippfehler von einem Buchstaben in häufigen Wörtern werden korrigiert. Kostet bei manchen Blöcken einige Sekunden.</string>
+    <string name="doubt_text">Prüft zweifelhafte Wörter mit einem anderen heruntergeladenen Whisper-Modell, falls verfügbar. Erhöht die Verarbeitungszeit und den Akkuverbrauch.</string>
     <string name="doubt_note">Dieses Wort gibt es nicht: Es wurde wohl falsch verstanden.</string>
     <string name="doubt_suggest">Vielleicht war es (tippen, um den Satz zu korrigieren):</string>
     <string name="ahead_title">Im Voraus transkribieren</string>
@@ -700,4 +692,35 @@
     <string name="wrong_ok_native">Korrigiert. Münzen gibt es nur fürs Hören in einer Sprache, die du lernst, nicht in deiner Muttersprache.</string>
     <string name="filter_official">Offizielles Transkript</string>
     <string name="discover_end_official">Hier wurden keine weiteren Podcasts mit offiziellem Transkript gefunden. Probiere ein anderes Thema oder schalte den Filter aus.</string>
+    <string name="reading_settings">Leseeinstellungen</string>
+    <string name="search_transcript">Transkript durchsuchen</string>
+    <string name="search_transcript_hint">Suche im Originaltext oder in der Übersetzung. Tippe zum Anhören auf ein Ergebnis.</string>
+    <string name="search_no_results">Keine Treffer.</string>
+    <string name="practice_actions">Üben und Optionen</string>
+    <string name="listen_selection">Anhören</string>
+    <string name="search_saved">Karten durchsuchen</string>
+    <string name="open_episode">Ursprüngliche Folge öffnen</string>
+    <string name="delete_card_title">Diese Karte löschen?</string>
+    <string name="export_anki_confirm">%1$s · %2$d Karten · %3$d Audioclips.\n\nExportiert alle Karten dieser Sprache, auch außerhalb deiner Suche und deines Filters.</string>
+    <string name="phase_waiting">Warten auf den Download</string>
+    <string name="phase_downloading">Benötigte Dateien werden geladen</string>
+    <string name="phase_loading">Sprachmodell wird geladen</string>
+    <string name="phase_processing">Untertitel werden erstellt</string>
+    <string name="phase_ready">Untertitel im Voraus bereit</string>
+    <string name="phase_paused">Untertitel pausiert</string>
+    <string name="phase_failed">Untertitel benötigen Aufmerksamkeit</string>
+    <string name="details_more">Details anzeigen</string>
+    <string name="details_less">Details ausblenden</string>
+    <string name="buffer_ready">%1$d Min. %2$d Sek. im Voraus verfügbar</string>
+    <string name="local_subtitles_detail">Untertitel werden auf deinem Telefon erstellt · %1$s</string>
+    <string name="pause_transcription">Pause</string>
+    <string name="card_save_failed">Karte konnte nicht gespeichert werden. Versuche es erneut.</string>
+    <string name="review_ready">Bereit für eine kurze Wiederholung?</string>
+    <string name="review_caught_up">Alles wiederholt</string>
+    <string name="words_empty_guide">Dein nächstes nützliches Wort steckt in einem Podcast. Halte im Player ein Wort oder einen Satz gedrückt und tippe auf Speichern. Hier findest du die Bedeutung und, wenn verfügbar, das Audio.</string>
+    <string name="export_anki_short">Nach Anki exportieren</string>
+    <string name="anki_exporting">Anki-Stapel wird vorbereitet…</string>
+    <string name="anki_export_error">Anki-Stapel konnte nicht exportiert werden: %1$s</string>
+    <string name="fast_decode_title">Schnellere Whisper-Dekodierung</string>
+    <string name="fast_decode_text">Überspringt wiederholte Versuche bei schwierigem Audio. Kann Whisper auf Kosten der Genauigkeit beschleunigen.</string>
 </resources>

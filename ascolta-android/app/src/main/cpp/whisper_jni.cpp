@@ -35,9 +35,22 @@ std::once_flag backendsLoaded;
 
 jstring utf8String(JNIEnv *env, const char *text);
 
+// A failed JNI method lookup leaves NoSuchMethodError pending. Convert it into a
+// recoverable exception before returning to the Kotlin worker's error handling.
+void callbackLookupFailed(JNIEnv *env, jclass listenerClass) {
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(listenerClass);
+    jclass errorClass = env->FindClass("java/lang/IllegalStateException");
+    if (errorClass != nullptr) {
+        env->ThrowNew(errorClass, "Whisper callbacks unavailable; please update the app");
+        env->DeleteLocalRef(errorClass);
+    }
+}
+
+
 void progressCallback(whisper_context *, whisper_state *, int progress, void *userData) {
     auto *data = static_cast<ListenerData *>(userData);
-    if (data == nullptr || data->listener == nullptr) return;
+    if (data == nullptr || data->listener == nullptr || data->onProgress == nullptr) return;
     data->env->CallVoidMethod(data->listener, data->onProgress, (jint) progress);
     if (data->env->ExceptionCheck()) data->env->ExceptionClear();
 }
@@ -262,7 +275,7 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeSystemInfo(JNIEnv *env, jclass) {
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
         JNIEnv *env, jclass, jlong handle, jfloatArray samples, jstring language,
-        jint threads, jstring prompt, jobject listener, jstring vadModelPath) {
+        jint threads, jstring prompt, jobject listener, jstring vadModelPath, jboolean fastDecoding) {
     auto *session = reinterpret_cast<Session *>(handle);
     if (session == nullptr) return nullptr;
     // Each call starts fresh: a previous block may have been abandoned (listener jumped).
@@ -281,6 +294,10 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
     params.language = lang.c_str();
     params.n_threads = threads;
     params.no_context = true;
+    if (fastDecoding) {
+        params.temperature_inc = 0.0f;
+        params.greedy.best_of = 1;
+    }
     params.suppress_blank = true;
     params.suppress_nst = true;
     params.token_timestamps = true; // per-word times for word highlighting
@@ -295,8 +312,16 @@ Java_com_ascolta_app_whisper_WhisperLib_nativeTranscribe(
     if (listener != nullptr) {
         jclass cls = env->GetObjectClass(listener);
         callbacks.onProgress = env->GetMethodID(cls, "onProgress", "(I)V");
+        if (callbacks.onProgress == nullptr || env->ExceptionCheck()) {
+            callbackLookupFailed(env, cls);
+            return nullptr; // never call a null method ID
+        }
         callbacks.onSegment = env->GetMethodID(
             cls, "onSegment", "(JJLjava/lang/String;[Ljava/lang/String;[J)V");
+        if (callbacks.onSegment == nullptr || env->ExceptionCheck()) {
+            callbackLookupFailed(env, cls);
+            return nullptr;
+        }
         env->DeleteLocalRef(cls);
         params.progress_callback = progressCallback;
         params.progress_callback_user_data = &callbacks;

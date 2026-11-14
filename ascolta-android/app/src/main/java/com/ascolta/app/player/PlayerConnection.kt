@@ -38,6 +38,9 @@ data class PlayerState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val speed: Float = 1f,
+    /** Changes only on a seek, never on ordinary playback ticks. */
+    val seekRevision: Long = 0,
+    val seekPositionMs: Long = 0,
 )
 
 /**
@@ -55,7 +58,7 @@ class PlayerConnection(
     db: AppDatabase,
     private val settings: Settings,
     private val progress: com.ascolta.app.data.ProgressStore,
-    private val fish: com.ascolta.app.data.FishStore,
+    private val universe: com.ascolta.app.universe.UniverseStore,
 ) {
     private val podcastDao = db.podcastDao()
     /** Language of the episode playing, for listening statistics. */
@@ -163,11 +166,18 @@ class PlayerConnection(
             }, ContextCompat.getMainExecutor(context))
         }
         c.addListener(object : Player.Listener {
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    _state.value = _state.value.copy(seekRevision = _state.value.seekRevision + 1, seekPositionMs = newPosition.positionMs)
+                    syncState()
+                }
+            }
             override fun onEvents(player: Player, events: Player.Events) {
                 syncState()
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
                     saveCurrentPosition()
                     progress.flush()
+                    universe.flush()
                     writeLog()
                 }
             }
@@ -331,12 +341,12 @@ class PlayerConnection(
                         val ms = (wall - lastTickWall).coerceIn(0, 1_000)
                         progress.addListening(language, ms)
                         logListening(ms, language)
-                        // The Aquarium is paid in coins from foreign-language listening.
-                        fish.addListening(ms, FishGame.isForeign(playingLanguage, settings.nativeLanguage.value), c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
+                        // Only real foreign-language playback adds energy to the idle world.
+                        universe.addListening(ms, FishGame.isForeign(playingLanguage, settings.nativeLanguage.value), c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
                     }
                     val position = c.currentPosition
                     val length = c.duration
-                    if (length > 60_000 && position >= length - 5_000) fish.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
+                    if (length > 60_000 && position >= length - 5_000) universe.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
                     checkAutoPause(c, position)
                     checkSleep(c, position)
                     c.currentMediaItem?.mediaId?.toLongOrNull()?.let { id -> watchAds(id); checkAds(c, position) }

@@ -2,6 +2,9 @@ package com.ascolta.app.net
 
 import android.net.Uri
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 
@@ -36,11 +39,12 @@ class PodcastDirectory(private val http: OkHttpClient) {
      * Apple allows about 20 requests a minute: answers are kept for an hour and at most four
      * requests run at once, so browsing themes and levels doesn't get the app refused.
      */
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
+    private val cache = java.util.Collections.synchronizedMap(LinkedHashMap<String, Pair<Long, String>>(32, 0.75f, true))
+    private val requests = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
     private val gate = kotlinx.coroutines.sync.Semaphore(4)
 
-    private suspend fun get(url: String): String {
-        cache[url]?.takeIf { System.currentTimeMillis() - it.first < 3_600_000 }?.let { return it.second }
+    private suspend fun get(url: String): String = requests.getOrPut(url) { kotlinx.coroutines.sync.Mutex() }.withLock {
+        cache[url]?.takeIf { System.currentTimeMillis() - it.first < 3_600_000 }?.let { return@withLock it.second }
         val body = gate.withPermit {
             try {
                 http.fetchString(url)
@@ -51,8 +55,11 @@ class PodcastDirectory(private val http: OkHttpClient) {
                 http.fetchString(url)
             }
         }
-        cache[url] = System.currentTimeMillis() to body
-        return body
+        synchronized(cache) {
+            cache[url] = System.currentTimeMillis() to body
+            while (cache.size > 32) cache.remove(cache.keys.first())
+        }
+        body
     }
 
     suspend fun search(term: String, country: String?, limit: Int = 40): List<DirectoryResult> {
@@ -63,7 +70,7 @@ class PodcastDirectory(private val http: OkHttpClient) {
             .appendQueryParameter("term", term)
             .apply { if (country != null) appendQueryParameter("country", country) }
             .build().toString()
-        return parseResults(get(url))
+        return withContext(Dispatchers.Default) { parseResults(get(url)) }
     }
 
     /**
@@ -79,35 +86,35 @@ class PodcastDirectory(private val http: OkHttpClient) {
             .appendQueryParameter("term", term)
             .apply { if (country != null) appendQueryParameter("country", country) }
             .build().toString()
-        return parseResults(get(url))
+        return withContext(Dispatchers.Default) { parseResults(get(url)) }
     }
 
     /**
      * Top podcasts of a genre in a country's store (Apple's charts), with their descriptions.
      * The chart has no feed addresses, so they are fetched with one lookup request.
      */
-    suspend fun topByGenre(genreId: Int, country: String, limit: Int = 50): List<DirectoryResult> {
+    suspend fun topByGenre(genreId: Int, country: String, limit: Int = 50): List<DirectoryResult> = withContext(Dispatchers.Default) {
         val chart = JSONObject(
             get("https://itunes.apple.com/${country.lowercase()}/rss/toppodcasts/limit=$limit/genre=$genreId/json"),
-        ).optJSONObject("feed")?.optJSONArray("entry") ?: return emptyList()
+        ).optJSONObject("feed")?.optJSONArray("entry") ?: return@withContext emptyList()
         val entries = (0 until chart.length()).mapNotNull { i ->
             val e = chart.getJSONObject(i)
             val id = e.optJSONObject("id")?.optJSONObject("attributes")?.optString("im:id")?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
             id to e.optJSONObject("summary")?.optString("label")
         }
-        if (entries.isEmpty()) return emptyList()
+        if (entries.isEmpty()) return@withContext emptyList()
         val summaries = entries.toMap()
         val body = get(
             "https://itunes.apple.com/lookup?entity=podcast&country=${country.lowercase()}&id=" + entries.joinToString(",") { it.first },
         )
-        val found = JSONObject(body).optJSONArray("results") ?: return emptyList()
+        val found = JSONObject(body).optJSONArray("results") ?: return@withContext emptyList()
         val byId = (0 until found.length()).associate { i ->
             val o = found.getJSONObject(i)
             o.optLong("collectionId").toString() to o
         }
         // Keep the chart's order.
-        return entries.mapNotNull { (id, _) ->
+        entries.mapNotNull { (id, _) ->
             val o = byId[id] ?: return@mapNotNull null
             parseResult(o)?.copy(summary = summaries[id])
         }.distinctBy { it.feedUrl }

@@ -6,6 +6,7 @@ import com.ascolta.app.data.Recommendations
 import com.ascolta.app.net.DirectoryResult
 import com.ascolta.app.whisper.SpeechModel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,7 +40,7 @@ class PodcastPagerTest {
     fun armenianAndFarsiUseOmnilingual() {
         assertEquals(SpeechModel.OMNILINGUAL, SpeechModel.recommended("hy"))
         assertEquals(SpeechModel.OMNILINGUAL, SpeechModel.recommended("fa"))
-        assertEquals(SpeechModel.PARAKEET, SpeechModel.recommended("it"))
+        assertEquals(SpeechModel.BASE, SpeechModel.recommended("it"))
     }
 
     @Test
@@ -100,4 +101,26 @@ class PodcastPagerTest {
         assertEquals(null, com.ascolta.app.net.TranscriptHosts.quickAnswer("https://rss.listen.style/p/x/rss"))
         assertEquals(null, com.ascolta.app.net.TranscriptHosts.quickAnswer("not a url"))
     }
+    @Test fun firstPageChecksOnlySixShowsAndKeepsTheRestForScrolling() = runBlocking {
+        val checked = mutableListOf<Int>()
+        val pager = PodcastPager(listOf(suspend { shows("chart", 40) }), check = { checked += it.size; it }, pageSize = 12)
+        assertEquals(6, pager.next(limit = 6).size)
+        assertEquals(listOf(6), checked)
+        val next = pager.next()
+        assertEquals("chart 7", next.first().title)
+        assertEquals(12, next.size)
+    }
+    @Test fun canceledChecksDoNotLosePodcastsOnReturnToDiscover() = runBlocking {
+        val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var wait = true
+        val pager = PodcastPager(listOf(suspend { shows("chart", 12) }), check = {
+            if (wait) { entered.complete(Unit); kotlinx.coroutines.awaitCancellation() }
+            it
+        })
+        val job = launch { pager.next(limit = 6) }
+        entered.await()
+        job.cancel(); job.join(); wait = false
+        assertEquals("chart 1", pager.next(limit = 6).first().title)
+    }
+
 }

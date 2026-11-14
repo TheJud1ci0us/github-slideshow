@@ -97,14 +97,9 @@ class PodcastRepository(
 
     // ---- Feeds -------------------------------------------------------------
 
-    suspend fun fetchFeed(url: String): ParsedFeed = withContext(Dispatchers.IO) {
-        http.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            // Gone or refused: say so plainly (Apple keeps listing some dead feeds).
-            if (response.code in 400..499) throw IOException(context.getString(R.string.feed_gone, response.code))
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-            RssParser.parse(response.body!!.byteStream())
-        }
-    }
+    private val feedLoader = com.ascolta.app.net.FeedLoader(http)
+
+    suspend fun fetchFeed(url: String, refresh: Boolean = false): ParsedFeed = feedLoader.load(url, refresh)
 
     /** Subscribes to a feed and returns the podcast id. */
     /**
@@ -175,7 +170,7 @@ class PodcastRepository(
     }
 
     suspend fun refresh(podcast: PodcastEntity): Int {
-        val feed = fetchFeed(podcast.feedUrl)
+        val feed = fetchFeed(podcast.feedUrl, refresh = true)
         val ids = episodeDao.insertAll(feed.episodes.map { it.toEntity(podcast.id) })
         // Feeds sometimes add transcripts to episodes after publishing.
         feed.episodes.filter { it.transcriptUrl != null }.forEach {
@@ -698,7 +693,10 @@ class PodcastRepository(
     suspend fun review(card: VocabEntity, grade: Flashcards.Grade) {
         Analytics.track("Flashcard.reviewed", mapOf("grade" to grade.name, "kind" to if (card.isSentence) "sentence" else "word", "language" to card.language))
         vocabDao.update(Flashcards.schedule(card, grade, System.currentTimeMillis()))
-        (context.applicationContext as com.ascolta.app.AscoltaApp).graph.progress.recordReview()
+        (context.applicationContext as com.ascolta.app.AscoltaApp).graph.let { graph ->
+            graph.progress.recordReview()
+            graph.universe.review(card.id, grade != Flashcards.Grade.AGAIN)
+        }
     }
 
     /** Refreshes the counts that badges depend on (words, transcripts, languages). */
@@ -735,37 +733,11 @@ class PodcastRepository(
     /** Tab-separated export that Anki (and most flashcard apps) can import. */
     /**
      * Words and sentences of the current language for Anki, with the speakers' audio: a zip with
-     * cards.txt (front, back, sentence, sentence translation, [sound:…]) and the clips in media/,
-     * plus how to import it. Returns the zip file.
+     * A standard Anki package with the selected language’s cards and existing audio clips.
+     * The language is captured before the exporter switches to its IO dispatcher.
      */
-    suspend fun exportAnkiZip(): File = withContext(Dispatchers.IO) {
-        val language = settings.learningLanguage.value
-        val cards = vocabDao.all().filter { it.language == language }
-        val dir = File(context.cacheDir, "export").apply { mkdirs() }
-        val zip = File(dir, "lingopod-$language-anki.zip")
-        java.util.zip.ZipOutputStream(zip.outputStream().buffered()).use { out ->
-            val lines = StringBuilder()
-            for (v in cards) {
-                val clip = v.audioPath?.let(::File)?.takeIf { it.exists() }
-                val sound = clip?.let { "lingopod-${v.id}.${it.extension}" }
-                if (clip != null && sound != null) {
-                    out.putNextEntry(java.util.zip.ZipEntry("media/$sound"))
-                    clip.inputStream().use { it.copyTo(out) }
-                    out.closeEntry()
-                }
-                lines.append(
-                    listOf(v.word, v.translation, v.sentence.orEmpty(), v.sentenceTranslation.orEmpty(), sound?.let { "[sound:$it]" }.orEmpty())
-                        .joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') },
-                ).append('\n')
-            }
-            out.putNextEntry(java.util.zip.ZipEntry("cards.txt"))
-            out.write(lines.toString().toByteArray())
-            out.closeEntry()
-            out.putNextEntry(java.util.zip.ZipEntry("HOW-TO-IMPORT.txt"))
-            out.write(context.getString(R.string.anki_howto).toByteArray())
-            out.closeEntry()
-        }
-        zip
+    suspend fun exportAnkiPackage(language: String = settings.learningLanguage.value): File = withContext(Dispatchers.IO) {
+        AnkiExporter.write(context, language, vocabDao.all().filter { it.language == language })
     }
 
     suspend fun exportVocabTsv(): String = vocabDao.all().filter { it.language == settings.learningLanguage.value }.joinToString("\n") { v ->

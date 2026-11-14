@@ -17,7 +17,7 @@ object FeedTranscriptParser {
 
     fun parse(body: String, type: String?): List<Segment> {
         val t = (type ?: "").lowercase()
-        val trimmed = body.trimStart('﻿', ' ', '\n', '\r', '\t')
+        val trimmed = body.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
         val raw = when {
             "json" in t || trimmed.startsWith("{") -> parseJson(trimmed)
             "-->" in trimmed -> parseCues(trimmed)

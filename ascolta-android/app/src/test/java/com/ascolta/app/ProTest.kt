@@ -51,8 +51,8 @@ class ProTest {
         assertEquals(FreeLimits.weekOf(LocalDate.of(2026, 11, 9)), FreeLimits.weekOf(LocalDate.of(2026, 11, 15)))
         assertEquals(FreeLimits.weekOf(LocalDate.of(2026, 11, 15)) + 7, FreeLimits.weekOf(LocalDate.of(2026, 11, 16)))
         // The Best model is Pro: free users get Balanced instead.
-        assertEquals(SpeechModel.SMALL, FreeLimits.allowedModel(SpeechModel.PARAKEET, "it", pro = false))
-        assertEquals(SpeechModel.PARAKEET, FreeLimits.allowedModel(SpeechModel.PARAKEET, "it", pro = true))
+        assertEquals(SpeechModel.SMALL, FreeLimits.allowedModel(SpeechModel.TURBO, "it", pro = false))
+        assertEquals(SpeechModel.TURBO, FreeLimits.allowedModel(SpeechModel.TURBO, "it", pro = true))
         assertEquals(SpeechModel.BASE, FreeLimits.allowedModel(SpeechModel.BASE, "it", pro = false))
     }
 }

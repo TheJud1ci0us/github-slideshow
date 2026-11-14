@@ -40,6 +40,7 @@ object WhisperLib {
         prompt: String?,
         listener: TranscribeListener?,
         vadModelPath: String?,
+        fastDecoding: Boolean,
     ): Array<WhisperSegment>?
     /** Returns [start0, end0, start1, end1, …] in ms of the parts that contain speech. */
     /** [fine]: shorter pieces (0.25 s pauses, at most 10 s) for models trained on short utterances. */

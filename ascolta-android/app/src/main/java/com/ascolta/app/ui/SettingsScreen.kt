@@ -199,14 +199,7 @@ fun SettingsScreen(section: String, onBack: () -> Unit) {
                         tier = stringResource(R.string.tier_meta),
                     )
                 }
-                // Parakeet sometimes writes English: redo those sentences with Canary (a few seconds per block).
-                if (SpeechModel.CANARY_180M.supports(learning) && learning != "en" && SpeechModel.PARAKEET in tiers) {
-                    SwitchRow(stringResource(R.string.fix_english_title), stringResource(R.string.fix_english_text), settings.fixEnglish)
-                }
-                // Words that don't exist ("kläddsträger"): heard again by a second model.
-                if (learning in com.ascolta.app.data.DoubtfulWords.LANGUAGES) {
-                    SwitchRow(stringResource(R.string.doubt_title), stringResource(R.string.doubt_text), settings.checkDoubtfulWords)
-                }
+                SwitchRow(stringResource(R.string.fast_decode_title), stringResource(R.string.fast_decode_text), settings.fastDecoding)
                 IntChoiceRow(
                     stringResource(R.string.ahead_title), settings.transcribeAhead,
                     listOf(2 to stringResource(R.string.ahead_minutes, 2), 5 to stringResource(R.string.ahead_minutes, 5),
@@ -515,12 +508,10 @@ private fun SpeechModel.descriptionRes() = when (this) {
     SpeechModel.SMALL -> R.string.model_desc_small
     SpeechModel.TURBO -> R.string.model_desc_turbo
     SpeechModel.LARGE_V3 -> R.string.model_desc_large_v3
-    SpeechModel.PARAKEET -> R.string.model_desc_parakeet
     SpeechModel.SENSEVOICE -> R.string.model_desc_sensevoice
     SpeechModel.REAZONSPEECH -> R.string.model_desc_reazonspeech
     SpeechModel.KOTOBA -> R.string.model_desc_kotoba
     SpeechModel.OMNILINGUAL -> R.string.model_desc_omnilingual
-    SpeechModel.CANARY_180M -> R.string.model_desc_canary
     SpeechModel.BASE_GPU, SpeechModel.SMALL_GPU -> R.string.model_desc_gpu
     SpeechModel.CUSTOM -> R.string.model_desc_custom
 }

@@ -24,11 +24,9 @@ object Http {
         .build()
 }
 
-suspend fun OkHttpClient.fetchString(url: String): String = withContext(Dispatchers.IO) {
-    newCall(Request.Builder().url(url).build()).execute().use { response ->
-        if (!response.isSuccessful) throw IOException("HTTP ${response.code} for $url")
-        response.body?.string() ?: ""
-    }
+suspend fun OkHttpClient.fetchString(url: String): String = readResponse(Request.Builder().url(url).build()) { response ->
+    if (!response.isSuccessful) throw IOException("HTTP ${response.code} for $url")
+    response.body?.string().orEmpty()
 }
 
 /**

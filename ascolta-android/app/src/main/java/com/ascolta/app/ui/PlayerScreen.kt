@@ -84,6 +84,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -96,6 +99,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ascolta.app.data.EpisodeEntity
 import com.ascolta.app.data.WordSplitter
+import com.ascolta.app.work.TranscriptionPhase
 import com.ascolta.app.work.WorkScheduler
 import com.ascolta.app.data.Segment
 import com.ascolta.app.data.Transcript
@@ -126,7 +130,7 @@ private data class WordLookup(val word: String, val segment: Segment)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
+fun PlayerScreen(episodeId: Long, onBack: () -> Unit, openDiagnostics: () -> Unit = {}) {
     val context = LocalContext.current
     val graph = context.graph
     val scope = rememberCoroutineScope()
@@ -188,14 +192,6 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     val frequencyRanks by produceState<Map<String, Int>?>(null, wordsLanguage, frequencyOn) {
         value = if (!frequencyOn) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { graph.wordLists.ranks(wordsLanguage) }
     }
-    // Words that don't exist (probably misheard): underlined. Null until the long word list is loaded.
-    val doubtLists by produceState<com.ascolta.app.data.WordLists?>(null, wordsLanguage) {
-        value = if (wordsLanguage !in com.ascolta.app.data.DoubtfulWords.LANGUAGES) null
-        else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            graph.wordLists.takeIf { com.ascolta.app.data.DoubtfulWords.supports(wordsLanguage, it) }
-        }
-    }
-
     // Fill in missing translations (e.g. translation model wasn't available during transcription).
     var translating by remember { mutableStateOf(false) }
     LaunchedEffect(transcript?.complete, nativeLanguage, translateOn) {
@@ -300,11 +296,6 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
     var follow by remember { mutableStateOf(true) }
     LaunchedEffect(dragged) {
         if (dragged) follow = false
-        else if (!follow) {
-            // Follows the audio again a few seconds after the reader stops scrolling.
-            delay(6_000)
-            follow = true
-        }
     }
     val contextPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.roundToPx() }
     LaunchedEffect(navIndex, follow, showTranslation, showOriginal, textScale, segments.size) {
@@ -336,11 +327,17 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         if (wordY < viewport * 0.15f || wordY > viewport * 0.7f) listState.animateScrollBy(wordY - viewport * 0.3f)
     }
 
+    var readingSheet by remember { mutableStateOf(false) }
+    var advancedSheet by remember { mutableStateOf(false) }
+    var searchSheet by remember { mutableStateOf(false) }
+    var transcriptQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
     var menu by remember { mutableStateOf(false) }
     var sleepDialog by remember { mutableStateOf(false) }
     var lookup by remember { mutableStateOf<WordLookup?>(null) }
     ForgetTourTarget("transcript"); ForgetTourTarget("player_more"); ForgetTourTarget("player_controls")
     // Selecting part of the transcript (to save with its audio, or to shadow).
+    var savingSelection by remember { mutableStateOf(false) }
     var selA by remember { mutableStateOf<com.ascolta.app.data.WordPos?>(null) }
     var selB by remember { mutableStateOf<com.ascolta.app.data.WordPos?>(null) }
     var shadowing by remember { mutableStateOf<com.ascolta.app.data.Selected?>(null) }
@@ -409,7 +406,70 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
         }
     }
 
+    if (readingSheet) ModalBottomSheet(onDismissRequest = { readingSheet = false }) {
+        Column(Modifier.fillMaxWidth().androidxVerticalScroll().padding(16.dp)) {
+            Text(stringResource(R.string.reading_settings), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(12.dp))
+            val source = languageName(transcript?.language ?: settings.learningLanguage.value)
+            val target = languageName(nativeLanguage)
+            CheckItem(stringResource(R.string.show_language, source), showOriginal) { settings.showOriginal.set(it) }
+            CheckItem(stringResource(R.string.translate_title), translateOn) { settings.translate.set(it) }
+            if (translateOn) CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
+
+            CheckItem(stringResource(R.string.highlight_words), wordHighlight) { settings.wordHighlight.set(it) }
+            if (!isJapanese) CheckItem(stringResource(R.string.highlight_new_words), highlightNew) { settings.highlightNewWords.set(it) }
+            if (isJapanese) {
+                HorizontalDivider()
+                com.ascolta.app.data.JapaneseScript.entries.forEach { s ->
+                    CheckItem(
+                        stringResource(
+                            when (s) {
+                                com.ascolta.app.data.JapaneseScript.KANJI -> R.string.ja_script_kanji
+                                com.ascolta.app.data.JapaneseScript.FURIGANA -> R.string.ja_script_furigana
+                                com.ascolta.app.data.JapaneseScript.ROMAJI -> R.string.ja_script_romaji
+                            },
+                        ),
+                        jaScript == s,
+                    ) { settings.japaneseScript.set(s.key) }
+                }
+            }
+            HorizontalDivider()
+            DropdownMenuItem(text = { Text(stringResource(R.string.larger_text)) }, onClick = {
+                settings.transcriptTextScale.set((textScale + 0.15f).coerceAtMost(2f))
+            })
+            DropdownMenuItem(text = { Text(stringResource(R.string.smaller_text)) }, onClick = {
+                settings.transcriptTextScale.set((textScale - 0.15f).coerceAtLeast(0.7f))
+            })
+        }
+    }
+    if (advancedSheet) ModalBottomSheet(onDismissRequest = { advancedSheet = false }) {
+        Column(Modifier.fillMaxWidth().androidxVerticalScroll().padding(16.dp)) {
+            Text(stringResource(R.string.practice_actions), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(12.dp))
+            CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
+            if (segments.isNotEmpty() && !isJapanese) DropdownMenuItem(
+                text = { Text(stringResource(R.string.episode_words)) },
+                onClick = { advancedSheet = false; showEpisodeWords = true },
+            )
+            segments.getOrNull(navIndex)?.let { cur ->
+                HorizontalDivider()
+                DropdownMenuItem(text = { Text(stringResource(R.string.shadow_this)) }, onClick = {
+                    advancedSheet = false
+                    graph.player.pause()
+                    selA = null; selB = null
+                    if (graph.allowPractice()) shadowing = com.ascolta.app.data.Selection.of(segments, selectWords, allRanges,
+                        com.ascolta.app.data.WordPos(navIndex, 0), com.ascolta.app.data.WordPos(navIndex, ((allRanges.getOrNull(navIndex)?.size ?: 1) - 1).coerceAtLeast(0)))
+                })
+            }
+        }
+    }
+    if (searchSheet) ModalBottomSheet(onDismissRequest = { searchSheet = false }) {
+        TranscriptSearchContent(segments, transcriptQuery, { transcriptQuery = it }) { start ->
+            searchSheet = false
+            follow = true
+            seek(start)
+        }
+    }
     androidx.compose.material3.Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = {
@@ -423,77 +483,13 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
                 actions = {
-                    // Sleep timer (stops at the end of a sentence).
-                    val sleepTimer by graph.player.sleep.collectAsState()
-                    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
-                    LaunchedEffect(sleepTimer) { while (sleepTimer != null) { nowTick = System.currentTimeMillis(); delay(1_000) } }
-                    TextButton(onClick = { sleepDialog = true }) {
-                        Icon(Icons.Filled.Bedtime, stringResource(R.string.sleep_timer))
-                        sleepTimer?.let { t ->
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                when {
-                                    t.endOfEpisode -> stringResource(R.string.sleep_end_short)
-                                    t.snapToMs != null -> "…"
-                                    else -> formatTime(((t.endsAt ?: 0) - nowTick).coerceAtLeast(0)).let { it }
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                    }
-                    // Switch between the episode's picture and the transcript (kept either way).
-                    if (segments.isNotEmpty()) {
-                        IconButton(onClick = { settings.showCover.set(!coverMode) }) {
-                            if (coverMode) Icon(Icons.Filled.Subtitles, stringResource(R.string.show_transcript))
-                            else Icon(Icons.Filled.Image, stringResource(R.string.show_cover))
-                        }
-                    }
                     IconButton(onClick = { menu = true }, modifier = Modifier.tourTarget("player_more")) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
-                    val source = languageName(transcript?.language ?: settings.learningLanguage.value)
-                    val target = languageName(nativeLanguage)
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        CheckItem(stringResource(R.string.show_language, source), showOriginal) { settings.showOriginal.set(it) }
-                        CheckItem(stringResource(R.string.translate_title), translateOn) { settings.translate.set(it) }
-                        if (translateOn) CheckItem(stringResource(R.string.show_language, target), showTranslation) { settings.showTranslation.set(it) }
-                        CheckItem(stringResource(R.string.pause_each_sentence), autoPause) { settings.autoPause.set(it) }
-                        CheckItem(stringResource(R.string.highlight_words), wordHighlight) { settings.wordHighlight.set(it) }
-                        if (!isJapanese) CheckItem(stringResource(R.string.highlight_new_words), highlightNew) { settings.highlightNewWords.set(it) }
-                        if (segments.isNotEmpty() && !isJapanese) DropdownMenuItem(
-                            text = { Text(stringResource(R.string.episode_words)) },
-                            onClick = { menu = false; showEpisodeWords = true },
-                        )
-                        if (isJapanese) {
-                            HorizontalDivider()
-                            com.ascolta.app.data.JapaneseScript.entries.forEach { s ->
-                                CheckItem(
-                                    stringResource(
-                                        when (s) {
-                                            com.ascolta.app.data.JapaneseScript.KANJI -> R.string.ja_script_kanji
-                                            com.ascolta.app.data.JapaneseScript.FURIGANA -> R.string.ja_script_furigana
-                                            com.ascolta.app.data.JapaneseScript.ROMAJI -> R.string.ja_script_romaji
-                                        },
-                                    ),
-                                    jaScript == s,
-                                ) { settings.japaneseScript.set(s.key) }
-                            }
-                        }
-                        segments.getOrNull(navIndex)?.let { cur ->
-                            HorizontalDivider()
-                            DropdownMenuItem(text = { Text(stringResource(R.string.shadow_this)) }, onClick = {
-                                menu = false
-                                graph.player.pause()
-                                selA = null; selB = null
-                                if (graph.allowPractice()) shadowing = com.ascolta.app.data.Selection.of(segments, selectWords, allRanges,
-                                    com.ascolta.app.data.WordPos(navIndex, 0), com.ascolta.app.data.WordPos(navIndex, ((allRanges.getOrNull(navIndex)?.size ?: 1) - 1).coerceAtLeast(0)))
-                            })
-                        }
-                        HorizontalDivider()
-                        DropdownMenuItem(text = { Text(stringResource(R.string.larger_text)) }, onClick = {
-                            settings.transcriptTextScale.set((textScale + 0.15f).coerceAtMost(2f))
-                        })
-                        DropdownMenuItem(text = { Text(stringResource(R.string.smaller_text)) }, onClick = {
-                            settings.transcriptTextScale.set((textScale - 0.15f).coerceAtLeast(0.7f))
-                        })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.reading_settings)) }, onClick = { menu = false; readingSheet = true })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.search_transcript)) }, onClick = { menu = false; searchSheet = true })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.sleep_timer)) }, onClick = { menu = false; sleepDialog = true })
+                        DropdownMenuItem(text = { Text(stringResource(if (coverMode) R.string.show_transcript else R.string.show_cover)) }, onClick = { menu = false; settings.showCover.set(!coverMode) })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.practice_actions)) }, onClick = { menu = false; advancedSheet = true })
                         if (ep?.transcriptState == TranscriptState.DONE) {
                             HorizontalDivider()
                             DropdownMenuItem(text = { Text(stringResource(R.string.retranscribe_current)) }, onClick = {
@@ -522,6 +518,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     selTranslation = runCatching { graph.repo.translateText(text, selLanguage, selNative) }.getOrNull()
                 }
             }
+            Column {
             if (sel != null && raw != null) SelectionBar(
                 text = sel.text,
                 translation = selTranslation,
@@ -530,18 +527,34 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 canJoin = raw.canJoin,
                 joined = joinPref,
                 onJoin = { settings.joinSelection.set(it) },
+                onListen = {
+                    scope.launch {
+                        val clip = graph.repo.selectionClip(ep, sel)
+                        if (clip != null) com.ascolta.app.whisper.AudioClip.play(clip)
+                        else seek(sel.startMs)
+                    }
+                },
+                saving = savingSelection,
                 onSave = {
-                    if (graph.allowPractice()) scope.launch {
-                        val added = graph.repo.saveSelection(ep, sel, transcript?.language ?: settings.learningLanguage.value)
-                        Toast.makeText(context, context.getString(
-                            when {
-                                !added -> R.string.already_saved
-                                ep?.localPath?.let { java.io.File(it).exists() } != true -> R.string.saved_without_audio
-                                sel.single -> R.string.saved_to_words
-                                else -> R.string.sentence_saved
-                            },
-                        ), Toast.LENGTH_SHORT).show()
-                        selA = null; selB = null
+                    if (!savingSelection && graph.allowPractice()) {
+                        savingSelection = true
+                        scope.launch {
+                        try {
+                            val added = graph.repo.saveSelection(ep, sel, transcript?.language ?: settings.learningLanguage.value)
+                            val message = context.getString(
+                                when {
+                                    !added -> R.string.already_saved
+                                    ep?.localPath?.let { java.io.File(it).exists() } != true -> R.string.saved_without_audio
+                                    sel.single -> R.string.saved_to_words
+                                    else -> R.string.sentence_saved
+                                },
+                            )
+                            selA = null; selB = null
+                            scope.launch { snackbar.showSnackbar(message) }
+                        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                        catch (e: Exception) { snackbar.showSnackbar(context.getString(R.string.card_save_failed)) }
+                        finally { savingSelection = false }
+                        }
                     }
                 },
                 onShadow = { if (graph.allowPractice()) shadowing = sel },
@@ -555,7 +568,8 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     if (a != null && b != null) editing = minOf(a, b).segment
                 },
                 onClose = { selA = null; selB = null },
-            ) else androidx.compose.foundation.layout.Box(Modifier.tourTarget("player_controls")) { Controls(
+            )
+            androidx.compose.foundation.layout.Box(Modifier.tourTarget("player_controls")) { Controls(
                 isPlaying = isCurrent && player.isPlaying,
                 buffering = isCurrent && player.isBuffering,
                 position = position,
@@ -584,16 +598,16 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                     graph.player.setSpeed(next)
                 },
             ) }
+            }
         },
         floatingActionButton = {
             if (!follow && segments.isNotEmpty() && !coverMode) {
-                SmallFloatingActionButton(onClick = { follow = true }) { Icon(Icons.Filled.MyLocation, stringResource(R.string.follow_playback)) }
+                androidx.compose.material3.ExtendedFloatingActionButton(onClick = { follow = true }, icon = { Icon(Icons.Filled.MyLocation, null) }, text = { Text(stringResource(R.string.follow_playback)) })
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (ep != null) StatusBanner(ep, transcript, translating)
-            if (ep != null) LanguageFixBanner()
+            if (ep != null) StatusBanner(ep, transcript, translating, openDiagnostics)
             if (frequencyRanks != null && segments.isNotEmpty()) FrequencyLegend()
             // In an ad: a button to skip it. Skipping by itself (Settings) is done by the player
             // service, so it also works with the screen off.
@@ -717,9 +731,6 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                         frequency = frequencyRanks?.let { ranks ->
                             remember(segment.text, ranks, jaReady) { com.ascolta.app.data.WordFrequency.of(segment.text, wordsLanguage, ranks) }
                         },
-                        doubtful = doubtLists?.let { lists ->
-                            remember(segment.text, lists) { com.ascolta.app.data.DoubtfulWords.find(segment.text, wordsLanguage, lists) }
-                        },
                     )
                 }
             }
@@ -823,7 +834,7 @@ fun PlayerScreen(episodeId: Long, onBack: () -> Unit) {
                 }
             },
             canPlayWord = isCurrent || ep?.localPath?.let { java.io.File(it).exists() } == true,
-            wordLists = doubtLists,
+            wordLists = graph.wordLists,
             podcastTitle = podcast?.title,
             onEditSentence = { editing = segments.indexOf(l.segment).takeIf { it >= 0 }; lookup = null },
             onDismiss = { lookup = null },
@@ -866,46 +877,16 @@ private fun LiveLine(segment: Segment, words: List<Word>?, activeWord: Int) {
 @Composable
 private fun CheckItem(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     DropdownMenuItem(
+        modifier = Modifier.semantics { role = androidx.compose.ui.semantics.Role.Checkbox; toggleableState = androidx.compose.ui.state.ToggleableState(checked) },
         text = { Text(label) },
         trailingIcon = { androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null) },
         onClick = { onChange(!checked) },
     )
 }
 
-/**
- * Shown once when Parakeet wrote sentences in English and no Whisper model was on the phone to
- * redo them in the episode's language: suggests Whisper Base (asked with its size, as always).
- */
-@Composable
-private fun LanguageFixBanner() {
-    val context = LocalContext.current
-    val graph = context.graph
-    if (!com.ascolta.app.work.TranscribeWorker.FIX_WRONG_LANGUAGE) return
-    val suggested by graph.settings.languageFixSuggested.flow.collectAsState()
-    val dismissed by graph.settings.languageFixDismissed.flow.collectAsState()
-    if (!suggested || dismissed) return
-    val model = com.ascolta.app.whisper.SpeechModel.CANARY_180M
-    if (graph.models.isDownloaded(model)) return
-    val dataWarning = rememberDataWarning()
-    Banner {
-        Text(stringResource(R.string.language_fix_text), style = MaterialTheme.typography.bodySmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-            Button(onClick = {
-                dataWarning.run(
-                    needs = { listOf(com.ascolta.app.data.DownloadCost.Item(model.label, graph.models.missingBytes(model), true, "model:${model.id}")) },
-                    onWifi = { com.ascolta.app.work.WorkScheduler.downloadModel(context, model, wifiOnly = true); graph.settings.languageFixDismissed.set(true) },
-                ) {
-                    com.ascolta.app.work.WorkScheduler.downloadModel(context, model)
-                    graph.settings.languageFixDismissed.set(true)
-                }
-            }) { Text(stringResource(R.string.language_fix_download, com.ascolta.app.data.DownloadCost.formatSize(graph.models.missingBytes(model)))) }
-            TextButton(onClick = { graph.settings.languageFixDismissed.set(true) }) { Text(stringResource(R.string.action_close)) }
-        }
-    }
-}
 
 @Composable
-private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating: Boolean) {
+private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating: Boolean, openDiagnostics: () -> Unit) {
     val context = LocalContext.current
     val graph = context.graph
     val scope = rememberCoroutineScope()
@@ -917,70 +898,44 @@ private fun StatusBanner(ep: EpisodeEntity, transcript: Transcript?, translating
     val partial = transcript?.segments?.isNotEmpty() == true
     when (ep.transcriptState) {
         // One compact line, so the transcript keeps most of the screen.
-        TranscriptState.RUNNING, TranscriptState.QUEUED -> Card(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        ) {
-            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "${ep.transcriptStatus ?: stringResource(R.string.banner_preparing)} · ${(ep.transcriptProgress * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    if (ep.transcriptState == TranscriptState.RUNNING) {
-                        LinearProgressIndicator(progress = { ep.transcriptProgress }, modifier = Modifier.fillMaxWidth().height(3.dp))
-                    } else {
-                        LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp))
-                    }
-                }
-                IconButton(onClick = { scope.launch { graph.repo.stopTranscription(ep.id) } }) {
-                    Icon(Icons.Filled.Stop, stringResource(R.string.action_stop), Modifier.size(20.dp))
-                }
-                IconButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
-                    Icon(Icons.Filled.Refresh, stringResource(R.string.stuck_restart), Modifier.size(20.dp))
-                }
-            }
-        }
-        TranscriptState.FAILED -> Banner {
-            Text(
-                stringResource(R.string.transcription_failed, ep.error ?: stringResource(R.string.unknown_error)),
-                color = MaterialTheme.colorScheme.error,
+        TranscriptState.RUNNING, TranscriptState.QUEUED -> {
+            val jobs by remember(ep.id) { androidx.work.WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(WorkScheduler.transcribeWorkName(ep.id)) }.collectAsState(initial = emptyList())
+            val job = jobs.firstOrNull { it.state == androidx.work.WorkInfo.State.RUNNING }
+            val phase = TranscriptionPhase.from(job?.progress?.getString(TranscriptionPhase.KEY_PHASE))
+            val model = graph.settings.modelFor(ep.transcriptLanguage ?: graph.settings.learningLanguage.value)
+            TranscriptionStatusCard(
+                phase = phase,
+                detail = stringResource(R.string.local_subtitles_detail, model.label) + "\n" + ep.transcriptStatus.orEmpty(),
+                bufferedMs = job?.progress?.getLong(TranscriptionPhase.KEY_BUFFER_MS, -1) ?: -1,
+                action = stringResource(R.string.pause_transcription),
+                onAction = { scope.launch { graph.repo.stopTranscription(ep.id) } },
+                onRestart = { scope.launch { graph.repo.restartTranscription(ep.id) } },
+                onDiagnostics = openDiagnostics,
             )
-            // A model not downloaded yet: ask (with its size), then start.
-            val missing = remember(ep.error) {
-                !graph.models.isDownloaded(graph.settings.modelFor(ep.transcriptLanguage ?: graph.settings.learningLanguage.value))
-            }
-            // Free weekly minutes used up: Pro removes the limit.
+        }
+        TranscriptState.FAILED -> {
+            val missing = !graph.models.isDownloaded(graph.settings.modelFor(ep.transcriptLanguage ?: graph.settings.learningLanguage.value))
             val limitReached = !graph.isPro && graph.limits.transcriptionLeftMs() <= 0
-            if (limitReached) Button(onClick = { graph.billing.requestPaywall("transcription") }) { Text(stringResource(R.string.get_pro)) }
-            else if (missing) Button(onClick = {
-                dataWarning.run(
-                    needs = { graph.repo.downloadNeeds(ep.id, transcribe = true) },
-                    onWifi = { scope.launch { graph.repo.restartTranscription(ep.id, wifiOnly = true) } },
-                ) { scope.launch { graph.repo.restartTranscription(ep.id) } }
-            }) { Text(stringResource(R.string.download_model_and_transcribe)) }
-            else TextButton(onClick = { scope.launch { graph.repo.restartTranscription(ep.id) } }) {
-                Text(stringResource(R.string.action_try_again))
-            }
+            TranscriptionStatusCard(
+                phase = TranscriptionPhase.FAILED,
+                detail = stringResource(R.string.section_diagnostics), error = ep.error ?: stringResource(R.string.unknown_error),
+                action = stringResource(when { limitReached -> R.string.get_pro; missing -> R.string.download_model_and_transcribe; else -> R.string.action_try_again }),
+                onAction = {
+                    if (limitReached) graph.billing.requestPaywall("transcription")
+                    else if (missing) dataWarning.run(
+                        needs = { graph.repo.downloadNeeds(ep.id, transcribe = true) },
+                        onWifi = { scope.launch { graph.repo.restartTranscription(ep.id, wifiOnly = true) } },
+                    ) { scope.launch { graph.repo.restartTranscription(ep.id) } }
+                    else scope.launch { graph.repo.restartTranscription(ep.id) }
+                },
+                onDiagnostics = openDiagnostics,
+            )
         }
-        TranscriptState.NONE -> if (partial || ep.transcriptProgress > 0f) Banner {
-            // Stopped by the user part-way: what was transcribed is kept.
-            Text(
-                stringResource(R.string.paused_title, (ep.transcriptProgress * 100).toInt()),
-                style = MaterialTheme.typography.titleSmall,
+        TranscriptState.NONE -> if (partial || ep.transcriptProgress > 0f) {
+            TranscriptionStatusCard(
+                phase = TranscriptionPhase.PAUSED, detail = stringResource(R.string.paused_text),
+                action = stringResource(R.string.action_continue), onAction = { transcribe() },
             )
-            Text(
-                stringResource(R.string.paused_text),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = { transcribe() }) {
-                Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.action_continue))
-            }
         } else Banner {
             Text(stringResource(R.string.no_transcript_title), style = MaterialTheme.typography.titleSmall)
             Text(
@@ -1041,13 +996,11 @@ internal fun SegmentItem(
     newWords: List<IntRange>? = null,
     /** Part of a detected ad: shown dimmed. */
     isAd: Boolean = false,
-    /** Words that don't exist (probably misheard), underlined. */
-    doubtful: List<IntRange>? = null,
     /** Words by how common they are (character ranges and band), coloured; null when the option is off. */
     frequency: List<Pair<IntRange, Int>>? = null,
 ) {
     val bandColors = frequencyColors()
-    val bg = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val bg = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface
     val select by androidx.compose.runtime.rememberUpdatedState(onSelect)
     val seek by androidx.compose.runtime.rememberUpdatedState(onSeek)
     // Long press a word, slide to the last word wanted, release: the words in between are selected.
@@ -1079,7 +1032,7 @@ internal fun SegmentItem(
             .onGloballyPositioned { placed.card = it }
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
             .then(if (isAd && !active) Modifier.alpha(0.45f) else Modifier),
     ) {
         Text(
@@ -1117,19 +1070,11 @@ internal fun SegmentItem(
             val highlight = MaterialTheme.colorScheme.primary
             val selectColor = MaterialTheme.colorScheme.tertiary
             val newColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f)
-            val doubtColor = MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
-            val text = remember(segment.text, activeWord, wordRanges, highlight, selectedChars, newWords, newColor, doubtful, frequency, bandColors) {
+            val text = remember(segment.text, activeWord, wordRanges, highlight, selectedChars, newWords, newColor, frequency, bandColors) {
                 buildAnnotatedString {
                     append(segment.text)
                     // How common each word is: coloured text.
                     frequency?.forEach { (r, band) -> if (r.last < segment.text.length) addStyle(SpanStyle(color = bandColors[band]), r.first, r.last + 1) }
-                    // Probably misheard: underlined, on a faint tint.
-                    doubtful?.forEach { r ->
-                        if (r.last < segment.text.length) addStyle(
-                            SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline, background = doubtColor),
-                            r.first, r.last + 1,
-                        )
-                    }
                     // New words: a light tint, the same for all (not distracting).
                     newWords?.forEach { r -> if (r.last < segment.text.length) addStyle(SpanStyle(background = newColor), r.first, r.last + 1) }
                     wordRanges.getOrNull(activeWord)?.let { range ->
@@ -1248,7 +1193,7 @@ private suspend fun checkSuggestion(
     val key = "${episode?.id}:${lookup.segment.startMs}:${range.first}"
     // Coins only for listening in a language other than the learner's native one.
     val foreign = com.ascolta.app.data.FishGame.isForeign(language, native)
-    val rewarded = foreign && graph.fish.rewardCatch(key)
+    val rewarded = foreign && graph.universe.rewardCatch(key)
     if (rewarded) graph.progress.recordCatch()
     com.ascolta.app.data.Analytics.track("Transcript.mistakeCaught", mapOf("language" to language, "rewarded" to rewarded.toString()))
     return WrongWordResult(
@@ -1414,36 +1359,6 @@ private fun WordSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text(lookup.word, style = MaterialTheme.typography.headlineMedium)
-            // A word that doesn't exist: probably misheard. The nearest real words, to correct the sentence.
-            val doubtful = remember(lookup.word, wordLists) {
-                wordLists != null && com.ascolta.app.data.DoubtfulWords.find(lookup.word.lowercase(), language, wordLists).isNotEmpty()
-            }
-            if (doubtful && wordLists != null) {
-                val suggestions by produceState(emptyList<String>(), lookup.word) {
-                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                        com.ascolta.app.data.DoubtfulWords.suggestions(lookup.word, language, wordLists)
-                    }
-                }
-                Text(stringResource(R.string.doubt_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                if (suggestions.isNotEmpty()) {
-                    Text(stringResource(R.string.doubt_suggest), style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        suggestions.forEach { word ->
-                            val fixed = if (lookup.word.first().isUpperCase()) word.replaceFirstChar { it.uppercaseChar() } else word
-                            AssistChip(
-                                onClick = {
-                                    val text = lookup.segment.text.replaceFirst(lookup.word, fixed)
-                                    scope.launch { graph.repo.editSentence(episode, lookup.segment, text) }
-                                    onDismiss()
-                                },
-                                label = { Text(fixed) },
-                                shape = androidx.compose.foundation.shape.CircleShape,
-                            )
-                        }
-                    }
-                }
-            }
             if (language == "ja") {
                 // Reading and romaji of the Japanese word.
                 val reading = remember(lookup.word) { com.ascolta.app.data.Japanese.reading(lookup.word) }
@@ -1498,15 +1413,11 @@ private fun WordSheet(
                 r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { suggestion = it.trim().trimEnd('.', '!', '?'); checked = null }
             }
             val canSpeak = remember { android.speech.SpeechRecognizer.isRecognitionAvailable(context) }
-            val isDoubtful = wordLists != null && remember(lookup.word, wordLists) {
-                com.ascolta.app.data.DoubtfulWords.find(lookup.word.lowercase(), language, wordLists).isNotEmpty()
-            }
             if (!wrongOpen) {
                 androidx.compose.material3.OutlinedButton(
                     onClick = { wrongOpen = true },
                     modifier = Modifier.padding(top = 4.dp),
-                    colors = if (isDoubtful) androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    else androidx.compose.material3.ButtonDefaults.outlinedButtonColors(),
+
                 ) { Text(stringResource(R.string.wrong_word)) }
             } else {
                 WrongWordPanel(
@@ -1655,7 +1566,7 @@ private fun WordSheet(
 }
 
 @Composable
-private fun Controls(
+internal fun Controls(
     isPlaying: Boolean,
     buffering: Boolean,
     position: Long,
@@ -1669,8 +1580,9 @@ private fun Controls(
     onSpeed: () -> Unit,
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
     Surface(tonalElevation = 3.dp) {
-        Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = if (compact) 2.dp else 8.dp)) {
             Slider(
                 value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
                 onValueChange = { dragging = it },
@@ -1688,7 +1600,7 @@ private fun Controls(
             Row(Modifier.fillMaxWidth()) {
                 Text(formatTime(dragging?.let { (it * duration).toLong() } ?: position), style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.weight(1f))
-                Text(if (duration > 0) formatTime(duration) else "--:--", style = MaterialTheme.typography.labelSmall)
+                Text(if (duration > 0) "−" + formatTime((duration - (dragging?.let { (it * duration).toLong() } ?: position)).coerceAtLeast(0)) else "--:--", style = MaterialTheme.typography.labelSmall)
             }
             Row(
                 Modifier.fillMaxWidth(),
@@ -1699,7 +1611,7 @@ private fun Controls(
                     Text(String.format(java.util.Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.') + "×")
                 }
                 IconButton(onClick = onPrevious) { Icon(Icons.Filled.SkipPrevious, stringResource(R.string.previous_sentence)) }
-                FilledIconButton(onClick = onPlayPause, modifier = Modifier.size(64.dp)) {
+                FilledIconButton(onClick = onPlayPause, modifier = Modifier.size(if (compact) 48.dp else 64.dp)) {
                     if (buffering) CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
                     else Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, stringResource(R.string.play_pause), Modifier.size(36.dp))
                 }
@@ -1710,15 +1622,17 @@ private fun Controls(
     }
 }
 
-/** Shown instead of the player controls while part of the transcript is selected. */
+/** Docked selection actions; playback controls stay available below. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun SelectionBar(
+internal fun SelectionBar(
     text: String,
     canJoin: Boolean,
     joined: Boolean,
     onJoin: (Boolean) -> Unit,
     onSave: () -> Unit,
     onShadow: () -> Unit,
+    onListen: () -> Unit,
     onCopy: () -> Unit,
     onEdit: () -> Unit,
     onClose: () -> Unit,
@@ -1726,15 +1640,17 @@ private fun SelectionBar(
     /** The selection in the learner's language (the app's translator), null while it comes. */
     translation: String? = null,
     translating: Boolean = false,
+    saving: Boolean = false,
 ) {
+    var more by remember { mutableStateOf(false) }
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 200.dp).androidxVerticalScroll().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "“$text”", style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = onTranslate) { Icon(Icons.Filled.Translate, stringResource(R.string.google_translate)) }
+
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.action_close)) }
             }
             when {
@@ -1744,8 +1660,8 @@ private fun SelectionBar(
                 )
                 translating -> Text("…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(stringResource(R.string.select_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (canJoin) {
+
+            if (more && canJoin) {
                 // The model sometimes ends a sentence too early: let the learner drop the stray "." or "?".
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.select_join_question), style = MaterialTheme.typography.labelMedium)
@@ -1761,15 +1677,20 @@ private fun SelectionBar(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSave, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.BookmarkAdd, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_save))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSave, enabled = !saving, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(stringResource(R.string.select_save), maxLines = 1)
                 }
-                OutlinedButton(onClick = onShadow, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.RecordVoiceOver, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.select_shadow))
+                OutlinedButton(onClick = onListen, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(stringResource(R.string.listen_selection), maxLines = 1)
                 }
                 IconButton(onClick = onCopy) { Icon(Icons.Filled.ContentCopy, stringResource(R.string.select_copy)) }
-                IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, stringResource(R.string.edit_sentence)) }
+                IconButton(onClick = { more = !more }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.action_more)) }
+            }
+            if (more) {
+                TextButton(onClick = onShadow) { Text(stringResource(R.string.select_shadow)) }
+                TextButton(onClick = onEdit) { Text(stringResource(R.string.edit_sentence)) }
+                TextButton(onClick = onTranslate) { Text(stringResource(R.string.google_translate)) }
             }
         }
     }

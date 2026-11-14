@@ -11,7 +11,7 @@ import okhttp3.OkHttpClient
 import java.io.File
 
 enum class Engine {
-    WHISPER, PARAKEET, SENSEVOICE, REAZONSPEECH, OMNILINGUAL, CANARY;
+    WHISPER, SENSEVOICE, REAZONSPEECH, OMNILINGUAL;
 
     /**
      * Models that write no punctuation: their speech is cut at short pauses (250 ms) into
@@ -31,18 +31,11 @@ private const val WHISPER_HF = "https://huggingface.co/ggerganov/whisper.cpp/res
 private const val SENSEVOICE_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main"
 private const val REAZON_HF = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/main"
 private const val KOTOBA_HF = "https://huggingface.co/kotoba-tech/kotoba-whisper-v2.0-ggml/resolve/main"
-private const val CANARY_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main"
 private const val OMNILINGUAL_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-omnilingual-asr-1600-languages-300M-ctc-int8-2025-11-12/resolve/main"
-private const val PARAKEET_HF = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main"
 
 /** Languages for which Omnilingual is suggested over Whisper Base. */
 val OMNILINGUAL_FIRST = setOf("hy", "fa", "hi", "ur", "ka", "bn", "mr", "gu", "kn", "ta", "te", "be", "mk", "is", "cy", "sw", "af", "ht")
 
-/** Languages NVIDIA Parakeet TDT 0.6B v3 understands (25 European languages). */
-val PARAKEET_LANGUAGES = setOf(
-    "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
-    "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
-)
 
 /**
  * Speech recognition models. They are downloaded once; all recognition then
@@ -70,15 +63,6 @@ enum class SpeechModel(
     /** Whisper Large v3: the most accurate Whisper, slower than real time on most phones. */
     LARGE_V3("large-v3", Engine.WHISPER, "Whisper Large v3", 1081,
         listOf(ModelFile("$WHISPER_HF/ggml-large-v3-q5_0.bin", "ggml-large-v3-q5_0.bin", 1_081_140_203))),
-    PARAKEET("parakeet-v3", Engine.PARAKEET, "NVIDIA Parakeet v3", 670,
-        listOf(
-            ModelFile("$PARAKEET_HF/tokens.txt", "parakeet-v3/tokens.txt", 93_939),
-            ModelFile("$PARAKEET_HF/decoder.int8.onnx", "parakeet-v3/decoder.int8.onnx", 11_845_274),
-            ModelFile("$PARAKEET_HF/joiner.int8.onnx", "parakeet-v3/joiner.int8.onnx", 6_355_277),
-            ModelFile("$PARAKEET_HF/encoder.int8.onnx", "parakeet-v3/encoder.int8.onnx", 652_282_294),
-        ),
-        languages = PARAKEET_LANGUAGES,
-    ),
     /** Alibaba SenseVoice Small: one pass, very light; best for Japanese, Chinese, Korean. */
     SENSEVOICE("sensevoice", Engine.SENSEVOICE, "SenseVoice Small", 240,
         listOf(
@@ -102,18 +86,6 @@ enum class SpeechModel(
      * Whisper Base for languages Parakeet and SenseVoice don't cover (Farsi, Hindi, Georgian…).
      * Writes no punctuation. Apache 2.0.
      */
-    /**
-     * NVIDIA Canary 180M Flash (CC BY 4.0): small, and told the language, so it can't switch to
-     * English. Used to redo the sentences Parakeet writes in English (French, Spanish, German).
-     */
-    CANARY_180M("canary-180m", Engine.CANARY, "NVIDIA Canary 180M", 207,
-        listOf(
-            ModelFile("$CANARY_HF/tokens.txt", "canary-180m/tokens.txt", 53_555),
-            ModelFile("$CANARY_HF/decoder.int8.onnx", "canary-180m/decoder.int8.onnx", 74_437_848),
-            ModelFile("$CANARY_HF/encoder.int8.onnx", "canary-180m/encoder.int8.onnx", 132_678_643),
-        ),
-        languages = setOf("en", "es", "de", "fr"),
-    ),
     OMNILINGUAL("omnilingual", Engine.OMNILINGUAL, "Meta Omnilingual (1,600 languages)", 365,
         listOf(
             ModelFile("$OMNILINGUAL_HF/tokens.txt", "omnilingual/tokens.txt", 86_423),
@@ -135,9 +107,8 @@ enum class SpeechModel(
     fun supports(language: String) = languages == null || language in languages
 
     companion object {
-        /** A good default for a language: Parakeet for its 25 European languages, SenseVoice for Japanese, Chinese, Korean. */
+        /** Whisper Base by default; specialized models for languages that benefit from them. */
         fun recommended(language: String): SpeechModel = when {
-            language in PARAKEET_LANGUAGES -> PARAKEET
             language in setOf("ja", "zh", "ko") -> SENSEVOICE
             // Whisper Base is weak in these; Armenian is only in Omnilingual's range of good ones.
             language in OMNILINGUAL_FIRST -> OMNILINGUAL
@@ -151,7 +122,6 @@ enum class SpeechModel(
         fun tiers(language: String): List<SpeechModel> = when {
             language == "ja" -> listOf(SENSEVOICE, REAZONSPEECH, KOTOBA)
             language in setOf("zh", "ko") -> listOf(BASE, SENSEVOICE, TURBO)
-            language in PARAKEET_LANGUAGES -> listOf(BASE, SMALL, PARAKEET)
             language in OMNILINGUAL_FIRST -> listOf(BASE, SMALL, OMNILINGUAL)
             else -> listOf(BASE, SMALL, TURBO)
         }
@@ -159,9 +129,9 @@ enum class SpeechModel(
         /** Offered after the three tiers, for every language: the most accurate, but slow. */
         val MOST_ACCURATE = LARGE_V3
 
-        /** The NPU model was removed: anyone who had chosen it gets Parakeet on the CPU. */
+        /** Retired or unknown model IDs, including NVIDIA models, migrate to Whisper Base. */
         fun byId(id: String): SpeechModel = entries.firstOrNull { it.id == id }
-            ?: if (id.startsWith("parakeet")) PARAKEET else BASE
+            ?: BASE
     }
 }
 
@@ -178,17 +148,16 @@ class ModelManager(private val context: Context, private val http: OkHttpClient)
 
     fun file(name: String) = File(dir, name)
 
-    /** The main model file: whisper's .bin, or Parakeet's folder. */
+    /** The main model file: Whisper weights or a sherpa model folder. */
     fun primaryPath(model: SpeechModel): File = when {
         model == SpeechModel.CUSTOM -> file("custom.bin")
         model.engine == Engine.WHISPER -> file(model.files.first().name)
         else -> file(model.files.first().name).parentFile!!
     }
 
-    /** Parakeet's word-piece list for the NPU engine. */
-    /** Frees the space of models that are no longer offered (the 2.3 GB NPU model). */
+    /** Frees storage occupied by retired NVIDIA models. */
     fun removeRetiredModels() {
-        listOf("parakeet-v3-npu", "parakeet-v3-npu.zip").map(::file).filter { it.exists() }.forEach { it.deleteRecursively() }
+        listOf("parakeet-v3", "canary-180m", "parakeet-v3-npu", "parakeet-v3-npu.zip").map(::file).filter { it.exists() }.forEach { it.deleteRecursively() }
     }
 
     /** Present and complete: exactly the expected size (a damaged file once crashed Parakeet on load). */
