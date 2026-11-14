@@ -1193,7 +1193,7 @@ private suspend fun checkSuggestion(
     val key = "${episode?.id}:${lookup.segment.startMs}:${range.first}"
     // Coins only for listening in a language other than the learner's native one.
     val foreign = com.ascolta.app.data.FishGame.isForeign(language, native)
-    val rewarded = foreign && graph.fish.rewardCatch(key)
+    val rewarded = foreign && graph.universe.rewardCatch(key)
     if (rewarded) graph.progress.recordCatch()
     com.ascolta.app.data.Analytics.track("Transcript.mistakeCaught", mapOf("language" to language, "rewarded" to rewarded.toString()))
     return WrongWordResult(

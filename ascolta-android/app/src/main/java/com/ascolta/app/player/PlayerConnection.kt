@@ -58,7 +58,7 @@ class PlayerConnection(
     db: AppDatabase,
     private val settings: Settings,
     private val progress: com.ascolta.app.data.ProgressStore,
-    private val fish: com.ascolta.app.data.FishStore,
+    private val universe: com.ascolta.app.universe.UniverseStore,
 ) {
     private val podcastDao = db.podcastDao()
     /** Language of the episode playing, for listening statistics. */
@@ -177,6 +177,7 @@ class PlayerConnection(
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) && !player.isPlaying) {
                     saveCurrentPosition()
                     progress.flush()
+                    universe.flush()
                     writeLog()
                 }
             }
@@ -340,12 +341,12 @@ class PlayerConnection(
                         val ms = (wall - lastTickWall).coerceIn(0, 1_000)
                         progress.addListening(language, ms)
                         logListening(ms, language)
-                        // The Aquarium is paid in coins from foreign-language listening.
-                        fish.addListening(ms, FishGame.isForeign(playingLanguage, settings.nativeLanguage.value), c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
+                        // Only real foreign-language playback adds energy to the idle world.
+                        universe.addListening(ms, FishGame.isForeign(playingLanguage, settings.nativeLanguage.value), c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L)
                     }
                     val position = c.currentPosition
                     val length = c.duration
-                    if (length > 60_000 && position >= length - 5_000) fish.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
+                    if (length > 60_000 && position >= length - 5_000) universe.episodeFinished(c.currentMediaItem?.mediaId?.toLongOrNull() ?: 0L, length)
                     checkAutoPause(c, position)
                     checkSleep(c, position)
                     c.currentMediaItem?.mediaId?.toLongOrNull()?.let { id -> watchAds(id); checkAds(c, position) }

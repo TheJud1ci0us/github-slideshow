@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CloudDownload
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,7 +56,7 @@ import com.ascolta.app.graph
  * in rounded cards, each opening its own page.
  */
 @Composable
-fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, openPersonalize: () -> Unit, openPaywall: () -> Unit = {}, openAquarium: () -> Unit = {}) {
+fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, openPersonalize: () -> Unit, openPaywall: () -> Unit = {}, openUniverse: () -> Unit = {}) {
     val proActive by LocalContext.current.graph.billing.isPro.collectAsState()
     val graph = LocalContext.current.graph
     val settings = graph.settings
@@ -62,7 +64,7 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
     val levels by settings.levels.flow.collectAsState()
     val all by settings.learningLanguages.flow.collectAsState()
     val stats by graph.progress.stats.collectAsState()
-    LaunchedEffect(Unit) { graph.progress.flush(); graph.fish.flush(); graph.repo.refreshProgressCounts() }
+    LaunchedEffect(Unit) { graph.progress.flush(); graph.repo.refreshProgressCounts() }
     val level = remember(levels, learning) { settings.levelFor(learning) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -91,26 +93,20 @@ fun ProfileScreen(openSettings: (String) -> Unit, openProgress: () -> Unit, open
             Stat("${stats.earned.size}/${Badges.all().size}", stringResource(R.string.profile_badges), Modifier.weight(1f), openProgress)
         }
 
-        // The Aquarium: a fishing game paid for with listening coins.
-        val aquarium by graph.fish.state.collectAsState()
+        // Optional world building; podcast features never depend on the game.
+        val universe by graph.universe.state.collectAsState()
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(MaterialTheme.shapes.large)
-                .background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = openAquarium).padding(horizontal = 14.dp, vertical = 10.dp),
+                .background(MaterialTheme.colorScheme.surfaceContainer).clickable(onClick = openUniverse).padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.aq_tank), null, Modifier.size(48.dp))
+            Icon(androidx.compose.material.icons.Icons.Filled.Public, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.aq_title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.aq_card_text, aquarium.coins), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.world_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.world_profile_text, universe.levels.size), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            val fresh = (aquarium.unseenMs / com.ascolta.app.data.FishGame.COIN_MS).toInt()
-            if (fresh >= 50) {
-                Text(
-                    "+$fresh", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).background(androidx.compose.ui.graphics.Color(0xFFD9453C)).padding(horizontal = 9.dp, vertical = 2.dp),
-                )
-            }
+
         }
 
         SectionCard(stringResource(R.string.profile_learning_section)) {

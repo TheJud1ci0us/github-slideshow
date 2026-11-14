@@ -693,7 +693,10 @@ class PodcastRepository(
     suspend fun review(card: VocabEntity, grade: Flashcards.Grade) {
         Analytics.track("Flashcard.reviewed", mapOf("grade" to grade.name, "kind" to if (card.isSentence) "sentence" else "word", "language" to card.language))
         vocabDao.update(Flashcards.schedule(card, grade, System.currentTimeMillis()))
-        (context.applicationContext as com.ascolta.app.AscoltaApp).graph.progress.recordReview()
+        (context.applicationContext as com.ascolta.app.AscoltaApp).graph.let { graph ->
+            graph.progress.recordReview()
+            graph.universe.review(card.id, grade != Flashcards.Grade.AGAIN)
+        }
     }
 
     /** Refreshes the counts that badges depend on (words, transcripts, languages). */
