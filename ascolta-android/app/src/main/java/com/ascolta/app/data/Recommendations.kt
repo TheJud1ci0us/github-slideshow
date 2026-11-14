@@ -81,6 +81,26 @@ object Recommendations {
         return head + tail
     }
 
+    /** Rank a small metadata pool before checking feeds, so Discover keeps level/theme preferences. */
+    suspend fun quickPicks(
+        directory: PodcastDirectory, language: String, genres: List<Int>, band: LevelBand?,
+    ): List<DirectoryResult> = coroutineScope {
+        val country = LANGUAGES.firstOrNull { it.code == language }?.country ?: "US"
+        val themes = genres.filter { it != GENRE_LEARNING }.take(2)
+        val courses = async {
+            learnerQueries(language, country, listOf(country)).firstOrNull()?.let { (term, store) ->
+                runCatching { directory.search(term, store, 40).filter { forLearners(it, languageNames(language)) } }
+                    .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; emptyList() }
+            }.orEmpty()
+        }
+        val themed = themes.map { genre -> async {
+            genre to runCatching { directory.topByGenre(genre, country, 25) }
+                .getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; emptyList() }
+        } }
+        merge(language, courses.await(), themed.awaitAll(), band, limit = 90,
+            coursesFirst = band == LevelBand.BEGINNER || themes.isEmpty()).map { it.podcast }
+    }
+
     suspend fun picks(
         directory: PodcastDirectory,
         feedLanguage: com.ascolta.app.net.FeedLanguage,

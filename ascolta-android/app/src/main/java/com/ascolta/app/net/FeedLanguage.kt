@@ -25,6 +25,12 @@ class FeedLanguage(private val http: OkHttpClient, private val transcriptStore: 
     private val cache = ConcurrentHashMap<String, String>()
     private val dead = ConcurrentHashMap.newKeySet<String>()
     private val limit = Semaphore(8)
+    private val probeHttp = http.newBuilder()
+        .cache(null) // A deliberately partial read must not drain an RSS body just to fill the HTTP cache.
+        .callTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     /** True if this feed was found not to work (checked by [of] / [ofAll]). */
     fun isDead(feedUrl: String): Boolean = feedUrl in dead
@@ -35,28 +41,17 @@ class FeedLanguage(private val http: OkHttpClient, private val transcriptStore: 
     /** Two-letter code, or null if the feed doesn't say (or can't be read in time). */
     suspend fun of(feedUrl: String): String? {
         cache[feedUrl]?.let { return it.ifEmpty { null } }
-        val lang = limit.withPermit {
-            withTimeoutOrNull(6_000) {
-                withContext(Dispatchers.IO) {
-                    try {
-                        read(feedUrl)
-                    } catch (e: DeadFeed) {
-                        dead += feedUrl
-                        null
-                    } catch (e: java.net.UnknownHostException) {
-                        dead += feedUrl // the site no longer exists
-                        null
-                    } catch (e: javax.net.ssl.SSLException) {
-                        dead += feedUrl // broken certificate: following would fail too
-                        null
-                    } catch (e: Exception) {
-                        null
-                    }
+        val outcome = limit.withPermit {
+            withTimeoutOrNull(4_000) {
+                runCatching { read(feedUrl) }.onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
                 }
             }
-        }
-        cache[feedUrl] = lang.orEmpty()
-        return lang
+        } ?: return null
+        return outcome.fold(
+            onSuccess = { lang -> cache[feedUrl] = lang.orEmpty(); lang },
+            onFailure = { if (it is DeadFeed) dead += feedUrl; null },
+        )
     }
 
     suspend fun ofAll(feedUrls: List<String>): Map<String, String?> = coroutineScope {
@@ -136,29 +131,27 @@ class FeedLanguage(private val http: OkHttpClient, private val transcriptStore: 
         }
     }
 
-    private fun read(feedUrl: String): String? {
-        http.newCall(Request.Builder().url(feedUrl).build()).execute().use { response ->
-            // Gone, forbidden or not found: following it would fail. (Server errors may pass.)
-            if (response.code in 400..499 && response.code != 429) throw DeadFeed()
-            if (!response.isSuccessful) return null
-            val source = response.body?.source() ?: return null
-            // The language comes near the top of the channel; stop after 64 KB.
-            val head = StringBuilder()
-            val buffer = ByteArray(8_192)
-            val stream = source.inputStream()
-            while (head.length < 65_536) {
-                val n = stream.read(buffer)
-                if (n <= 0) break
-                head.append(String(buffer, 0, n, Charsets.UTF_8))
-                TAG.find(head)?.let { return LanguageCheck.normalize(it.groupValues[1]) }
-            }
-            // A web page (or anything else) instead of a podcast feed.
-            if (head.isNotEmpty() && !FEED.containsMatchIn(head)) throw DeadFeed()
-            return null
+    private suspend fun read(feedUrl: String): String? = probeHttp.readResponse(Request.Builder().url(feedUrl).build()) { response ->
+        if (response.code in listOf(401, 403, 404, 410)) throw DeadFeed()
+        if (!response.isSuccessful) throw java.io.IOException("HTTP ${response.code}")
+        val stream = response.body?.byteStream() ?: return@readResponse null
+        val head = StringBuilder()
+        val buffer = ByteArray(8_192)
+        while (head.length < 65_536) {
+            val n = stream.read(buffer, 0, minOf(buffer.size, 65_536 - head.length))
+            if (n <= 0) break
+            head.append(String(buffer, 0, n, Charsets.UTF_8))
+            val itemAt = ITEM_START.find(head)?.range?.first
+            val channel = if (itemAt == null) head.toString() else head.substring(0, itemAt)
+            TAG.find(channel)?.let { return@readResponse LanguageCheck.normalize(it.groupValues[1]) }
+            if (itemAt != null) break
         }
+        if (head.isNotEmpty() && !FEED.containsMatchIn(head)) throw DeadFeed()
+        null
     }
 
     private companion object {
+        val ITEM_START = Regex("""<item[\s>]""", RegexOption.IGNORE_CASE)
         val FEED = Regex("""<(rss|feed|rdf:RDF|channel)[\s>]""", RegexOption.IGNORE_CASE)
         val TRANSCRIPT = Regex("""<podcast:transcript[\s>]""", RegexOption.IGNORE_CASE)
         val ITEM_END = Regex("""</item>""", RegexOption.IGNORE_CASE)

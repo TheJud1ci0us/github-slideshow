@@ -24,8 +24,8 @@ android {
         applicationId = "app.lingopod"
         minSdk = 26
         targetSdk = 35
-        versionCode = 203
-        versionName = "1.9.13-no-nvidia"
+        versionCode = 204
+        versionName = "1.9.14-no-nvidia"
 
         // Anonymous usage statistics (TelemetryDeck). Empty = analytics switched off entirely.
         // Set telemetryDeckAppId (and a random telemetryDeckSalt) in gradle.properties.
@@ -218,6 +218,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.43.1")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.43.1")
     testImplementation(composeBom)

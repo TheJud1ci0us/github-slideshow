@@ -31,38 +31,51 @@ class PodcastPager(
         private set
 
     /** The next page (possibly shorter, or empty once [exhausted]). */
-    suspend fun next(): List<DirectoryResult> = lock.withLock {
+    suspend fun next(limit: Int = pageSize): List<DirectoryResult> = lock.withLock {
+        require(limit > 0)
         val out = mutableListOf<DirectoryResult>()
         var checked = 0
-        while (out.size < pageSize) {
-            if (checked >= maxCheckedPerPage && ready.isEmpty()) {
-                // Searched long enough: what was found is shown, and the list ends here.
-                exhausted = true
-                break
-            }
-            if (ready.isNotEmpty()) {
-                out += ready.removeFirst()
-                continue
-            }
-            if (pending.isEmpty()) {
-                if (nextSource >= sources.size) {
+        try {
+            while (out.size < limit) {
+                if (checked >= maxCheckedPerPage && ready.isEmpty()) {
+                    // Searched long enough: what was found is shown, and the list ends here.
                     exhausted = true
                     break
                 }
-                // A source that fails (network, the store's rate limit) is tried once more a bit later.
-                val source = sources[nextSource++]
-                val found = runCatching { source() }.getOrElse {
-                    if (it is kotlinx.coroutines.CancellationException) throw it
-                    kotlinx.coroutines.delay(retryDelayMs)
-                    runCatching { source() }.getOrDefault(emptyList())
+                if (ready.isNotEmpty()) {
+                    out += ready.removeFirst()
+                    continue
                 }
-                found.filter { seen.add(it.feedUrl) }.forEach(pending::addLast)
-                continue
+                if (pending.isEmpty()) {
+                    if (nextSource >= sources.size) {
+                        exhausted = true
+                        break
+                    }
+                    // A source that fails (network, the store's rate limit) is tried once more a bit later.
+                    val source = sources[nextSource]
+                    val found = runCatching { source() }.getOrElse {
+                        if (it is kotlinx.coroutines.CancellationException) throw it
+                        kotlinx.coroutines.delay(retryDelayMs)
+                        runCatching { source() }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; emptyList() }
+                    }
+                    nextSource++
+                    found.filter { seen.add(it.feedUrl) }.forEach(pending::addLast)
+                    continue
+                }
+                val batch = List(minOf(pending.size, limit - out.size)) { pending.removeFirst() }
+                checked += batch.size
+                ready += runCatching { check(batch) }.getOrElse {
+                    if (it is kotlinx.coroutines.CancellationException) {
+                        batch.asReversed().forEach(pending::addFirst)
+                        throw it
+                    }
+                    emptyList()
+                }
             }
-            val batch = List(minOf(pending.size, pageSize + 4)) { pending.removeFirst() }
-            checked += batch.size
-            ready += runCatching { check(batch) }.getOrDefault(emptyList())
+            out
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            out.asReversed().forEach(ready::addFirst)
+            throw e
         }
-        out
     }
 }

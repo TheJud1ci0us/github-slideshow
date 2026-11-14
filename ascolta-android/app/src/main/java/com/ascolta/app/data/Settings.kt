@@ -172,7 +172,6 @@ class Settings(context: Context) {
     /** Remove the "." or "?" between transcript sentences in a selection (last choice made). */
     val joinSelection = bool("join_selection", false)
     /** Discover: only podcasts that give official transcripts. */
-    val discoverOfficialOnly = bool("discover_official_only", false)
     /** Parakeet wrote sentences in English and no Whisper model was there to redo them: suggest Whisper Base. */
     val languageFixSuggested = bool("language_fix_suggested", false)
     val languageFixDismissed = bool("language_fix_dismissed", false)

@@ -98,7 +98,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     var genre by rememberSaveable { mutableStateOf<Int?>(null) }
     val myBand = remember(learning, levelsPref) { LevelBand.of(settings.levelFor(learning)) }
     var band by remember(learning, levelsPref) { mutableStateOf(myBand) }
-    val officialOnly by settings.discoverOfficialOnly.flow.collectAsState()
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     var loadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     // Endless lists: the pager behind the results shown, and whether a page is loading.
     var pager by remember { mutableStateOf<com.ascolta.app.data.PodcastPager?>(null) }
@@ -114,9 +114,9 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         loadingMore = false
         error = null
         loadJob = scope.launch {
-            runCatching { newPager.next() }
+            runCatching { newPager.next(limit = 6) }
                 .onSuccess { results = it; if (it.isEmpty()) error = context.getString(R.string.no_results) }
-                .onFailure { if (it !is kotlinx.coroutines.CancellationException) error = context.getString(R.string.search_failed, it.message ?: "") }
+                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; error = context.getString(R.string.search_failed, it.message ?: "") }
             loading = false
         }
     }
@@ -141,13 +141,6 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         }
     }
 
-    /** With "Official transcript" on, a list keeps only shows whose latest episodes have one. */
-    fun official(check: suspend (List<DirectoryResult>) -> List<DirectoryResult>): suspend (List<DirectoryResult>) -> List<DirectoryResult> =
-        if (!settings.discoverOfficialOnly.value) check else { batch -> check(graph.feedLanguage.withTranscripts(batch)) }
-
-    /** Shows with official transcripts are rare: a page gives up after checking this many. */
-    fun officialCap() = if (settings.discoverOfficialOnly.value) 100 else Int.MAX_VALUE
-
     fun search(term: String) {
         if (term.isBlank()) return
         genre = null
@@ -165,9 +158,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         }.orEmpty()
         // Then the search itself: this store first, then the US one (more shows), up to 200 each.
         load(com.ascolta.app.data.PodcastPager(
-            top + listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }),
-            check = official { it }, // the search results are shown in any language; the tag says which
-            maxCheckedPerPage = officialCap(),
+            listOf(suspend { graph.directory.search(term, store, 200) }, suspend { graph.directory.search(term, "US", 200) }) + top,
+            check = { it }, // Display typed search matches before optional language tags arrive.
             pageSize = 30,
         ))
     }
@@ -192,8 +184,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         load(com.ascolta.app.data.PodcastPager(
             (if (course) com.ascolta.app.data.Recommendations.learnerSources(graph.directory, lang, store, stores)
             else com.ascolta.app.data.Recommendations.themeSources(graph.directory, genreId, lang, store)) + more,
-            check = official(com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course)),
-            maxCheckedPerPage = officialCap(),
+            check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, settings.nativeLanguage.value, course),
         ))
     }
 
@@ -212,28 +203,45 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     // "For you": suggestions for the language, favourite themes and level (shown before any search).
     // The suggestions first, then (as you scroll) the favourite themes, shows for learners and
     // the backup searches, endlessly until the store runs out.
-    val forYouItems = remember(learning, interestsPref, levelsPref, officialOnly) { androidx.compose.runtime.mutableStateListOf<DirectoryResult>() }
-    var forYouLoaded by remember(learning, interestsPref, levelsPref, officialOnly) { mutableStateOf(false) }
-    val forYouPager = remember(learning, interestsPref, levelsPref, officialOnly) {
+    val showingForYou = results.isEmpty() && !loading && error == null
+    val recommendationKey = listOf(learning, settings.nativeLanguage.value, interestsPref, levelsPref).joinToString("|")
+    val forYouItems = remember(learning, interestsPref, levelsPref) { androidx.compose.runtime.mutableStateListOf<DirectoryResult>() }
+    var forYouLoaded by remember(learning, interestsPref, levelsPref) { mutableStateOf(false) }
+    val forYouPager = remember(learning, interestsPref, levelsPref) {
         val lang = learning
         val native = settings.nativeLanguage.value
         val store = country ?: "US"
-        val picks = suspend {
-            com.ascolta.app.data.Recommendations.picks(graph.directory, graph.feedLanguage, lang, native, settings.interestList(), myBand, 20).map { it.podcast }
-        }
+        // Start with one source and six checked shows. The previous global picks pass
+        // fetched multiple charts/searches and checked dozens of RSS feeds before any cover appeared.
+        val sources = com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList())
+        val first = listOf(suspend {
+            com.ascolta.app.data.Recommendations.quickPicks(graph.directory, lang, settings.interestList(), myBand)
+        }) + sources
         val more = com.ascolta.app.data.Recommendations.moreSources(
             { id, st -> graph.directory.topByGenre(id, st, 200) },
             com.ascolta.app.data.Recommendations.storesFor(lang, store), settings.interestList(),
         )
         com.ascolta.app.data.PodcastPager(
-            listOf(picks) + com.ascolta.app.data.Recommendations.forYouSources(graph.directory, lang, store, settings.interestList()) + more,
-            check = official(com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true)),
-            maxCheckedPerPage = officialCap(),
-            pageSize = 18,
+            first + more,
+            check = com.ascolta.app.data.Recommendations.languageCheck(graph.feedLanguage, lang, native, isCourse = true),
+            pageSize = 12,
         )
     }
-    LaunchedEffect(forYouPager) {
-        forYouItems.addAll(runCatching { forYouPager.next() }.getOrDefault(emptyList()))
+    LaunchedEffect(forYouPager, showingForYou) {
+        if (!showingForYou || forYouLoaded) return@LaunchedEffect
+        val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { graph.discoveryCache.read(recommendationKey) }
+        if (cached.isNotEmpty()) { forYouItems.addAll(cached); forYouLoaded = true }
+        val fresh = runCatching { forYouPager.next(limit = 6) }.getOrElse {
+            if (it is kotlinx.coroutines.CancellationException) throw it
+            emptyList()
+        }
+        if (fresh.isNotEmpty()) {
+            // Preserve the reader's position if they already started scrolling through cached covers.
+            if (gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0) {
+                forYouItems.clear(); forYouItems.addAll(fresh)
+            } else forYouItems.addAll(fresh.filter { r -> forYouItems.none { it.feedUrl == r.feedUrl } })
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { graph.discoveryCache.write(recommendationKey, fresh) } }
+        }
         forYouLoaded = true
     }
 
@@ -245,9 +253,12 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         GENRES.sortedBy { g -> if (g.id == GENRE_LEARNING) -1 else mine.indexOf(g.id).let { if (it < 0) 100 else it } }
     }
 
+    val visibleKeys by remember { androidx.compose.runtime.derivedStateOf { gridState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() } }
+
     // Language each search result's feed declares, shown when it isn't the language learned.
-    val resultLanguages by produceState<Map<String, String?>>(emptyMap(), results) {
-        value = if (genre == null && results.isNotEmpty()) graph.feedLanguage.ofAll(results.map { it.feedUrl }) else emptyMap()
+    val resultLanguages by produceState<Map<String, String?>>(emptyMap(), results, visibleKeys) {
+        val visible = results.filter { it.feedUrl in visibleKeys }
+        value = if (genre == null) value.filterKeys { key -> results.any { it.feedUrl == key } } + graph.feedLanguage.ofAll(visible.map { it.feedUrl }) else emptyMap()
     }
     // Feeds found not to work are hidden (re-evaluated once their check is done).
     val working = remember(results, resultLanguages) { results.filter { !graph.feedLanguage.isDead(it.feedUrl) } }
@@ -255,23 +266,25 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
     val shown = atLevel.ifEmpty { working }
 
     // Endless scrolling: within 6 items of the end, the next page of whichever list is shown loads.
-    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val nearEnd by remember {
         androidx.compose.runtime.derivedStateOf {
             val info = gridState.layoutInfo
             info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 6
         }
     }
-    val showingForYou = results.isEmpty() && !loading && error == null
     val activePager = if (showingForYou) forYouPager.takeIf { forYouLoaded } else pager.takeIf { !loading }
     LaunchedEffect(nearEnd, activePager, results.size, forYouItems.size) {
         val p = activePager ?: return@LaunchedEffect
         if (!nearEnd || loadingMore || p.exhausted) return@LaunchedEffect
         loadingMore = true
-        val more = runCatching { p.next() }.getOrDefault(emptyList())
-        if (p === forYouPager) forYouItems.addAll(more.filter { m -> forYouItems.none { it.feedUrl == m.feedUrl } })
-        else if (p === pager) results = (results + more).distinctBy { it.feedUrl }
-        loadingMore = false
+        try {
+            var more: List<DirectoryResult>
+            do {
+                more = runCatching { p.next() }.getOrElse { if (it is kotlinx.coroutines.CancellationException) throw it; emptyList() }
+            } while (p === forYouPager && !p.exhausted && more.all { r -> forYouItems.any { it.feedUrl == r.feedUrl } })
+            if (p === forYouPager) forYouItems.addAll(more.filter { m -> forYouItems.none { it.feedUrl == m.feedUrl } })
+            else if (p === pager) results = (results + more).distinctBy { it.feedUrl }
+        } finally { loadingMore = false }
     }
 
     // One scrolling grid: the header scrolls away, so results get the whole screen.
@@ -279,8 +292,8 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
         state = gridState,
         columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
         contentPadding = PaddingValues(bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, key = "header") {
@@ -318,20 +331,12 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                         onClick = { levelMenu = true },
                     )
                 }
-                // Only podcasts that publish their own transcripts (any theme, search or "For you").
-                FilterToggle(stringResource(R.string.filter_official), officialOnly) { on ->
-                    settings.discoverOfficialOnly.set(on)
-                    com.ascolta.app.data.Analytics.track("Discover.officialFilter", mapOf("on" to on.toString()))
-                    when {
-                        genre != null -> browse(genre!!)
-                        query.isNotBlank() && results.isNotEmpty() -> search(query)
-                    }
-                }
                 if (categoryMenu) {
                     MenuSheet(onDismiss = { categoryMenu = false }) {
                         MenuSheetItem(stringResource(R.string.all_categories), selected = genre == null) {
                             categoryMenu = false
                             // Back to "For you".
+                            loadJob?.cancel(); loading = false; loadingMore = false
                             genre = null; query = ""; results = emptyList(); pager = null; error = null
                         }
                         genres.forEach { g ->
@@ -394,17 +399,11 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                 }
                 else -> items(picks.size, key = { picks[it].feedUrl }) { i ->
                     val r = picks[i]
-                    // Every column gets the same total side margin, so all covers are equal squares.
-                    val (startPad, endPad) = when (i % 3) { 0 -> 10.dp to 3.33.dp; 1 -> 6.67.dp to 6.67.dp; else -> 3.33.dp to 10.dp }
-                    Box(Modifier.padding(start = startPad, end = endPad)) {
-                        CoverTile(
-                            imageUrl = r.artworkUrl,
-                            title = r.title,
-                            onClick = { followAndOpen(r) },
-                            checked = r.feedUrl in subscribed,
-                            showTitle = true,
-                        )
-                    }
+                    CoverTile(
+                        imageUrl = r.artworkUrl, title = r.title,
+                        onClick = { followAndOpen(r) }, checked = r.feedUrl in subscribed,
+                        edgeToEdge = true,
+                    )
                 }
             }
         }
@@ -477,7 +476,7 @@ fun DiscoverScreen(initialQuery: String?, openPodcast: (Long) -> Unit) {
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 activePager?.exhausted == true -> Text(
-                    stringResource(if (officialOnly) R.string.discover_end_official else R.string.discover_end),
+                    stringResource(R.string.discover_end),
                     Modifier.fillMaxWidth().padding(16.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

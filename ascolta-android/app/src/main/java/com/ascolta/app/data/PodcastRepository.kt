@@ -97,14 +97,9 @@ class PodcastRepository(
 
     // ---- Feeds -------------------------------------------------------------
 
-    suspend fun fetchFeed(url: String): ParsedFeed = withContext(Dispatchers.IO) {
-        http.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            // Gone or refused: say so plainly (Apple keeps listing some dead feeds).
-            if (response.code in 400..499) throw IOException(context.getString(R.string.feed_gone, response.code))
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-            RssParser.parse(response.body!!.byteStream())
-        }
-    }
+    private val feedLoader = com.ascolta.app.net.FeedLoader(http)
+
+    suspend fun fetchFeed(url: String, refresh: Boolean = false): ParsedFeed = feedLoader.load(url, refresh)
 
     /** Subscribes to a feed and returns the podcast id. */
     /**
@@ -175,7 +170,7 @@ class PodcastRepository(
     }
 
     suspend fun refresh(podcast: PodcastEntity): Int {
-        val feed = fetchFeed(podcast.feedUrl)
+        val feed = fetchFeed(podcast.feedUrl, refresh = true)
         val ids = episodeDao.insertAll(feed.episodes.map { it.toEntity(podcast.id) })
         // Feeds sometimes add transcripts to episodes after publishing.
         feed.episodes.filter { it.transcriptUrl != null }.forEach {

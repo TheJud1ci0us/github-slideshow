@@ -240,8 +240,8 @@ fun LibraryScreen(
  * the name), with the number of new episodes in the corner and ★ for favourites.
  */
 @Composable
-private fun PodcastGridRow(row: List<com.ascolta.app.data.PodcastWithStats>, openPodcast: (Long?) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 1.5.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+internal fun PodcastGridRow(row: List<com.ascolta.app.data.PodcastWithStats>, openPodcast: (Long?) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
         row.forEach { p ->
             CoverTile(
                 imageUrl = p.podcast.imageUrl,
@@ -249,6 +249,7 @@ private fun PodcastGridRow(row: List<com.ascolta.app.data.PodcastWithStats>, ope
                 onClick = { openPodcast(p.podcast.id) },
                 badge = p.newCount,
                 favourite = p.podcast.favourite,
+                edgeToEdge = true,
                 modifier = Modifier.weight(1f),
             )
         }

@@ -444,9 +444,9 @@ fun PodcastStep(
     val picks: List<com.ascolta.app.data.Pick>? = if (loaded) shown else null
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             ScreenTitle(stringResource(R.string.onboarding_podcasts_title), stringResource(R.string.onboarding_podcasts_text))
@@ -466,7 +466,7 @@ fun PodcastStep(
                     imageUrl = pick.podcast.artworkUrl,
                     title = pick.podcast.title,
                     checked = on,
-                    showTitle = true,
+                    edgeToEdge = true,
                     onClick = {
                         if (on) chosen.remove(pick.podcast.feedUrl)
                         else {
